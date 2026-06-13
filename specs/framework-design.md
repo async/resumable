@@ -63,6 +63,7 @@ TSRX owns the baseline semantics for:
 - components as ordinary TypeScript functions returning TSRX
 - statement containers (`@{...}`)
 - comments inside template children
+- nested component content through TSRX's `children` convention
 - lexical scope inside statement containers and control-flow blocks
 - `@if`, `@for`, `@switch`, and `@try`
 - `@for` `index`, `key`, and `@empty`
@@ -90,9 +91,9 @@ Five pieces:
    lazily-loadable symbols, splitting async derivations into key functions and
    run functions, compiling async boundaries, computing capture sets, and emitting
    diagnostics when the capture or async tracking rules are violated.
-2. **Runtime** — a small fine-grained reactive core (signal graph, deep proxies
-   for object state, async node state, cancellation/versioning, DOM binding
-   helpers). Never exposed as user vocabulary.
+2. **Runtime** — a small fine-grained reactive core (graph cells, object state
+   records, async node state, cancellation/versioning, DOM binding helpers).
+   Never exposed as user vocabulary.
 3. **Server renderer** — runs component bodies once on the server, renders HTML,
    awaits demanded async nodes in v1 non-streaming mode, and serializes the
    resumability payload (state values, async snapshots, subscription graph,
@@ -126,8 +127,9 @@ The author-facing graph data model is three intent-named words:
 - `computed()` creates sync or async derived graph state.
 - `shared()` creates a named request/container/page graph root.
 
-Signals, stores, subscriptions, and proxy nodes are implementation details of
-graph management. `onVisible` is an element event prop, not a state primitive.
+Signals, stores, subscriptions, and object-state representation are
+implementation details of graph management. `onVisible` is an element event
+prop, not a state primitive.
 The two local-state intrinsics, available in any `.tsrx` file (components and
 shared logic alike):
 
@@ -317,6 +319,50 @@ State declared inside @if is disposed when the branch is removed.
 Move it above the @if if it should persist.
 ```
 
+### Children and projection
+
+TSRX's current documented convention is that composite components accept nested
+JSX content as `children`; computed values and render-prop-style values are
+passed explicitly as `children={...}`. This framework adopts that TSRX authoring
+convention. The compiler and runtime model is projection.
+
+```tsx
+export function Panel({ children }) @{
+  <section>{children}</section>
+}
+```
+
+`children` is not a React-style VNode array. It is an opaque compiler-owned
+template projection that may be placed into the output at `{children}`. The
+parent component can render it, wrap it, or pass it through to another component,
+but it cannot inspect, map, clone, diff, count, or mutate the child structure.
+
+This keeps the familiar JSX/TSRX authoring model without reintroducing VDOM
+costs. Server rendering is still O(n), because emitting HTML is O(n). Client
+resume must not be O(n) over the component tree: SSR emits the DOM plus graph,
+event, element, async, and projection metadata, and the resumer wakes only from
+serialized locators when an event, visibility trigger, async continuation, or
+state write demands it.
+
+Projection does not make the graph a tree. The DOM placement is tree-shaped, but
+state and async graph nodes keep the scopes where they were created. A parent
+that renders `{children}` owns only the projection site, not the child graph. If
+that projection site is removed by an `@if` branch or keyed item disposal, the
+projected DOM and any scopes created exclusively for that projected instance are
+disposed with it.
+
+The compiler should diagnose React-style child manipulation in v1:
+
+```txt
+children is an opaque template projection in @async/await.
+Render it with {children}, pass it through, or wrap it; do not inspect or map it.
+```
+
+There is no separate `<Slot />` primitive in v1. Qwik needed slots to keep VDOM
+projection sparse; this framework has no VDOM, so the slot-shaped concern is the
+projection metadata, not an author-facing component. Named slots are deferred
+unless TSRX standardizes a syntax that this host profile can adopt.
+
 ### No effects, no tasks — by design, not omission
 
 There is no `effect()`/`task()` primitive and never will be. A computed and an
@@ -486,7 +532,7 @@ diagnostic in v1: module-scope state would be shared across requests on the
 server and has no home in the per-document serialization payload. Request,
 container, and page state is declared with `shared()` definitions instead.
 
-### Implementation: hybrid compiler-rewrite + deep proxies
+### Implementation: compiler-owned graph state
 
 **Primitives (compiler-rewritten).** The compiler knows every `state()`/`computed()`
 creation site statically, so every read of that binding compiles to a graph read
@@ -495,18 +541,20 @@ closures, template expressions, destructured aliases, and non-component helper
 functions in `.tsrx` files. Reactivity crosses `.tsrx` function boundaries with
 zero ceremony; "transporting reactivity" is not a concept users need.
 
-**Objects and collections (proxied).** `state(obj)` wraps objects, arrays, `Map`,
-`Set`, and `Date` in deep Vue-style proxies at runtime. `user.profile.name = x`
-and `items.push(x)` just work via proxy traps; no reactive subclasses. Subscriptions
-are path-level, so a deep mutation updates only the bindings that read that path.
+**Objects and collections.** `state(obj)` supports objects, arrays, `Map`, `Set`,
+and `Date` without a separate `store()` primitive or reactive collection
+subclasses. `user.profile.name = x` and `items.push(x)` are graph writes with
+path-level invalidation semantics, so a deep mutation updates only the bindings
+that read that path.
 
-**Why hybrid:** the compiler can rewrite reads of variables it can see, but deep
-access through runtime aliases (`const u = obj.user` handed to a helper) is not
-statically trackable without whole-program analysis. Proxies handle aliasing at
-runtime; the compiler handles the hot common case with zero proxy overhead for
-primitives. A pure-compiler approach (Svelte-4-style static dependency tracking)
-is rejected outright: resumability requires a reified runtime graph, because the
-graph is exactly what gets serialized.
+The concrete object-state representation is private and may vary by target or
+optimization level. The public contract is plain JavaScript read/write syntax,
+path-granular dependency tracking, serialization to plain data, and no
+author-facing marker type.
+
+A pure-compiler approach (Svelte-4-style static dependency tracking) is rejected
+outright: resumability requires a reified runtime graph, because the graph is
+exactly what gets serialized.
 
 ### Destructuring
 
@@ -780,7 +828,7 @@ line. Diagnostic quality is a first-class deliverable, not polish.
 
 The server renderer emits, alongside the HTML:
 
-1. **State values** — proxies unwrap to plain data; serialized with the extended
+1. **State values** — object state serializes to plain data with the extended
    serializer. Sync `computed()` values are *not* serialized; they re-derive
    lazily from their dependencies on first read.
 2. **Async snapshots** — demanded async computed IDs, dependency keys, request
@@ -855,7 +903,7 @@ it is not public API).
   aliasing, async dependency-key extraction, post-await diagnostics, boundary
   lowering, extraction, capture diagnostics) — input `.tsrx` → emitted JS +
   symbol manifest.
-- **Runtime:** unit tests on the graph (dependency tracking, path-level proxy
+- **Runtime:** unit tests on the graph (dependency tracking, path-level
   subscriptions, lazy computed, async computed status/versioning/cancellation).
 - **Resumability end-to-end:** render a fixture app on the server, load it in a
   headless browser with **zero framework JS executed**, assert no execution before
@@ -880,8 +928,8 @@ their prerequisites exist:
 
 ## Build Order (high level)
 
-1. Reactive runtime core (graph + proxies + async node status/versioning) — pure
-   TS, testable standalone.
+1. Reactive runtime core (graph + object state + async node status/versioning) —
+   pure TS, testable standalone.
 2. Compiler: state rewriting + template codegen for client-side rendering (CSR
    mode first, to validate the language surface without serialization).
 3. Async computed lowering + `@try`/`@pending`/`@catch` boundary lowering.
