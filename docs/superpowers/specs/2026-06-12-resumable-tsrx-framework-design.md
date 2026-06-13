@@ -52,9 +52,10 @@ Four pieces:
 3. **Server renderer** — runs component bodies once on the server, renders HTML,
    and serializes the resumability payload (state values, subscription graph,
    listener→symbol map) into the document.
-4. **Resumer** — ~1KB client bootstrap. Attaches one global event listener,
-   lazy-loads symbols on first interaction, re-attaches bindings on first
-   relevant state change. No hydration pass, no component execution.
+4. **Resumer** — ~1KB client bootstrap. Attaches one global event listener
+   (plus a shared IntersectionObserver for `onVisible`-wired elements),
+   lazy-loads symbols on first interaction or visibility, re-attaches bindings
+   on first relevant state change. No hydration pass, no component execution.
 
 Bundler integration is a Vite plugin wrapping the compiler; extracted symbols
 become code-split entry points.
@@ -103,8 +104,38 @@ The classic uses of effects each have a better home:
   bindings to targets the template can't express; solved at the template level,
   not with lifecycle APIs.
 - *React to state you don't own* → deliberately unsupported.
-- *Eager client setup* (observers, third-party widgets) → deferred (see
-  Deferred Decisions); no current need identified.
+- *Eager client setup* (third-party widgets, canvas init, observers) →
+  `onVisible` (below).
+
+### `onVisible` — visibility as an event, not a lifecycle
+
+The one sanctioned home for mount-shaped imperative code is an element prop,
+parallel to `onClick`:
+
+```tsx
+<canvas onVisible={el => {
+  const chart = initChart(el, points.slice());
+  return () => chart.destroy();
+}} />
+```
+
+Semantics:
+
+- An `on*` event handler where the event is "element entered the viewport."
+  The resumer registers one shared IntersectionObserver for wired elements;
+  the handler is extracted as a lazy symbol (capture rule applies) and loads
+  only when its element first becomes visible.
+- Fires once per element instance, receives the element, may return a cleanup
+  that runs on element removal.
+- **Not a reactive computation.** State reads inside are current-value reads —
+  no subscriptions, no re-runs. Keeping imperative third-party state in sync
+  after init (e.g. `chart.update` on data change) is explicitly unsolved in v1;
+  Qwik's answer (`track()` inside the task) is a marker, so it is not ours.
+- The zero-JS guarantee gets a *scoped*, greppable asterisk: pages without
+  `onVisible` ship zero eager behavior; pages with it run exactly the symbols
+  whose elements are on screen. There is no free-floating equivalent
+  (`onMount()`, `client()`) and there never will be — anything without an
+  element doesn't belong in a component.
 
 A pure pull graph also deletes a class of resumability hazards: resume is
 always re-derivation, with no effect-ordering or "did it already run on the
@@ -180,7 +211,7 @@ opt-in. Here the boundaries are structural and the compiler already knows them.
 Every one of the following is extracted into its own lazily-loadable symbol, with
 no annotation:
 
-- event handler expressions (`onClick={...}`)
+- event handler expressions (`onClick={...}`, `onVisible={...}`)
 - `computed()` bodies
 - DOM binding expressions (text/attribute bindings — the system's only effects)
 - component bodies (executed on the server only)
@@ -266,9 +297,12 @@ Settled in principle but not yet in shape:
 Deliberately out of scope for the first implementation plan, to be designed when
 their prerequisites exist:
 
-- Eager client setup escape hatch (observers, third-party widgets, timers — e.g.
-  an element-scoped `use={}` binding). No current need identified; nothing ships
-  in v1.
+- Keeping imperative third-party state in sync after `onVisible` init (the
+  `chart.update` problem), plus possible `onVisible` variants (idle trigger,
+  `onHidden`).
+- Async derivation (`computed(async () => ...)` with pending/error states) —
+  likely needed before real apps; the strongest candidate to promote into v1
+  scope, since without an async story users will reinvent effects badly.
 - Writable `computed()` (optimistic state).
 - Streaming SSR / out-of-order flushing.
 - Server functions / RPC story.
