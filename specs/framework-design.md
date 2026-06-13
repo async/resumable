@@ -125,7 +125,8 @@ The author-facing graph data model is three intent-named words:
 
 - `state()` creates graph state.
 - `computed()` creates sync or async derived graph state.
-- `shared()` creates a named request/container/page graph root.
+- `shared()` creates a named graph root that can be shared across request,
+  container, page, or component-library UI graph instances.
 
 Signals, stores, subscriptions, and object-state representation are
 implementation details of graph management. `onVisible` is an element event
@@ -213,10 +214,12 @@ the component and never re-enter the component body on the client. Components
 are just ways to create local graph scopes, attach reads/writes, and project
 graph values into DOM.
 
-`shared()` lifts that same graph model out of any component instance and gives
-it request/container/page scope. This is different from hooks and context, which
-scope state through render order, provider ancestry, component subscriptions,
-and rerender boundaries. In this framework, the boundary is the dataflow:
+`shared()` lifts that same graph model into a named dataflow. Some named graphs
+are request/container/page state; others are UI graph instances used by
+headless UI libraries and design systems whose pieces are authored as separate
+components. This is different from hooks and context, which scope state through
+render order, provider ancestry, component subscriptions, and rerender
+boundaries. In this framework, the boundary is the dataflow:
 
 ```txt
 where the graph instance lives
@@ -576,9 +579,9 @@ graph. Destructuring in the parameter list is auto-aliased as above.
 
 There is no `context()` and no `store()`. React-style context makes authors
 create tree boundaries (`Provider`, context IDs, wrapper hooks) for data that is
-usually request, container, or page scoped: auth, i18n, cart, feature flags,
-current org, route cache, websocket state. `shared()` names that dataflow
-directly.
+usually just named dataflow: auth, i18n, cart, feature flags, current org, route
+cache, websocket state, or component-library state shared by root/trigger/item/
+content pieces. `shared()` names that dataflow directly.
 
 ```tsx
 // session.tsrx - definition only; module scope holds no instance
@@ -617,10 +620,11 @@ function Header() @{
 ```
 
 `session()` does not mean "run a hook." It means: resolve this named dataflow
-instance for the current request/container/page. The instance is created on the
-server per request, serialized into the graph payload, resumed lazily on the
-client, and synchronized by serialized patch events only when it crosses
-container/runtime boundaries.
+instance for the current graph context. For app data, that graph context is
+usually request/container/page. The instance is created on the server,
+serialized into the graph payload, resumed lazily on the client, and
+synchronized by serialized patch events only when it crosses container/runtime
+boundaries.
 
 ```txt
 shared definition
@@ -635,9 +639,14 @@ Semantics:
 - **Identity:** compiler-emitted stable ID per definition (package + export
   name). No `createContextId`, and IDs survive serialization and
   separately-built bundles.
-- **Resolution:** bare call resolves the current request/container/page instance
-  of that shared definition. There is no `provide()` or `create()` in v1;
-  repeated local widget state stays ordinary component-owned `state()`.
+- **Resolution:** a bare call resolves the active instance of that shared
+  definition for the current graph context. There is no `provide()` or
+  `create()` in v1. For request/page data, the active instance is the
+  request/container/page instance. For headless UI and design-system components,
+  the active instance is the compiler-owned UI graph instance serialized for
+  that widget. Multiple widgets get distinct graph instances through normal
+  component, key, and projection identity; event/resume symbols carry the graph
+  instance ID they were rendered with.
 - **Boundaries are dataflow, not components.** The framework tracks who reads,
   who writes, which runtime owns the instance, and where the state must
   serialize or sync. Authors do not place provider components to define those
@@ -760,10 +769,63 @@ The two bundles share live state without sharing code. The header write updates
 its local graph and emits a serialized patch for the `shell` shared ID; the
 sidebar runtime folds that patch into its own graph.
 
-**Local repeated widget state**
+**Headless UI / design-system graph**
 
-Repeated component instances do not use `shared()`. Their boundary is local
-ownership, so ordinary `state()` is enough.
+Compound components often split one widget across separately authored pieces:
+root, trigger, content, item, label, indicator. Qwik Design System solves this
+with Qwik context because Qwik needs a provider mechanism. In this framework,
+the same pattern is a named graph.
+
+```tsx
+// select.tsrx - definition only; module scope holds no instance
+export const select = shared(() => {
+  const s = state({
+    open: false,
+    value: null,
+    highlightedIndex: null,
+    itemValues: [] as string[],
+  });
+
+  return {
+    ...s,
+    choose(value: string) {
+      s.value = value;
+      s.open = false;
+    },
+  };
+});
+
+export function SelectRoot({ children }) @{
+  const s = select();
+
+  <div data-open={s.open}>{children}</div>
+}
+
+export function SelectTrigger() @{
+  const s = select();
+
+  <button onClick={() => s.open = !s.open}>
+    {s.value ?? "Select"}
+  </button>
+}
+
+export function SelectItem({ value, children }) @{
+  const s = select();
+
+  <div onClick={() => s.choose(value)}>{children}</div>
+}
+```
+
+All three components read and write the same select graph instance for that
+rendered widget. A second `<SelectRoot>` gets a different graph instance. No
+provider component, context ID, wrapper hook, or tree-shaped public API is
+introduced; the compiler/runtime records graph instance identity in the same
+SSR/resume metadata used for events, projection, keyed loops, and DOM bindings.
+
+**Self-contained local widget state**
+
+Self-contained component instances usually do not need `shared()`. Their
+boundary is local ownership, so ordinary `state()` is enough.
 
 ```tsx
 export function Select({ options }) @{
@@ -786,9 +848,10 @@ export function Select({ options }) @{
 }
 ```
 
-This prevents `shared()` from becoming context under a different name. Shared
-state is named request/container/page dataflow; local state is component-owned
-dataflow.
+This keeps `shared()` from replacing local state. Use `state()` for
+self-contained component state. Use `shared()` when a named graph must be
+resolved by multiple independently-authored pieces, across a request/page or
+inside a design-system widget.
 
 ## Resumability
 
