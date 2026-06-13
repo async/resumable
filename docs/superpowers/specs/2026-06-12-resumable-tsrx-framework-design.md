@@ -89,6 +89,13 @@ These are **compiler intrinsics**, not imports of a value type. There is no
 `Signal`/`Tracked` type in the public API. Event handler props are camelCase
 (`onClick`, `onInput`), matching TSRX/JSX convention — no directive namespace.
 
+`state()`/`computed()` may be created anywhere in a call tree rooted in a
+component instance — including helper functions in non-component `.tsrx` files
+(custom-hook-style stores). Creation at **module scope** is a compile-time
+diagnostic in v1: module-scope state would be shared across requests on the
+server and has no home in the per-document serialization payload. App-wide state
+is shared via `context()` instead.
+
 ### Implementation: hybrid compiler-rewrite + deep proxies
 
 **Primitives (compiler-rewritten).** The compiler knows every `state()`/`computed()`
