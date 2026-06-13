@@ -53,8 +53,8 @@ Four pieces:
    and serializes the resumability payload (state values, subscription graph,
    listener→symbol map) into the document.
 4. **Resumer** — ~1KB client bootstrap. Attaches one global event listener,
-   lazy-loads symbols on first interaction, re-attaches effects on first relevant
-   state change. No hydration pass, no component execution.
+   lazy-loads symbols on first interaction, re-attaches bindings on first
+   relevant state change. No hydration pass, no component execution.
 
 Bundler integration is a Vite plugin wrapping the compiler; extracted symbols
 become code-split entry points.
@@ -63,16 +63,12 @@ become code-split entry points.
 
 ### Surface API
 
-Three intrinsics, available in any `.tsrx` file (components and shared logic alike):
+Two intrinsics, available in any `.tsrx` file (components and shared logic alike):
 
 ```tsx
 export function Counter() @{
   let count = state(0);
   let double = computed(() => count * 2);
-
-  effect(() => {
-    console.log(count); // re-runs when count changes
-  });
 
   <button onClick={() => count++}>{count} / {double}</button>
 }
@@ -82,8 +78,44 @@ export function Counter() @{
   plain assignment/mutation.
 - `computed(fn)` — lazy derived value. Read as a plain variable. Not writable
   (no optimistic-write semantics in v1; revisit if real apps demand it).
-- `effect(fn)` — side effect re-run when its dependencies change. Dependencies
-  are tracked at runtime by reads during execution.
+
+### No effects, no tasks — by design, not omission
+
+There is no `effect()`/`task()` primitive and never will be. A computed and an
+effect are the same node (a reactive computation); the only difference is that a
+computed is **pull-based** (runs when read) while an effect is **push-based**
+(runs because deps changed, with no consumer). That push property is exactly
+what breaks resumability (eager self-waking code) and exactly what enables
+spaghetti (reacting to state you don't own). Removing it yields the framework's
+core invariant:
+
+> **The entire graph is demand-driven from the DOM.** State → computed →
+> bindings, where compiler-generated DOM bindings are the only effects in the
+> system. Nothing computes unless the screen needs it.
+
+The classic uses of effects each have a better home:
+
+- *Derive state from state* → `computed()`.
+- *"When X changes, update Y"* → an antipattern in every fine-grained system;
+  with no render loop, every mutation originates at an identifiable site (an
+  event handler), so co-locate the side work there as a plain function.
+- *Sync external targets* (`document.title`, imperative DOM) → these are
+  bindings to targets the template can't express; solved at the template level,
+  not with lifecycle APIs.
+- *React to state you don't own* → deliberately unsupported.
+- *Eager client setup* (observers, third-party widgets) → deferred (see
+  Deferred Decisions); no current need identified.
+
+A pure pull graph also deletes a class of resumability hazards: resume is
+always re-derivation, with no effect-ordering or "did it already run on the
+server" semantics to replay.
+
+This matters double in the AI age: with one way to express any data flow
+(derive it), generated code is reviewable by construction — stale-closure
+effects, dependency-array bugs, and effect-ordering races are not lintable
+mistakes here, they are unrepresentable. (Prior art: Ryan Carniato's
+derived-first direction for Solid 2.0 — "you don't need effects; computed is
+your effect.")
 
 These are **compiler intrinsics**, not imports of a value type. There is no
 `Signal`/`Tracked` type in the public API. Event handler props are camelCase
@@ -126,12 +158,18 @@ to alias bindings: `const { x } = props` means every later read of `x` emits
 behavior generalized to all compiler-known reactive sources. Rest/spread of a
 reactive source produces a derived proxy over the remaining keys.
 
-### Props and context
+### Props and shared state
 
 - Component props are getter-backed; reads inside the child re-read the parent's
   graph. Destructuring in the parameter list is auto-aliased as above.
-- `context()` (provide/read) follows the same rules as state: compiler-known
-  creation, serializable values, graph-referenced by extracted closures.
+- The shared-state primitive (context vs. provider-free auto-scoped stores) is
+  under active design — see Open Design Threads. Whatever lands must follow the
+  same rules as state: compiler-known creation, serializable values,
+  graph-referenced by extracted closures, no module-scope instances. Requirements
+  already settled: no manual boundary ceremony (no `createContextId` +
+  provider + consumer triple), and it must work across nested containers and
+  separately-built micro-frontend containers (stable cross-bundle identity,
+  plain-data wire format).
 
 ## Resumability
 
@@ -143,8 +181,8 @@ Every one of the following is extracted into its own lazily-loadable symbol, wit
 no annotation:
 
 - event handler expressions (`onClick={...}`)
-- `effect()` bodies
 - `computed()` bodies
+- DOM binding expressions (text/attribute bindings — the system's only effects)
 - component bodies (executed on the server only)
 
 ### The Capture Rule (replaces the marker)
@@ -172,8 +210,8 @@ The server renderer emits, alongside the HTML:
 1. **State values** — proxies unwrap to plain data; serialized with the extended
    serializer. `computed()` values are *not* serialized; they re-derive lazily
    from their dependencies on first read.
-2. **Subscription graph** — which symbol (binding, effect, computed) depends on
-   which state path.
+2. **Subscription graph** — which symbol (binding, computed) depends on which
+   state path.
 3. **Wiring** — DOM element → event → symbol map for listeners, and DOM element →
    binding-symbol map for dynamic text/attributes.
 
@@ -214,11 +252,23 @@ it is not public API).
   the DOM updated. This e2e harness is the core invariant check and gets built
   early, not last.
 
+## Open Design Threads
+
+Settled in principle but not yet in shape:
+
+- **Shared state / DI primitive.** Leading candidate: provider-free auto-scoped
+  stores (module-scope *definitions*, per-container *instances*, compiler-emitted
+  stable IDs for cross-container/micro-frontend sharing via a page-level
+  registry). Not yet approved; see requirements under "Props and shared state."
+
 ## Deferred Decisions
 
 Deliberately out of scope for the first implementation plan, to be designed when
 their prerequisites exist:
 
+- Eager client setup escape hatch (observers, third-party widgets, timers — e.g.
+  an element-scoped `use={}` binding). No current need identified; nothing ships
+  in v1.
 - Writable `computed()` (optimistic state).
 - Streaming SSR / out-of-order flushing.
 - Server functions / RPC story.
