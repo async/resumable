@@ -11,16 +11,18 @@ load, closures lazy-loaded on first interaction) without any author-facing marke
 supporting exactly one authoring language: **TSRX** (https://tsrx.dev — `.tsrx`
 files, `@{}` component blocks, first-class `@if`/`@for`, co-located `<style>`).
 Because the framework owns the language via a TSRX codegen plugin, the compiler
-sees every component, every state creation site, and every closure structurally —
-which is what makes marker-free resumability and a plain-value state API tractable.
+sees every component, every state creation site, every closure, and every async
+boundary structurally — which is what makes marker-free resumability, async
+dataflow, and a plain-value state API tractable.
 
 The central model is: UI structure is a tree-shaped graph, but state dependencies
 are a general directed graph. Current web frameworks often force that general
 graph through tree-shaped tools: provider ancestry, hook call order, component
 subscriptions, rerender boundaries, and hydration boundaries. This framework
 does the opposite: the dataflow graph is the boundary. Components project graph
-nodes into DOM; events write back into graph nodes; resumability serializes graph
-state and edges rather than re-entering component trees.
+nodes into DOM; events write back into graph nodes; async work derives graph
+nodes from awaited data; resumability serializes graph state and edges rather
+than re-entering component trees.
 
 JSX/TSX is explicitly **not** supported.
 
@@ -37,6 +39,9 @@ JSX/TSX is explicitly **not** supported.
    "Signal" is an implementation detail of compiled output, never API vocabulary.
 4. **TSRX-only.** State and reactivity are language features of `.tsrx` files,
    not a runtime library importable from arbitrary TS.
+5. **First-class async.** Async dataflow is a compiler-tracked graph feature, not
+   an effect/task/resource wrapper. Pending/error UI is expressed with TSRX
+   boundaries, and async dependencies are serializable/resumable.
 
 ## Non-Goals
 
@@ -53,12 +58,15 @@ Four pieces:
 1. **Compiler** — a TSRX codegen plugin (the framework is a TSRX compile target,
    alongside React/Solid/Vue targets). Responsible for: rewriting state reads and
    writes, compiling templates to DOM instructions, extracting closures into
-   lazily-loadable symbols, computing capture sets, and emitting diagnostics when
-   the capture rule is violated.
+   lazily-loadable symbols, splitting async derivations into key functions and
+   run functions, compiling async boundaries, computing capture sets, and emitting
+   diagnostics when the capture or async tracking rules are violated.
 2. **Runtime** — a small fine-grained reactive core (signal graph, deep proxies
-   for object state, DOM binding helpers). Never exposed as user vocabulary.
+   for object state, async node state, cancellation/versioning, DOM binding
+   helpers). Never exposed as user vocabulary.
 3. **Server renderer** — runs component bodies once on the server, renders HTML,
-   and serializes the resumability payload (state values, subscription graph,
+   awaits demanded async nodes in v1 non-streaming mode, and serializes the
+   resumability payload (state values, async snapshots, subscription graph,
    listener→symbol map) into the document.
 4. **Resumer** — ~1KB client bootstrap. Attaches one global event listener
    (plus a shared IntersectionObserver for `onVisible`-wired elements),
@@ -75,7 +83,7 @@ become code-split entry points.
 The entire author-facing data model is three intent-named words:
 
 - `state()` creates graph state.
-- `computed()` creates derived graph state.
+- `computed()` creates sync or async derived graph state.
 - `shared()` creates a named request/container/page graph root.
 
 Signals, stores, subscriptions, and proxy nodes are implementation details of
@@ -96,8 +104,11 @@ export function Counter() @{
   plain assignment/mutation. Scalars compile to one reactive cell; objects and
   collections compile to field/path-granular reactive data. There is no separate
   `store()` primitive.
-- `computed(fn)` — lazy derived value. Read as a plain variable. Not writable
-  (no optimistic-write semantics in v1; revisit if real apps demand it).
+- `computed(fn)` — lazy derived value. Read as a plain variable. Sync computeds
+  re-derive from their dependencies when read. Async computeds are compiler-known
+  async graph nodes with pending/error/value state, cancellation, and dependency
+  keys. Computeds are not writable (no optimistic-write semantics in v1; revisit
+  if real apps demand it).
 
 ```tsx
 let count = state(0);
@@ -159,6 +170,7 @@ core invariant:
 The classic uses of effects each have a better home:
 
 - *Derive state from state* → `computed()`.
+- *Fetch data from state* → `computed(async ...)` plus a TSRX async boundary.
 - *"When X changes, update Y"* → an antipattern in every fine-grained system;
   with no render loop, every mutation originates at an identifiable site (an
   event handler), so co-locate the side work there as a plain function.
@@ -210,9 +222,97 @@ mistakes here, they are unrepresentable. (Prior art: Ryan Carniato's
 derived-first direction for Solid 2.0 — "you don't need effects; computed is
 your effect.")
 
-These are **compiler intrinsics**, not imports of a value type. There is no
-`Signal`/`Tracked` type in the public API. Event handler props are camelCase
-(`onClick`, `onInput`), matching TSRX/JSX convention — no directive namespace.
+### Async derivation and TSRX boundaries
+
+Async is v1 core, not a deferred resource layer. Without a first-class async
+path, users will rebuild effects by hand with `loading`, `error`, and `data`
+state. The framework instead treats async as derived graph state:
+
+```tsx
+function UserRoute() @{
+  const user = computed(async ({ signal }) => {
+    const id = route.params.userId;
+
+    const res = await fetch(`/api/users/${id}`, { signal });
+    if (!res.ok) throw new Error("Failed to load user");
+
+    return await res.json();
+  });
+
+  @try {
+    <Profile user={user} />
+  } @pending {
+    <Spinner />
+  } @catch (err) {
+    <ErrorView error={err} />
+  }
+}
+```
+
+Semantics:
+
+- `computed(async ({ signal }) => ...)` creates a lazy async graph node. It does
+  not run at creation; it runs only when demanded by a DOM binding or TSRX async
+  boundary.
+- Reactive reads before the first `await` form the dependency key for the async
+  node. When that key changes, the runtime creates a new request version.
+- Reactive reads after the first `await` are a compile-time diagnostic. Snapshot
+  the value before awaiting, or split the logic into an async computed plus a
+  sync computed:
+
+```tsx
+const rawUser = computed(async ({ signal }) =>
+  fetchUser(route.params.userId, signal)
+);
+const formattedUser = computed(() => formatUser(rawUser, locale));
+```
+
+- Sync computeds may depend on async computeds. They become
+  async-pending-capable transitively and must still be read under an async
+  boundary if their upstream async value can be pending or rejected.
+- The runtime passes an `AbortSignal` to async computeds. On dependency-key
+  change or disposal, stale work is aborted when possible; stale promise
+  resolutions are ignored even if the underlying operation cannot abort.
+- `@try` / `@pending` / `@catch` is the only v1 UI mechanism for observing async
+  pending/error state. There is no public `resource()`, `.loading`, `.error`, or
+  `track()` API.
+- A template read of an async computed must be dominated by an async boundary.
+  Missing boundaries are compile-time diagnostics in v1. A future router may
+  provide route-level implicit boundaries, but the v1 compiler should keep the
+  rule explicit.
+- In v1 non-streaming SSR, the server awaits all demanded async nodes inside
+  rendered boundaries before emitting final HTML. Streaming, out-of-order
+  flushing, stale-while-revalidate, and explicit cache policy are separate
+  features.
+- On client revalidation, a dependency-key change returns the boundary to
+  `@pending` for the new key. Stale-content and cached-key policies are deferred.
+
+Internally, the compiler can lower the single author-facing function into a
+resource-shaped pair:
+
+```ts
+_asyncComputed({
+  key: () => ({ id: route.params.userId }),
+  run: async ({ key, signal }) => fetchUser(key.id, signal),
+});
+```
+
+That split is an implementation model, not public API. It keeps the authoring
+surface aligned with JavaScript `async`/`await`, while giving the runtime the
+explicit dependency key, cancellation hook, version counter, and serialization
+record required for resumability.
+
+Rationale: runtime-only tracking systems lose dependencies after `await` unless
+users manually read them before suspension; Qwik solves that with `track()`, and
+Vue/Angular document the same synchronous-tracking constraint. Svelte's compiler
+can recover some async dependencies in compiler-visible expressions. This
+framework takes the TSRX-only route: no marker, but strict compiler diagnostics
+at the async boundary.
+
+The state, async, and event primitives are **compiler intrinsics**, not imports
+of a value type. There is no `Signal`/`Tracked` type in the public API. Event
+handler props are camelCase (`onClick`, `onInput`), matching TSRX/JSX convention
+— no directive namespace.
 
 `state()`/`computed()` may be created anywhere in a call tree rooted in a
 component or shared instance — including helper functions in non-component
@@ -488,6 +588,7 @@ no annotation:
 
 - event handler expressions (`onClick={...}`, `onVisible={...}`)
 - `computed()` bodies
+- async computed run functions and async boundary branch bindings
 - DOM binding expressions (text/attribute bindings — the system's only effects)
 - component bodies (executed on the server only)
 
@@ -514,15 +615,19 @@ quality is a first-class deliverable, not polish.
 The server renderer emits, alongside the HTML:
 
 1. **State values** — proxies unwrap to plain data; serialized with the extended
-   serializer. `computed()` values are *not* serialized; they re-derive lazily
-   from their dependencies on first read.
-2. **Shared instances** — shared definition IDs, request/container/page scope,
+   serializer. Sync `computed()` values are *not* serialized; they re-derive
+   lazily from their dependencies on first read.
+2. **Async snapshots** — demanded async computed IDs, dependency keys, request
+   versions, status (`pending`, `resolved`, `rejected`), and settled value/error
+   data when available. This prevents resume from refetching data the server
+   already resolved.
+3. **Shared instances** — shared definition IDs, request/container/page scope,
    version counters, and the plain state snapshot for each touched shared
    instance. Methods/actions are never serialized.
-3. **Subscription graph** — which symbol (binding, computed) depends on which
-   state path.
-4. **Wiring** — DOM element → event → symbol map for listeners, and DOM element →
-   binding-symbol map for dynamic text/attributes.
+4. **Subscription graph** — which symbol (binding, computed, async dependency
+   key) depends on which state path.
+5. **Wiring** — DOM element → event → symbol map for listeners, and DOM element →
+   binding-symbol map for dynamic text/attributes/async boundaries.
 
 Format: a JSON script block plus element attributes for wiring (exact encoding is
 an implementation detail of the renderer/resumer pair and may change freely —
@@ -536,6 +641,9 @@ it is not public API).
 - State writes during that run propagate through the graph; subscribed binding
   symbols are loaded on demand and update the DOM in place. Nothing re-renders;
   there is no component re-execution path in the client runtime at all.
+- Async computed invalidation aborts the prior request version, imports the async
+  run function only when a visible/demanded boundary needs it, and applies only the
+  newest matching result to the graph.
 - If a write touches a shared instance that spans a container/runtime boundary,
   the local graph write additionally emits a versioned `CustomEvent` patch. The
   exact event name and encoding are private runtime protocol, but the shape is
@@ -556,26 +664,29 @@ it is not public API).
 ## Error Handling
 
 - **Compile time:** capture-rule violations, `state()`/`computed()` used outside
-  a `.tsrx` reactive scope, unserializable initial state. All diagnostics name the
-  offending identifier and span.
+  a `.tsrx` reactive scope, reactive reads after `await` in async computed
+  bodies, async reads outside an async boundary, unserializable initial state.
+  All diagnostics name the offending identifier and span.
 - **Runtime (dev):** serialization failures at SSR time fail the render loudly
-  with the state path included. Resumer logs a structured error if a symbol fails
-  to load or a graph reference is missing (payload/version mismatch).
+  with the state path included. Async result serialization failures include the
+  async computed ID and dependency key. Resumer logs a structured error if a
+  symbol fails to load or a graph reference is missing (payload/version mismatch).
 - **Runtime (prod):** symbol load failures retry once, then surface through an
   app-level error hook.
 
 ## Testing Strategy
 
 - **Compiler:** snapshot tests per language feature (state rewrite, destructuring
-  aliasing, extraction, capture diagnostics) — input `.tsrx` → emitted JS + symbol
-  manifest.
+  aliasing, async dependency-key extraction, post-await diagnostics, boundary
+  lowering, extraction, capture diagnostics) — input `.tsrx` → emitted JS +
+  symbol manifest.
 - **Runtime:** unit tests on the graph (dependency tracking, path-level proxy
-  subscriptions, lazy computed).
+  subscriptions, lazy computed, async computed status/versioning/cancellation).
 - **Resumability end-to-end:** render a fixture app on the server, load it in a
   headless browser with **zero framework JS executed**, assert no execution before
-  interaction, then interact and assert only the expected symbols were fetched and
-  the DOM updated. This e2e harness is the core invariant check and gets built
-  early, not last.
+  interaction, assert server-resolved async data does not refetch on resume, then
+  interact and assert only the expected symbols were fetched and the DOM updated.
+  This e2e harness is the core invariant check and gets built early, not last.
 
 ## Deferred Decisions
 
@@ -585,9 +696,8 @@ their prerequisites exist:
 - Keeping imperative third-party state in sync after `onVisible` init (the
   `chart.update` problem), plus possible `onVisible` variants (idle trigger,
   `onHidden`).
-- Async derivation (`computed(async () => ...)` with pending/error states) —
-  likely needed before real apps; the strongest candidate to promote into v1
-  scope, since without an async story users will reinvent effects badly.
+- Async caching policy beyond "current dependency key", stale-while-revalidate
+  UI, manual refresh/invalidation APIs, and prefetch policy.
 - Writable `computed()` (optimistic state).
 - Streaming SSR / out-of-order flushing.
 - Server functions / RPC story.
@@ -595,8 +705,10 @@ their prerequisites exist:
 
 ## Build Order (high level)
 
-1. Reactive runtime core (graph + proxies) — pure TS, testable standalone.
+1. Reactive runtime core (graph + proxies + async node status/versioning) — pure
+   TS, testable standalone.
 2. Compiler: state rewriting + template codegen for client-side rendering (CSR
    mode first, to validate the language surface without serialization).
-3. Closure extraction + capture analysis + diagnostics.
-4. Server renderer + serialization + resumer; e2e resumability harness.
+3. Async computed lowering + `@try`/`@pending`/`@catch` boundary lowering.
+4. Closure extraction + capture analysis + diagnostics.
+5. Server renderer + serialization + resumer; e2e resumability harness.
