@@ -2,6 +2,8 @@
 
 **Date:** 2026-06-12
 **Status:** Approved direction, pre-implementation
+**Tagline:** A resumable UI framework for async-first apps.
+**Package:** `@async/await`
 
 ## Summary
 
@@ -51,9 +53,36 @@ JSX/TSX is explicitly **not** supported.
   no-marker property.)
 - Qwik-style serialization of arbitrary lexical scopes (see Capture Rule).
 
+## TSRX Baseline
+
+This framework should let TSRX answer syntax and template-shape questions
+whenever core TSRX already has an answer.
+
+TSRX owns the baseline semantics for:
+
+- components as ordinary TypeScript functions returning TSRX
+- statement containers (`@{...}`)
+- comments inside template children
+- lexical scope inside statement containers and control-flow blocks
+- `@if`, `@for`, `@switch`, and `@try`
+- `@for` `index`, `key`, and `@empty`
+- dynamic tags/components (`<{expr}>`)
+- scoped `<style>` blocks and style composition
+
+This framework is a TSRX host profile. It consumes the TSRX AST and defines only
+the host-specific semantics needed for marker-free graph state, async dataflow,
+closure extraction, resumability, serialization, and runtime DOM wiring. When a
+question is already answered by TSRX, this design should reference that answer
+rather than invent a parallel rule.
+
+The main exception is reactive state semantics. TSRX's core lazy destructuring
+syntax remains valid TSRX, but this framework's host profile preserves live
+reads for known-reactive sources without requiring authors to use lazy
+destructuring markers.
+
 ## Architecture Overview
 
-Four pieces:
+Five pieces:
 
 1. **Compiler** — a TSRX codegen plugin (the framework is a TSRX compile target,
    alongside React/Solid/Vue targets). Responsible for: rewriting state reads and
@@ -72,15 +101,26 @@ Four pieces:
    (plus a shared IntersectionObserver for `onVisible`-wired elements),
    lazy-loads symbols on first interaction or visibility, re-attaches bindings
    on first relevant state change. No hydration pass, no component execution.
+5. **Build integration** — a Rolldown plugin base exported by `@async/await`,
+   with framework adapters such as Vite consuming that base plugin. Extracted
+   symbols become code-split entry points, and production builds emit the
+   manifest metadata needed by the server renderer, resumer, preload/runtime
+   graph, and cached SSR fragments.
 
-Bundler integration is a Vite plugin wrapping the compiler; extracted symbols
-become code-split entry points.
+The build architecture is Rolldown-first, not Vite-first. The base Rolldown
+plugin owns compiler transforms, virtual modules, emitted symbol chunks,
+manifest generation, diagnostics, and client/server/library build modes. The
+Vite plugin is an adapter that wraps the Rolldown plugin with Vite-specific
+environment detection, dev-server transforms, HMR, HTML/dev-tag injection, build
+orchestration, and public extension APIs. This mirrors the `qwik-bundler`
+structure: a reusable `rolldown` entry point is the core, and `vite` is one
+consumer of it.
 
 ## State System
 
 ### Surface API
 
-The entire author-facing data model is three intent-named words:
+The author-facing graph data model is three intent-named words:
 
 - `state()` creates graph state.
 - `computed()` creates sync or async derived graph state.
@@ -119,6 +159,44 @@ session.user = user;      // invalidates only the `user` path
 session.status = "ready"; // invalidates only the `status` path
 ```
 
+### DOM element handles
+
+DOM elements are not graph state. They are host objects that may exist in the
+browser, may be absent on the server, and may disappear when a conditional or
+keyed item is removed.
+
+Use `element<T>()` when lazy event code needs a typed, resumable handle to a host
+element. Bind it with the framework-owned `el` prop:
+
+```tsx
+export function SearchBox() @{
+  let input = element<HTMLInputElement>();
+
+  <>
+    <input el={input} />
+    <button onClick={() => input?.focus()}>Focus</button>
+  </>
+}
+```
+
+`element()` creates an element handle, not reactive data. `el={handle}` binds that
+handle to exactly one host element in the current graph scope. On the server, and
+after the element is removed, reading the handle produces `undefined`. When a
+lazy event or visibility handler runs in the browser, the resumer resolves the
+handle's serialized DOM locator to the current element.
+
+This covers the common design-system cases: focus registries, item navigation,
+measurement, pointer capture, popover/dialog/file-picker APIs, and cross-event
+DOM access. It also keeps two jobs separate:
+
+- `element()` names an element for later imperative use.
+- attach/detach setup and cleanup, if needed, should use a separate lifecycle
+  surface rather than overloading element handles.
+
+`state()` cannot hold DOM nodes, and `element()` handles are not serialized as
+data. Passing element handles through component context, arrays, and helpers is
+valid when the values remain inside `.tsrx` compiler-owned code.
+
 ### Scoping model
 
 A tree is a constrained graph: one root, parent/child ancestry, no arbitrary
@@ -152,6 +230,92 @@ construct state boundaries with providers; the graph itself is the resumable
 unit. Resuming means loading the symbol touched by an event, materializing its
 graph references, applying writes to graph nodes, and updating the DOM bindings
 that actually depend on those paths.
+
+### Loop identity
+
+TSRX already gives `@for` optional `index` and `key` clauses:
+
+```tsx
+@for (const product of products; index i; key product.id) {
+  <ProductCard product={product} />
+}
+```
+
+This framework uses the `key` clause as the stable identity root for repeated
+local graph scopes. A keyed loop item keeps its component instances, local
+`state()`, `computed()` nodes, async nodes, DOM bindings, and event wiring
+attached to the same logical item across reorder, insert, and delete operations.
+
+Unkeyed `@for` is positional. That is acceptable for static/stateless output,
+but any loop body that creates resumable graph identity must either provide a
+stable domain key or explicitly key by position (`index i; key i`) when state
+should follow the slot rather than the item. The compiler should diagnose
+interactive or stateful unkeyed loops and point at the `@for` header:
+
+```tsx
+@for (const product of products; key product.id) {
+  <ProductCard product={product} />
+}
+```
+
+The loop key applies to generated child identity for that iteration. If a child
+component or element supplies its own key, that authored key becomes the child
+identity within the keyed loop item.
+
+### Conditional identity
+
+`@if` branches create branch-local graph scopes. When a branch is removed from
+the DOM, graph state created exclusively inside that branch is disposed with it:
+local `state()`, `computed()` nodes, async nodes, DOM bindings, event wiring,
+and pending async work.
+
+When the branch becomes active again, it creates fresh branch-local graph state
+from the current parent values. This matches the no-VDOM model: conditional
+rendering inserts and removes real DOM and graph subtrees directly rather than
+retaining hidden virtual subtrees.
+
+```tsx
+export function Panel() @{
+  const open = state(false);
+
+  <section>
+    <button onClick={() => open = !open}>Toggle</button>
+
+    @if (open) {
+      const draft = state("");
+
+      <input value={draft} onInput={event => draft = event.currentTarget.value} />
+    }
+  </section>
+}
+```
+
+In this example, `draft` resets every time `open` changes from `false` to `true`.
+If state should survive while the branch is hidden, declare it in the nearest
+stable parent scope:
+
+```tsx
+export function Panel() @{
+  const open = state(false);
+  const draft = state("");
+
+  <section>
+    <button onClick={() => open = !open}>Toggle</button>
+
+    @if (open) {
+      <input value={draft} onInput={event => draft = event.currentTarget.value} />
+    }
+  </section>
+}
+```
+
+The compiler should be able to explain this rule when local state appears inside
+a conditional branch:
+
+```txt
+State declared inside @if is disposed when the branch is removed.
+Move it above the @if if it should persist.
+```
 
 ### No effects, no tasks — by design, not omission
 
@@ -309,10 +473,11 @@ can recover some async dependencies in compiler-visible expressions. This
 framework takes the TSRX-only route: no marker, but strict compiler diagnostics
 at the async boundary.
 
-The state, async, and event primitives are **compiler intrinsics**, not imports
-of a value type. There is no `Signal`/`Tracked` type in the public API. Event
-handler props are camelCase (`onClick`, `onInput`), matching TSRX/JSX convention
-— no directive namespace.
+The state, async, element, and event primitives are **compiler intrinsics**, not
+imports of a value type. There is no `Signal`/`Tracked` type in the public API.
+Event handler props are camelCase (`onClick`, `onInput`), matching TSRX/JSX
+convention — no directive namespace. Element handles use the host prop `el`,
+which only accepts `element()` handles.
 
 `state()`/`computed()` may be created anywhere in a call tree rooted in a
 component or shared instance — including helper functions in non-component
@@ -560,7 +725,7 @@ export function Select({ options }) @{
 
   @if (s.open) {
     <ul>
-      @for (option of options) {
+      @for (const option of options; key option.value) {
         <li onClick={() => {
           s.value = option.value;
           s.open = false;
@@ -597,18 +762,19 @@ no annotation:
 An extracted closure may capture only:
 
 1. `state()` / `computed()` references — serialized as graph references, not values
-2. props and `shared()` instance references
-3. module-level imports — re-imported by the emitted symbol module
-4. serializable constants (JSON-compatible values, plus the framework's extended
+2. `element()` handles — serialized as DOM locators, not DOM nodes
+3. props and `shared()` instance references
+4. module-level imports — re-imported by the emitted symbol module
+5. serializable constants (JSON-compatible values, plus the framework's extended
    set: Date, Map, Set, URL, BigInt, typed arrays)
 
 Capturing anything else — a local class instance, a raw function, a DOM node held
 in a plain variable — is a **compile-time diagnostic** pointing at the exact
 variable, explaining why it can't cross a resume boundary and what to do instead
-(usually: make it state, hoist it to module scope, or derive it inside the
-closure). The diagnostic does the job Qwik's `$` does, but only fires when
-something is actually unserializable instead of taxing every line. Diagnostic
-quality is a first-class deliverable, not polish.
+(usually: make it state, make it an `element()` handle, hoist it to module scope,
+or derive it inside the closure). The diagnostic does the job Qwik's `$` does,
+but only fires when something is actually unserializable instead of taxing every
+line. Diagnostic quality is a first-class deliverable, not polish.
 
 ### Serialization payload
 
@@ -628,6 +794,9 @@ The server renderer emits, alongside the HTML:
    key) depends on which state path.
 5. **Wiring** — DOM element → event → symbol map for listeners, and DOM element →
    binding-symbol map for dynamic text/attributes/async boundaries.
+6. **Element handles** — `element()` handle IDs mapped to DOM locators emitted by
+   `el={handle}` bindings. The payload identifies where the element is; it never
+   serializes the element object itself.
 
 Format: a JSON script block plus element attributes for wiring (exact encoding is
 an implementation detail of the renderer/resumer pair and may change freely —
@@ -637,7 +806,11 @@ it is not public API).
 
 - One global delegated event listener (capture phase) from the resumer.
 - First interaction: look up the symbol for that element/event, dynamically
-  import it, materialize its captured graph references, run it.
+  import it, materialize its captured graph references and element handles, run
+  it.
+- Element handles resolve from serialized DOM locators at handler execution time.
+  If the element was removed or the locator no longer matches, the handle reads
+  as `undefined`.
 - State writes during that run propagate through the graph; subscribed binding
   symbols are loaded on demand and update the DOM in place. Nothing re-renders;
   there is no component re-execution path in the client runtime at all.
@@ -665,7 +838,9 @@ it is not public API).
 
 - **Compile time:** capture-rule violations, `state()`/`computed()` used outside
   a `.tsrx` reactive scope, reactive reads after `await` in async computed
-  bodies, async reads outside an async boundary, unserializable initial state.
+  bodies, async reads outside an async boundary, `el` used with a non-`element()`
+  handle, one `element()` handle bound to multiple live host elements, an element
+  handle stored in `state()` or serialized data, unserializable initial state.
   All diagnostics name the offending identifier and span.
 - **Runtime (dev):** serialization failures at SSR time fail the render loudly
   with the state path included. Async result serialization failures include the

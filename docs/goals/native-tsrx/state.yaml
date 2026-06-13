@@ -1,0 +1,939 @@
+version: 2
+
+goal:
+  title: "Native TSRX Rust Parser"
+  slug: "native-tsrx"
+  kind: existing_plan
+  tranche: "Create a source-backed native TSRX Rust/Oxc project with project-local Codex rules/skills, TDD fixtures from TSRX examples, parser implementation, and TypeScript/NAPI exposure."
+  status: done
+  oracle:
+    signal: "A source-backed native-tsrx project exists with .codex/ gitignored, rules/skills created before implementation, TSRX website examples captured as fixtures, native parser tests passing, and a verified TypeScript/NAPI API."
+    cadence: "after each Worker package and at final audit"
+    final_proof: "Final Judge/PM receipt maps research, generated .codex files, scaffold, fixtures, Rust parser tests, and TypeScript/NAPI verification commands to the original request with full_outcome_complete: true."
+  intake:
+    original_request: "Create native-tsrx from latest TSRX docs/examples, Ripple TSRX package, and Satteri; add project .codex rules/skills first; then implement Rust/Oxc parser with TDD fixtures and TypeScript exposure."
+    interpreted_outcome: "Build a new source-backed Rust/Oxc native TSRX project under /Users/jacksm5pro/dev/open-source/native-tsrx with Codex project guidance, tests, parser code, and TypeScript exposure."
+    input_shape: existing_plan
+    audience: "Jack and future native-tsrx contributors"
+    authority: requested
+    proof_type: test
+    completion_proof: "The new native-tsrx project exists, .codex/ is gitignored, project-local rules/skills exist and were created before parser implementation, captured TSRX website examples are fixtures, Rust parser tests pass, and TypeScript/NAPI exposure is verified."
+    likely_misfire: "Building a generic Rust parser or NAPI crate without source-backed TSRX behavior, project-local Codex guidance, or full example fixtures."
+    blind_spots_considered:
+      - "The target sibling directory is outside the current writable root and may require an approved sandbox escalation."
+      - "The latest TSRX website and GitHub source research must happen during /goal, not during goal prep."
+      - "Oxc AST compatibility and semantic integration may force an adapter or fork decision."
+      - "The .codex rules and skills must be generated before parser implementation starts."
+      - "Fixtures need source provenance so example drift can be audited later."
+    existing_plan_facts:
+      - "Create a new project named native-tsrx in /Users/jacksm5pro/dev/open-source."
+      - "Collect the latest TSRX specification and examples from https://tsrx.dev."
+      - "Inspect https://github.com/Ripple-TS/ripple/tree/main/packages/tsrx directly."
+      - "Inspect https://github.com/bruits/satteri for the analogous Satteri approach."
+      - "Use Rust Oxc ecosystem crates such as oxc_parser and oxc_semantic."
+      - "Expose the native implementation back to TypeScript."
+      - "Create project-local .codex rules and skills before implementation based on TSRX and Satteri research."
+      - "Use TDD for each part of native-tsrx implementation."
+      - "Use each TSRX website example as a test fixture."
+      - "Make sure .codex is .gitignored."
+
+rules:
+  pm_owns_state: true
+  one_active_task: true
+  max_write_workers: 1
+  no_implementation_without_worker_or_pm_task: true
+  no_completion_without_judge_or_pm_audit: true
+  planning_is_not_completion: true
+  queued_required_worker_blocks_completion: true
+  continuous_until_full_outcome: true
+  missing_input_or_credentials_do_not_stop_goal: true
+  preserve_and_validate_existing_plan: true
+  intake_misfire_must_be_audited: true
+  goal_pressure_requires_oracle: true
+  no_completion_on_weak_proof: true
+  slice_policy:
+    max_consecutive_tiny_tasks: 2
+    prefer_vertical_slices: true
+    judge_picks_largest_safe_slice: true
+    worker_completes_whole_slice: true
+
+agents:
+  scout: installed
+  worker: installed
+  judge: installed
+
+visual_board:
+  selected: local
+  local:
+    status: live
+    url: "http://goalbuddy.localhost:41737/native-tsrx/"
+    command: "npx goalbuddy board docs/goals/native-tsrx"
+
+active_task: null
+
+tasks:
+  - id: T001
+    type: scout
+    assignee: Scout
+    status: done
+    reasoning_hint: medium
+    objective: "Collect source-backed TSRX and Satteri evidence for native-tsrx before any implementation."
+    inputs:
+      - "https://tsrx.dev"
+      - "https://github.com/Ripple-TS/ripple/tree/main/packages/tsrx"
+      - "https://github.com/bruits/satteri"
+      - "Original user plan in docs/goals/native-tsrx/goal.md"
+    constraints:
+      - "Read-only."
+      - "Do not create /Users/jacksm5pro/dev/open-source/native-tsrx yet."
+      - "Do not edit implementation files."
+      - "Use current/latest source material; cite URLs, files, commands, and dates in the receipt or note."
+      - "Inventory every TSRX website example that must become a fixture."
+      - "Extract facts relevant to .codex rules/skills, parser grammar, Oxc integration, test fixtures, and TypeScript/NAPI exposure."
+    expected_output:
+      - "TSRX spec and examples inventory with provenance."
+      - "Ripple packages/tsrx architecture and behavior notes."
+      - "Satteri architecture and transferable pattern notes."
+      - "Initial fixture list from TSRX website examples."
+      - "Risks and open architecture decisions for Judge."
+      - "Candidate project-local .codex rules and skills."
+    receipt:
+      result: done
+      note: notes/T001-source-scout.md
+      summary: "Mapped current TSRX spec/features/examples, Ripple @tsrx/core parser architecture, Satteri Rust/NAPI monorepo pattern, and Oxc parser/semantic fit. Identified website fixtures, .codex rule/skill candidates, and risks for Judge."
+      evidence:
+        - "https://tsrx.dev/specification"
+        - "https://tsrx.dev/features"
+        - "https://github.com/Ripple-TS/ripple/tree/main/packages/tsrx"
+        - "https://github.com/bruits/satteri"
+        - "https://docs.rs/oxc_parser/latest/oxc_parser/"
+      spawned_tasks:
+        - T002
+
+  - id: T002
+    type: judge
+    assignee: Judge
+    status: done
+    reasoning_hint: high
+    objective: "Validate the source-backed plan and choose the first safe write slice."
+    inputs:
+      - "T001 receipt or note"
+      - "docs/goals/native-tsrx/goal.md"
+      - "docs/goals/native-tsrx/state.yaml"
+    constraints:
+      - "Do not implement."
+      - "Preserve the user's sequencing: .codex rules/skills before parser implementation."
+      - "Decide whether the first write slice needs sandbox escalation for /Users/jacksm5pro/dev/open-source/native-tsrx."
+      - "Pick the largest safe useful Worker slice with clear allowed_files, verify commands, and stop conditions."
+    expected_output:
+      - "Decision: approved | revise | blocked."
+      - "Architecture direction for initial Rust/Oxc crate and TypeScript exposure."
+      - "Exact first Worker objective."
+      - "allowed_files for first Worker."
+      - "verify commands for first Worker."
+      - "stop_if conditions."
+      - "Deferred risks and follow-up tasks."
+    receipt:
+      result: done
+      decision: approved
+      full_outcome_complete: false
+      rationale: "T001 provides enough source-backed evidence to start writes. The first safe slice must create the native-tsrx scaffold and project-local .codex rules/skills before parser behavior, preserving the user's sequencing and reducing the risk of implementing stale TSRX syntax."
+      worker_objective: "Create the native-tsrx project scaffold and project-local .codex rules/skills before parser implementation."
+      allowed_files:
+        - "/Users/jacksm5pro/dev/open-source/native-tsrx/**"
+        - "docs/goals/native-tsrx/**"
+      verify:
+        - "test -d /Users/jacksm5pro/dev/open-source/native-tsrx"
+        - "test -f /Users/jacksm5pro/dev/open-source/native-tsrx/.gitignore"
+        - "grep -n '^.codex/$\\|^.codex$' /Users/jacksm5pro/dev/open-source/native-tsrx/.gitignore"
+        - "test -d /Users/jacksm5pro/dev/open-source/native-tsrx/.codex"
+        - "cargo metadata --manifest-path /Users/jacksm5pro/dev/open-source/native-tsrx/Cargo.toml --no-deps"
+      stop_if:
+        - "Need to write outside allowed_files."
+        - "Sandbox blocks creating /Users/jacksm5pro/dev/open-source/native-tsrx and escalation is not approved."
+        - "T001 source-backed evidence is missing or insufficient to write .codex rules/skills."
+        - "Would need to implement parser behavior before .codex rules/skills exist."
+      notes:
+        - "Sibling directory creation requires sandbox escalation."
+        - "Do not use blog examples as canonical fixtures unless cross-checked against the June 7, 2026 spec."
+
+  - id: T003
+    type: worker
+    assignee: Worker
+    status: done
+    reasoning_hint: medium
+    objective: "Create the native-tsrx project scaffold and project-local .codex rules/skills before parser implementation."
+    allowed_files:
+      - "/Users/jacksm5pro/dev/open-source/native-tsrx/**"
+      - "docs/goals/native-tsrx/**"
+    verify:
+      - "test -d /Users/jacksm5pro/dev/open-source/native-tsrx"
+      - "test -f /Users/jacksm5pro/dev/open-source/native-tsrx/.gitignore"
+      - "grep -n '^.codex/$\\|^.codex$' /Users/jacksm5pro/dev/open-source/native-tsrx/.gitignore"
+      - "test -d /Users/jacksm5pro/dev/open-source/native-tsrx/.codex"
+      - "cargo metadata --manifest-path /Users/jacksm5pro/dev/open-source/native-tsrx/Cargo.toml --no-deps"
+    stop_if:
+      - "Need to write outside allowed_files."
+      - "Sandbox blocks creating /Users/jacksm5pro/dev/open-source/native-tsrx and escalation is not approved."
+      - "T001 source-backed evidence is missing or insufficient to write .codex rules/skills."
+      - "Would need to implement parser behavior before .codex rules/skills exist."
+    receipt:
+      result: done
+      changed_files:
+        - "/Users/jacksm5pro/dev/open-source/native-tsrx/.gitignore"
+        - "/Users/jacksm5pro/dev/open-source/native-tsrx/Cargo.lock"
+        - "/Users/jacksm5pro/dev/open-source/native-tsrx/Cargo.toml"
+        - "/Users/jacksm5pro/dev/open-source/native-tsrx/README.md"
+        - "/Users/jacksm5pro/dev/open-source/native-tsrx/docs/sources.md"
+        - "/Users/jacksm5pro/dev/open-source/native-tsrx/fixtures/website/manifest.json"
+        - "/Users/jacksm5pro/dev/open-source/native-tsrx/package.json"
+        - "/Users/jacksm5pro/dev/open-source/native-tsrx/pnpm-workspace.yaml"
+        - "/Users/jacksm5pro/dev/open-source/native-tsrx/src/lib.rs"
+        - "/Users/jacksm5pro/dev/open-source/native-tsrx/.codex/rules/native-tsrx.md"
+        - "/Users/jacksm5pro/dev/open-source/native-tsrx/.codex/skills/native-tsrx-fixture/SKILL.md"
+        - "/Users/jacksm5pro/dev/open-source/native-tsrx/.codex/skills/native-tsrx-parser/SKILL.md"
+        - "/Users/jacksm5pro/dev/open-source/native-tsrx/.codex/skills/native-tsrx-napi/SKILL.md"
+        - "/Users/jacksm5pro/dev/open-source/native-tsrx/.codex/skills/native-tsrx-source-sync/SKILL.md"
+      commands:
+        - cmd: "test -d /Users/jacksm5pro/dev/open-source/native-tsrx"
+          status: pass
+        - cmd: "test -f /Users/jacksm5pro/dev/open-source/native-tsrx/.gitignore"
+          status: pass
+        - cmd: "grep -n '^.codex/$\\|^.codex$' /Users/jacksm5pro/dev/open-source/native-tsrx/.gitignore"
+          status: pass
+        - cmd: "test -d /Users/jacksm5pro/dev/open-source/native-tsrx/.codex"
+          status: pass
+        - cmd: "cargo metadata --manifest-path /Users/jacksm5pro/dev/open-source/native-tsrx/Cargo.toml --no-deps --format-version 1"
+          status: pass
+        - cmd: "cargo fmt --manifest-path /Users/jacksm5pro/dev/open-source/native-tsrx/Cargo.toml --check"
+          status: pass
+        - cmd: "cargo test --manifest-path /Users/jacksm5pro/dev/open-source/native-tsrx/Cargo.toml"
+          status: pass
+      summary: "Created the sibling native-tsrx project, added Oxc parser/AST/semantic dependencies, source receipts, website fixture manifest, root TS workspace metadata, and project-local .codex rules/skills before parser behavior. .codex is ignored as requested."
+
+  - id: T004
+    type: worker
+    assignee: Worker
+    status: done
+    reasoning_hint: medium
+    objective: "Implement the first native TSRX parser slice with TDD fixtures from the TSRX website examples."
+    allowed_files:
+      - "/Users/jacksm5pro/dev/open-source/native-tsrx/**"
+      - "docs/goals/native-tsrx/**"
+    verify:
+      - "cargo test --manifest-path /Users/jacksm5pro/dev/open-source/native-tsrx/Cargo.toml"
+      - "cargo fmt --manifest-path /Users/jacksm5pro/dev/open-source/native-tsrx/Cargo.toml --check"
+    stop_if:
+      - "Project-local .codex rules/skills are missing."
+      - "Need files outside allowed_files."
+      - "Fixture provenance from tsrx.dev examples is missing."
+      - "Oxc integration choice is ambiguous enough to require Judge review."
+      - "Verification fails twice for different root causes."
+    receipt:
+      result: done
+      changed_files:
+        - "/Users/jacksm5pro/dev/open-source/native-tsrx/fixtures/website/home-greeting-card.tsrx"
+        - "/Users/jacksm5pro/dev/open-source/native-tsrx/fixtures/website/manifest.json"
+        - "/Users/jacksm5pro/dev/open-source/native-tsrx/src/lib.rs"
+        - "/Users/jacksm5pro/dev/open-source/native-tsrx/tests/website.rs"
+      source_provenance:
+        fixture: "home-greeting-card"
+        source: "https://tsrx.dev/llms.txt"
+        retrieved_on: "2026-06-13"
+      tdd_trace:
+        - command: "cargo test --manifest-path /Users/jacksm5pro/dev/open-source/native-tsrx/Cargo.toml"
+          outcome: "fail_sandbox_before_tdd"
+          note: "Sandbox denied writing target/debug/.cargo-lock in the sibling project."
+        - command: "cargo test --manifest-path /Users/jacksm5pro/dev/open-source/native-tsrx/Cargo.toml"
+          outcome: "fail_expected"
+          note: "New website fixture test failed because parse_tsrx and TsrxSyntaxKind did not exist yet."
+        - command: "cargo fmt --manifest-path /Users/jacksm5pro/dev/open-source/native-tsrx/Cargo.toml --check"
+          outcome: "fail_expected"
+          note: "rustfmt reported formatting diffs after implementation."
+        - command: "cargo test --manifest-path /Users/jacksm5pro/dev/open-source/native-tsrx/Cargo.toml"
+          outcome: "fail_expected"
+          note: "Internal span expectation was off by one byte and was corrected."
+      commands:
+        - cmd: "cargo fmt --manifest-path /Users/jacksm5pro/dev/open-source/native-tsrx/Cargo.toml --check"
+          status: pass
+        - cmd: "cargo test --manifest-path /Users/jacksm5pro/dev/open-source/native-tsrx/Cargo.toml"
+          status: pass
+      summary: "Added the first current tsrx.dev fixture, recorded exact provenance, and implemented a minimal native parser slice that records JSXCodeBlock markers for `@{` while preserving byte offsets for Oxc TSX parser and semantic checks."
+
+  - id: T005
+    type: worker
+    assignee: Worker
+    status: done
+    reasoning_hint: medium
+    objective: "Expose native-tsrx back to TypeScript through a NAPI/Node package with tests."
+    allowed_files:
+      - "/Users/jacksm5pro/dev/open-source/native-tsrx/**"
+      - "docs/goals/native-tsrx/**"
+    verify:
+      - "cargo test --manifest-path /Users/jacksm5pro/dev/open-source/native-tsrx/Cargo.toml"
+      - "npm test --prefix /Users/jacksm5pro/dev/open-source/native-tsrx"
+    stop_if:
+      - "Native parser fixture tests are not passing."
+      - "Need network dependency installation and escalation is not approved."
+      - "Need files outside allowed_files."
+      - "TypeScript API shape is ambiguous enough to require Judge review."
+    receipt:
+      result: done
+      changed_files:
+        - "/Users/jacksm5pro/dev/open-source/native-tsrx/.gitignore"
+        - "/Users/jacksm5pro/dev/open-source/native-tsrx/Cargo.lock"
+        - "/Users/jacksm5pro/dev/open-source/native-tsrx/Cargo.toml"
+        - "/Users/jacksm5pro/dev/open-source/native-tsrx/crates/native-tsrx-napi/Cargo.toml"
+        - "/Users/jacksm5pro/dev/open-source/native-tsrx/crates/native-tsrx-napi/build.rs"
+        - "/Users/jacksm5pro/dev/open-source/native-tsrx/crates/native-tsrx-napi/src/lib.rs"
+        - "/Users/jacksm5pro/dev/open-source/native-tsrx/package-lock.json"
+        - "/Users/jacksm5pro/dev/open-source/native-tsrx/package.json"
+        - "/Users/jacksm5pro/dev/open-source/native-tsrx/src/binding.ts"
+        - "/Users/jacksm5pro/dev/open-source/native-tsrx/src/index.ts"
+        - "/Users/jacksm5pro/dev/open-source/native-tsrx/test/native-tsrx.test.mjs"
+        - "/Users/jacksm5pro/dev/open-source/native-tsrx/tsconfig.json"
+      source_references:
+        - "https://github.com/bruits/satteri/blob/main/Cargo.toml"
+        - "https://github.com/bruits/satteri/blob/main/packages/satteri/package.json"
+        - "https://github.com/bruits/satteri/blob/main/crates/satteri-napi-binding/Cargo.toml"
+      verification_trace:
+        - command: "npm test --prefix /Users/jacksm5pro/dev/open-source/native-tsrx"
+          outcome: "fail_expected"
+          note: "TypeScript build needed `types: [\"node\"]` in tsconfig.json."
+      commands:
+        - cmd: "cargo fmt --manifest-path /Users/jacksm5pro/dev/open-source/native-tsrx/Cargo.toml --check"
+          status: pass
+        - cmd: "cargo test --manifest-path /Users/jacksm5pro/dev/open-source/native-tsrx/Cargo.toml"
+          status: pass
+        - cmd: "npm install --prefix /Users/jacksm5pro/dev/open-source/native-tsrx"
+          status: pass
+        - cmd: "npm test --prefix /Users/jacksm5pro/dev/open-source/native-tsrx"
+          status: pass
+        - cmd: "cargo test --manifest-path /Users/jacksm5pro/dev/open-source/native-tsrx/Cargo.toml --workspace"
+          status: pass
+      summary: "Added a separate cdylib NAPI crate following the Satteri layout, exposed the Rust parser through parseTsrxJson, added a TypeScript wrapper with parseTsrx, and verified Node tests for the website fixture and diagnostic path. Generated node_modules, dist, root napi-rs glue, target, and platform .node files are gitignored."
+
+  - id: T006
+    type: judge
+    assignee: Judge
+    status: done
+    reasoning_hint: high
+    objective: "Audit whether the current implementation satisfies the native-tsrx outcome and identify remaining required slices."
+    inputs:
+      - "All done task receipts"
+      - "Current native-tsrx project tree"
+      - "Last Rust and TypeScript verification commands"
+      - "Fixture inventory from T001"
+    constraints:
+      - "Do not implement."
+      - "Reject completion if any TSRX website example fixture is missing."
+      - "Reject completion if .codex was not gitignored before implementation."
+      - "Reject completion if TypeScript/NAPI exposure is unverified."
+      - "Reject completion if required Worker work is still queued or active."
+    expected_output:
+      - "complete | not_complete"
+      - "full_outcome_complete: true | false"
+      - "missing evidence"
+      - "next task if not complete"
+    receipt:
+      result: done
+      decision: not_complete
+      full_outcome_complete: false
+      commands:
+        - cmd: "node -e 'compare fixtures/website/manifest.json to fixtures/website/*.tsrx'"
+          status: pass
+      evidence:
+        fixture_count: 21
+        fixture_files_present: 1
+        fixture_files_missing:
+          - "home-user-list"
+          - "home-lazy-destructuring-counter"
+          - "home-cart-statement-container"
+          - "features-button-with-style"
+          - "features-counter-nested-function"
+          - "features-product-card-nested-code-block"
+          - "features-js-comments"
+          - "features-lazy-destructuring-user-card"
+          - "features-prop-shorthand"
+          - "features-lexical-scope"
+          - "features-conditional-rendering"
+          - "features-list-rendering"
+          - "features-switch"
+          - "features-error-boundary"
+          - "features-retry-boundary"
+          - "features-async-boundary"
+          - "features-dynamic-panel"
+          - "features-scoped-card-style"
+          - "features-style-composition"
+          - "features-module-style-expression"
+        rust_parser_verified: true
+        typescript_napi_verified: true
+      rationale: "The scaffold, .codex rules/skills, first parser slice, and NAPI TypeScript exposure are verified, but the original request requires each current TSRX website example to become a test fixture. Only home-greeting-card has a fixture file so far, and parser grammar coverage remains limited to the initial statement-container opener slice."
+      next_task: T007
+
+  - id: T007
+    type: worker
+    assignee: Worker
+    status: done
+    reasoning_hint: medium
+    objective: "Capture the remaining current tsrx.dev website parser examples as fixture files with inventory tests before expanding parser grammar."
+    allowed_files:
+      - "/Users/jacksm5pro/dev/open-source/native-tsrx/**"
+      - "docs/goals/native-tsrx/**"
+    verify:
+      - "node -e 'const fs=require(\"fs\"); const path=\"/Users/jacksm5pro/dev/open-source/native-tsrx/fixtures/website\"; const manifest=JSON.parse(fs.readFileSync(path+\"/manifest.json\",\"utf8\")); const files=new Set(fs.readdirSync(path).filter(f=>f.endsWith(\".tsrx\")).map(f=>f.replace(/\\\\.tsrx$/, \"\"))); const missing=manifest.fixtures.map(f=>f.id).filter(id=>!files.has(id)); if (missing.length) { console.error(JSON.stringify(missing)); process.exit(1); }'"
+      - "cargo test --manifest-path /Users/jacksm5pro/dev/open-source/native-tsrx/Cargo.toml"
+      - "cargo fmt --manifest-path /Users/jacksm5pro/dev/open-source/native-tsrx/Cargo.toml --check"
+    stop_if:
+      - "Current tsrx.dev source pages cannot be retrieved."
+      - "A website example conflicts with the current specification or T001 inventory."
+      - "Completing the task would require parser grammar expansion instead of fixture capture."
+      - "Need files outside allowed_files."
+    receipt:
+      result: done
+      changed_files:
+        - "/Users/jacksm5pro/dev/open-source/native-tsrx/fixtures/website/*.tsrx"
+        - "/Users/jacksm5pro/dev/open-source/native-tsrx/fixtures/website/manifest.json"
+        - "/Users/jacksm5pro/dev/open-source/native-tsrx/tests/fixtures.rs"
+      source_provenance:
+        retrieved_on: "2026-06-13"
+        sources:
+          - "https://tsrx.dev/"
+          - "https://tsrx.dev/features"
+          - "https://tsrx.dev/llms.txt"
+      commands:
+        - cmd: "node -e 'compare fixtures/website/manifest.json to fixtures/website/*.tsrx'"
+          status: pass
+        - cmd: "cargo fmt --manifest-path /Users/jacksm5pro/dev/open-source/native-tsrx/Cargo.toml --check"
+          status: pass
+        - cmd: "cargo test --manifest-path /Users/jacksm5pro/dev/open-source/native-tsrx/Cargo.toml"
+          status: pass
+      summary: "Captured the remaining current website parser examples from tsrx.dev as `.tsrx` fixture files and added a Rust inventory test proving every manifest entry has a fixture file with tsrx.dev provenance."
+
+  - id: T008
+    type: worker
+    assignee: Worker
+    status: done
+    reasoning_hint: medium
+    objective: "Implement the next native parser slice for lazy object destructuring fixtures with TDD assertions."
+    allowed_files:
+      - "/Users/jacksm5pro/dev/open-source/native-tsrx/**"
+      - "docs/goals/native-tsrx/**"
+    verify:
+      - "cargo test --manifest-path /Users/jacksm5pro/dev/open-source/native-tsrx/Cargo.toml"
+      - "cargo fmt --manifest-path /Users/jacksm5pro/dev/open-source/native-tsrx/Cargo.toml --check"
+      - "npm test --prefix /Users/jacksm5pro/dev/open-source/native-tsrx"
+    stop_if:
+      - "Lazy destructuring source examples conflict with current tsrx.dev specification."
+      - "Need to implement unrelated syntax such as @for, @if, dynamic tags, prop shorthand, or raw style parsing."
+      - "Need files outside allowed_files."
+      - "Verification fails twice for different root causes."
+    receipt:
+      result: done
+      changed_files:
+        - "/Users/jacksm5pro/dev/open-source/native-tsrx/src/lib.rs"
+        - "/Users/jacksm5pro/dev/open-source/native-tsrx/src/index.ts"
+        - "/Users/jacksm5pro/dev/open-source/native-tsrx/test/native-tsrx.test.mjs"
+        - "/Users/jacksm5pro/dev/open-source/native-tsrx/tests/website.rs"
+      tdd_trace:
+        - command: "cargo test --manifest-path /Users/jacksm5pro/dev/open-source/native-tsrx/Cargo.toml"
+          outcome: "fail_expected"
+          note: "New lazy destructuring fixture tests failed because TsrxSyntaxKind::LazyObjectBindingPattern did not exist yet."
+      commands:
+        - cmd: "cargo fmt --manifest-path /Users/jacksm5pro/dev/open-source/native-tsrx/Cargo.toml --check"
+          status: pass
+        - cmd: "cargo test --manifest-path /Users/jacksm5pro/dev/open-source/native-tsrx/Cargo.toml"
+          status: pass
+        - cmd: "npm test --prefix /Users/jacksm5pro/dev/open-source/native-tsrx"
+          status: pass
+      summary: "Added TDD coverage for the home and features lazy object destructuring fixtures, normalized `&{` to offset-preserving TSX, recorded LazyObjectBindingPattern markers, and exposed the marker through the TypeScript/NAPI wrapper."
+
+  - id: T009
+    type: worker
+    assignee: Worker
+    status: done
+    reasoning_hint: medium
+    objective: "Implement directive control-flow marker support for @if, @switch, and @try/@catch fixtures that normalize to JavaScript control-flow syntax."
+    allowed_files:
+      - "/Users/jacksm5pro/dev/open-source/native-tsrx/**"
+      - "docs/goals/native-tsrx/**"
+    verify:
+      - "cargo test --manifest-path /Users/jacksm5pro/dev/open-source/native-tsrx/Cargo.toml"
+      - "cargo fmt --manifest-path /Users/jacksm5pro/dev/open-source/native-tsrx/Cargo.toml --check"
+      - "npm test --prefix /Users/jacksm5pro/dev/open-source/native-tsrx"
+    stop_if:
+      - "A selected directive fixture requires @for index/key, @empty, @pending, raw style parsing, dynamic tags, or prop shorthand support."
+      - "Directive normalization cannot preserve byte offsets."
+      - "Need files outside allowed_files."
+      - "Verification fails twice for different root causes."
+    receipt:
+      result: done
+      changed_files:
+        - "/Users/jacksm5pro/dev/open-source/native-tsrx/src/lib.rs"
+        - "/Users/jacksm5pro/dev/open-source/native-tsrx/src/index.ts"
+        - "/Users/jacksm5pro/dev/open-source/native-tsrx/test/native-tsrx.test.mjs"
+        - "/Users/jacksm5pro/dev/open-source/native-tsrx/tests/website.rs"
+      tdd_trace:
+        - command: "cargo test --manifest-path /Users/jacksm5pro/dev/open-source/native-tsrx/Cargo.toml"
+          outcome: "fail_expected"
+          note: "New directive fixture tests failed because directive syntax variants did not exist yet."
+        - command: "cargo test --manifest-path /Users/jacksm5pro/dev/open-source/native-tsrx/Cargo.toml"
+          outcome: "scoped_gap"
+          note: "Retry boundary `@catch (e, reset)` is not JavaScript-compatible and remains a diagnostic for the catch-reset slice."
+      commands:
+        - cmd: "cargo fmt --manifest-path /Users/jacksm5pro/dev/open-source/native-tsrx/Cargo.toml --check"
+          status: pass
+        - cmd: "cargo test --manifest-path /Users/jacksm5pro/dev/open-source/native-tsrx/Cargo.toml"
+          status: pass
+        - cmd: "npm test --prefix /Users/jacksm5pro/dev/open-source/native-tsrx"
+          status: pass
+      summary: "Added offset-preserving directive markers and normalization for @if/@else, @switch/@case/@default, and @try/@catch forms that map to JavaScript control flow. Conditional, switch, and ordinary error-boundary fixtures parse through Oxc; retry-boundary markers are recorded but catch-reset parameters are deferred."
+
+  - id: T010
+    type: worker
+    assignee: Worker
+    status: done
+    reasoning_hint: medium
+    objective: "Implement catch-reset parameter normalization for the retry-boundary fixture."
+    allowed_files:
+      - "/Users/jacksm5pro/dev/open-source/native-tsrx/**"
+      - "docs/goals/native-tsrx/**"
+    verify:
+      - "cargo test --manifest-path /Users/jacksm5pro/dev/open-source/native-tsrx/Cargo.toml"
+      - "cargo fmt --manifest-path /Users/jacksm5pro/dev/open-source/native-tsrx/Cargo.toml --check"
+      - "npm test --prefix /Users/jacksm5pro/dev/open-source/native-tsrx"
+    stop_if:
+      - "Reset parameter normalization cannot preserve byte offsets."
+      - "Need to implement unrelated syntax such as @pending, @for, raw style parsing, dynamic tags, or prop shorthand."
+      - "Need files outside allowed_files."
+      - "Verification fails twice for different root causes."
+    receipt:
+      result: done
+      changed_files:
+        - "/Users/jacksm5pro/dev/open-source/native-tsrx/src/lib.rs"
+        - "/Users/jacksm5pro/dev/open-source/native-tsrx/src/index.ts"
+        - "/Users/jacksm5pro/dev/open-source/native-tsrx/test/native-tsrx.test.mjs"
+        - "/Users/jacksm5pro/dev/open-source/native-tsrx/tests/website.rs"
+      tdd_trace:
+        - command: "cargo test --manifest-path /Users/jacksm5pro/dev/open-source/native-tsrx/Cargo.toml"
+          outcome: "fail_expected"
+          note: "Retry-boundary acceptance failed because CatchResetParameter did not exist yet."
+      commands:
+        - cmd: "cargo fmt --manifest-path /Users/jacksm5pro/dev/open-source/native-tsrx/Cargo.toml --check"
+          status: pass
+        - cmd: "cargo test --manifest-path /Users/jacksm5pro/dev/open-source/native-tsrx/Cargo.toml"
+          status: pass
+        - cmd: "npm test --prefix /Users/jacksm5pro/dev/open-source/native-tsrx"
+          status: pass
+      summary: "Normalized `@catch (error, reset)` into an offset-preserving JavaScript catch parameter for Oxc, recorded CatchResetParameter spans, and exposed the marker through the TypeScript/NAPI wrapper."
+
+  - id: T011
+    type: judge
+    assignee: Judge
+    status: done
+    reasoning_hint: high
+    objective: "Audit parser fixture coverage after T010 and choose the next required parser slice."
+    inputs:
+      - "All done task receipts through T010"
+      - "/Users/jacksm5pro/dev/open-source/native-tsrx/fixtures/website/manifest.json"
+      - "/Users/jacksm5pro/dev/open-source/native-tsrx/tests/website.rs"
+      - "Last Rust and npm verification commands"
+    constraints:
+      - "Do not implement."
+      - "Reject completion if any manifest fixture is not either passing, intentionally diagnostic, or assigned to a follow-up parser slice."
+      - "Pick one next Worker slice with clear verify commands and stop conditions."
+    expected_output:
+      - "complete | not_complete"
+      - "coverage map"
+      - "next Worker objective"
+      - "allowed_files"
+      - "verify commands"
+      - "stop_if"
+    receipt:
+      result: done
+      decision: not_complete
+      full_outcome_complete: false
+      coverage_map:
+        clean_parse_fixtures:
+          - "features-conditional-rendering"
+          - "features-counter-nested-function"
+          - "features-error-boundary"
+          - "features-js-comments"
+          - "features-lazy-destructuring-user-card"
+          - "features-list-rendering"
+          - "features-retry-boundary"
+          - "features-switch"
+          - "home-cart-statement-container"
+          - "home-greeting-card"
+          - "home-lazy-destructuring-counter"
+        diagnostic_fixtures:
+          raw_style:
+            - "features-button-with-style"
+            - "features-module-style-expression"
+            - "features-scoped-card-style"
+            - "features-style-composition"
+          nested_code_block:
+            - "features-lexical-scope"
+            - "features-product-card-nested-code-block"
+          dynamic_tag:
+            - "features-dynamic-panel"
+          prop_shorthand:
+            - "features-prop-shorthand"
+          async_pending:
+            - "features-async-boundary"
+          for_markers_missing:
+            - "features-list-rendering"
+            - "home-user-list"
+        note: "Some fixtures parse cleanly through Oxc because unsupported TSRX forms are currently seen as JSX text; they still need native markers and structural validation before final completion."
+      next_task: T012
+      rationale: "Raw style normalization removes the largest repeated parse diagnostic group and matches a parser responsibility called out in T001 and project .codex rules."
+
+  - id: T012
+    type: worker
+    assignee: Worker
+    status: done
+    reasoning_hint: medium
+    objective: "Implement raw `<style>` body capture/normalization and JSXStyleElement markers for style fixtures."
+    allowed_files:
+      - "/Users/jacksm5pro/dev/open-source/native-tsrx/**"
+      - "docs/goals/native-tsrx/**"
+    verify:
+      - "cargo test --manifest-path /Users/jacksm5pro/dev/open-source/native-tsrx/Cargo.toml"
+      - "cargo fmt --manifest-path /Users/jacksm5pro/dev/open-source/native-tsrx/Cargo.toml --check"
+      - "npm test --prefix /Users/jacksm5pro/dev/open-source/native-tsrx"
+    stop_if:
+      - "Style body normalization cannot preserve byte offsets."
+      - "Need a full CSS parser instead of raw body capture."
+      - "Need to implement unrelated syntax such as prop shorthand, dynamic tags, nested code blocks, @pending, or @for."
+      - "Need files outside allowed_files."
+    receipt:
+      result: done
+      changed_files:
+        - "/Users/jacksm5pro/dev/open-source/native-tsrx/src/lib.rs"
+        - "/Users/jacksm5pro/dev/open-source/native-tsrx/src/index.ts"
+        - "/Users/jacksm5pro/dev/open-source/native-tsrx/test/native-tsrx.test.mjs"
+        - "/Users/jacksm5pro/dev/open-source/native-tsrx/tests/website.rs"
+      tdd_trace:
+        - command: "cargo test --manifest-path /Users/jacksm5pro/dev/open-source/native-tsrx/Cargo.toml"
+          outcome: "fail_expected"
+          note: "Style fixture tests failed because JsxStyleElement did not exist yet."
+      commands:
+        - cmd: "cargo fmt --manifest-path /Users/jacksm5pro/dev/open-source/native-tsrx/Cargo.toml --check"
+          status: pass
+        - cmd: "cargo test --manifest-path /Users/jacksm5pro/dev/open-source/native-tsrx/Cargo.toml"
+          status: pass
+        - cmd: "npm test --prefix /Users/jacksm5pro/dev/open-source/native-tsrx"
+          status: pass
+      summary: "Added JSXStyleElement markers and raw style body normalization that blanks CSS body bytes while preserving newlines and byte offsets. Style-only fixtures now parse through Oxc; button-with-style still intentionally waits on prop shorthand."
+
+  - id: T013
+    type: worker
+    assignee: Worker
+    status: done
+    reasoning_hint: medium
+    objective: "Implement JSX prop shorthand marker support and normalization for prop-shorthand fixtures."
+    allowed_files:
+      - "/Users/jacksm5pro/dev/open-source/native-tsrx/**"
+      - "docs/goals/native-tsrx/**"
+    verify:
+      - "cargo test --manifest-path /Users/jacksm5pro/dev/open-source/native-tsrx/Cargo.toml"
+      - "cargo fmt --manifest-path /Users/jacksm5pro/dev/open-source/native-tsrx/Cargo.toml --check"
+      - "npm test --prefix /Users/jacksm5pro/dev/open-source/native-tsrx"
+    stop_if:
+      - "Prop shorthand normalization cannot preserve byte offsets."
+      - "Need to implement unrelated syntax such as dynamic tags, nested code blocks, @pending, or @for."
+      - "Need files outside allowed_files."
+    receipt:
+      result: done
+      changed_files:
+        - "/Users/jacksm5pro/dev/open-source/native-tsrx/src/lib.rs"
+        - "/Users/jacksm5pro/dev/open-source/native-tsrx/src/index.ts"
+        - "/Users/jacksm5pro/dev/open-source/native-tsrx/test/native-tsrx.test.mjs"
+        - "/Users/jacksm5pro/dev/open-source/native-tsrx/tests/website.rs"
+      tdd_trace:
+        - command: "cargo test --manifest-path /Users/jacksm5pro/dev/open-source/native-tsrx/Cargo.toml"
+          outcome: "fail_expected"
+          note: "Prop shorthand tests failed because JsxPropShorthand did not exist yet."
+        - command: "cargo test --manifest-path /Users/jacksm5pro/dev/open-source/native-tsrx/Cargo.toml"
+          outcome: "scoped_gap"
+          note: "Standalone prop shorthand snippet still reports a semicolon diagnostic between top-level JSX examples; component fixture parses cleanly."
+      commands:
+        - cmd: "cargo fmt --manifest-path /Users/jacksm5pro/dev/open-source/native-tsrx/Cargo.toml --check"
+          status: pass
+        - cmd: "cargo test --manifest-path /Users/jacksm5pro/dev/open-source/native-tsrx/Cargo.toml"
+          status: pass
+        - cmd: "npm test --prefix /Users/jacksm5pro/dev/open-source/native-tsrx"
+          status: pass
+      post_slice_scan:
+        clean_after_slice:
+          - "features-button-with-style"
+          - "features-conditional-rendering"
+          - "features-counter-nested-function"
+          - "features-error-boundary"
+          - "features-js-comments"
+          - "features-lazy-destructuring-user-card"
+          - "features-list-rendering"
+          - "features-module-style-expression"
+          - "features-retry-boundary"
+          - "features-scoped-card-style"
+          - "features-style-composition"
+          - "features-switch"
+          - "home-cart-statement-container"
+          - "home-greeting-card"
+          - "home-lazy-destructuring-counter"
+        remaining_diagnostics:
+          - "features-async-boundary"
+          - "features-dynamic-panel"
+          - "features-lexical-scope"
+          - "features-product-card-nested-code-block"
+          - "features-prop-shorthand"
+          - "home-user-list"
+      summary: "Added JSXPropShorthand markers and offset-preserving normalization from `{name}` to a TSX-parseable boolean attribute shape. The button-with-style fixture now parses cleanly; the standalone prop-shorthand snippet records markers but keeps its top-level semicolon diagnostic."
+
+  - id: T014
+    type: worker
+    assignee: Worker
+    status: done
+    reasoning_hint: high
+    objective: "Implement nested JSX `@{...}` code block normalization for lexical-scope and product-card fixtures."
+    allowed_files:
+      - "/Users/jacksm5pro/dev/open-source/native-tsrx/**"
+      - "docs/goals/native-tsrx/**"
+    verify:
+      - "cargo test --manifest-path /Users/jacksm5pro/dev/open-source/native-tsrx/Cargo.toml"
+      - "cargo fmt --manifest-path /Users/jacksm5pro/dev/open-source/native-tsrx/Cargo.toml --check"
+      - "npm test --prefix /Users/jacksm5pro/dev/open-source/native-tsrx"
+    stop_if:
+      - "Nested code block normalization cannot preserve byte offsets."
+      - "Need to implement unrelated syntax such as dynamic tags, @pending, or full @for semantics."
+      - "Need files outside allowed_files."
+    receipt:
+      result: done
+      changed_files:
+        - "/Users/jacksm5pro/dev/open-source/native-tsrx/src/lib.rs"
+        - "/Users/jacksm5pro/dev/open-source/native-tsrx/test/native-tsrx.test.mjs"
+        - "/Users/jacksm5pro/dev/open-source/native-tsrx/tests/website.rs"
+      tdd_trace:
+        - command: "cargo test --manifest-path /Users/jacksm5pro/dev/open-source/native-tsrx/Cargo.toml"
+          outcome: "fail_expected"
+          note: "Lexical-scope and product-card nested code block fixture tests failed with Oxc Unexpected token diagnostics."
+        - command: "cargo test --manifest-path /Users/jacksm5pro/dev/open-source/native-tsrx/Cargo.toml"
+          outcome: "fail_expected"
+          note: "Initial JSX-child detection also matched arrow bodies because `=> @{...}` ends with `>`; tightened the detector to exclude arrows."
+      commands:
+        - cmd: "cargo fmt --manifest-path /Users/jacksm5pro/dev/open-source/native-tsrx/Cargo.toml --check"
+          status: pass
+        - cmd: "cargo test --manifest-path /Users/jacksm5pro/dev/open-source/native-tsrx/Cargo.toml"
+          status: pass
+        - cmd: "npm test --prefix /Users/jacksm5pro/dev/open-source/native-tsrx"
+          status: pass
+      post_slice_scan:
+        remaining_diagnostics:
+          - "features-async-boundary"
+          - "features-dynamic-panel"
+          - "features-prop-shorthand"
+          - "home-user-list"
+        note: "Nested code block fixtures now parse cleanly. Some clean fixtures still need native markers or structural validation, especially list rendering."
+      summary: "Added offset-preserving blank ranges for JSX-child `@{...}` bodies while continuing to scan inside them for markers. Lexical-scope and product-card nested code block fixtures now parse cleanly through Oxc, and product-card still records the nested @if marker."
+
+  - id: T015
+    type: worker
+    assignee: Worker
+    status: done
+    reasoning_hint: high
+    objective: "Implement @for and @empty marker support for list-rendering and user-list fixtures without full loop lowering."
+    allowed_files:
+      - "/Users/jacksm5pro/dev/open-source/native-tsrx/**"
+      - "docs/goals/native-tsrx/**"
+    verify:
+      - "cargo test --manifest-path /Users/jacksm5pro/dev/open-source/native-tsrx/Cargo.toml"
+      - "cargo fmt --manifest-path /Users/jacksm5pro/dev/open-source/native-tsrx/Cargo.toml --check"
+      - "npm test --prefix /Users/jacksm5pro/dev/open-source/native-tsrx"
+    stop_if:
+      - "@for normalization requires full loop lowering instead of marker capture."
+      - "Need to implement unrelated syntax such as dynamic tags, @pending, or standalone snippet semicolon handling."
+      - "Need files outside allowed_files."
+    receipt:
+      result: done
+      changed_files:
+        - "/Users/jacksm5pro/dev/open-source/native-tsrx/src/lib.rs"
+        - "/Users/jacksm5pro/dev/open-source/native-tsrx/src/index.ts"
+        - "/Users/jacksm5pro/dev/open-source/native-tsrx/test/native-tsrx.test.mjs"
+        - "/Users/jacksm5pro/dev/open-source/native-tsrx/tests/website.rs"
+      tdd_trace:
+        - command: "cargo test --manifest-path /Users/jacksm5pro/dev/open-source/native-tsrx/Cargo.toml"
+          outcome: "fail_expected"
+          note: "New list-rendering fixture tests failed to compile because JsxForExpression and JsxEmptyClause did not exist yet."
+      commands:
+        - cmd: "cargo fmt --manifest-path /Users/jacksm5pro/dev/open-source/native-tsrx/Cargo.toml --check"
+          status: pass
+        - cmd: "cargo test --manifest-path /Users/jacksm5pro/dev/open-source/native-tsrx/Cargo.toml"
+          status: pass
+        - cmd: "npm test --prefix /Users/jacksm5pro/dev/open-source/native-tsrx"
+          status: pass
+      post_slice_scan:
+        clean_after_slice:
+          - "features-list-rendering"
+          - "home-user-list"
+        remaining_diagnostics:
+          - "features-async-boundary"
+          - "features-dynamic-panel"
+          - "features-prop-shorthand"
+        note: "List rendering fixtures now parse cleanly and expose JSXForExpression/JSXEmptyClause markers through Rust and TypeScript/NAPI. Home user-list also retains its nested JSXIfExpression marker."
+      summary: "Added offset-preserving @for/@empty marker capture and block blanking so list-rendering syntax is hidden from Oxc while native markers remain available. Wired the new syntax kinds through the TypeScript facade and NAPI tests."
+
+  - id: T016
+    type: worker
+    assignee: Worker
+    status: done
+    reasoning_hint: high
+    objective: "Implement @pending marker support for the async-boundary fixture without changing try/catch lowering semantics."
+    allowed_files:
+      - "/Users/jacksm5pro/dev/open-source/native-tsrx/**"
+      - "docs/goals/native-tsrx/**"
+    verify:
+      - "cargo test --manifest-path /Users/jacksm5pro/dev/open-source/native-tsrx/Cargo.toml"
+      - "cargo fmt --manifest-path /Users/jacksm5pro/dev/open-source/native-tsrx/Cargo.toml --check"
+      - "npm test --prefix /Users/jacksm5pro/dev/open-source/native-tsrx"
+    stop_if:
+      - "@pending requires full async boundary lowering instead of marker capture."
+      - "Need to implement unrelated syntax such as dynamic tags or standalone snippet semicolon handling."
+      - "Need files outside allowed_files."
+    receipt:
+      result: done
+      changed_files:
+        - "/Users/jacksm5pro/dev/open-source/native-tsrx/src/lib.rs"
+        - "/Users/jacksm5pro/dev/open-source/native-tsrx/src/index.ts"
+        - "/Users/jacksm5pro/dev/open-source/native-tsrx/test/native-tsrx.test.mjs"
+        - "/Users/jacksm5pro/dev/open-source/native-tsrx/tests/website.rs"
+      tdd_trace:
+        - command: "cargo test --manifest-path /Users/jacksm5pro/dev/open-source/native-tsrx/Cargo.toml"
+          outcome: "fail_expected"
+          note: "New async-boundary fixture test failed to compile because JsxPendingClause did not exist yet."
+      commands:
+        - cmd: "cargo fmt --manifest-path /Users/jacksm5pro/dev/open-source/native-tsrx/Cargo.toml --check"
+          status: pass
+        - cmd: "cargo test --manifest-path /Users/jacksm5pro/dev/open-source/native-tsrx/Cargo.toml"
+          status: pass
+        - cmd: "npm test --prefix /Users/jacksm5pro/dev/open-source/native-tsrx"
+          status: pass
+      post_slice_scan:
+        clean_after_slice:
+          - "features-async-boundary"
+        remaining_diagnostics:
+          - "features-dynamic-panel"
+          - "features-prop-shorthand"
+        note: "Async boundary now parses cleanly and exposes JSXPendingClause through Rust and TypeScript/NAPI."
+      summary: "Added offset-preserving @pending marker capture and pending-block blanking so TSRX async-boundary syntax remains available to native consumers while Oxc sees a valid try/catch shape."
+
+  - id: T017
+    type: worker
+    assignee: Worker
+    status: done
+    reasoning_hint: high
+    objective: "Implement dynamic JSX tag-name marker support for the dynamic-panel fixture."
+    allowed_files:
+      - "/Users/jacksm5pro/dev/open-source/native-tsrx/**"
+      - "docs/goals/native-tsrx/**"
+    verify:
+      - "cargo test --manifest-path /Users/jacksm5pro/dev/open-source/native-tsrx/Cargo.toml"
+      - "cargo fmt --manifest-path /Users/jacksm5pro/dev/open-source/native-tsrx/Cargo.toml --check"
+      - "npm test --prefix /Users/jacksm5pro/dev/open-source/native-tsrx"
+    stop_if:
+      - "Dynamic tags require full component resolution or runtime lowering instead of marker capture."
+      - "Need to implement unrelated syntax such as standalone snippet semicolon handling."
+      - "Need files outside allowed_files."
+    receipt:
+      result: done
+      changed_files:
+        - "/Users/jacksm5pro/dev/open-source/native-tsrx/src/lib.rs"
+        - "/Users/jacksm5pro/dev/open-source/native-tsrx/src/index.ts"
+        - "/Users/jacksm5pro/dev/open-source/native-tsrx/test/native-tsrx.test.mjs"
+        - "/Users/jacksm5pro/dev/open-source/native-tsrx/tests/website.rs"
+      tdd_trace:
+        - command: "cargo test --manifest-path /Users/jacksm5pro/dev/open-source/native-tsrx/Cargo.toml"
+          outcome: "fail_expected"
+          note: "New dynamic-panel fixture test failed to compile because JsxDynamicTagName did not exist yet."
+      commands:
+        - cmd: "cargo fmt --manifest-path /Users/jacksm5pro/dev/open-source/native-tsrx/Cargo.toml --check"
+          status: pass
+        - cmd: "cargo test --manifest-path /Users/jacksm5pro/dev/open-source/native-tsrx/Cargo.toml"
+          status: pass
+        - cmd: "npm test --prefix /Users/jacksm5pro/dev/open-source/native-tsrx"
+          status: pass
+      post_slice_scan:
+        clean_after_slice:
+          - "features-dynamic-panel"
+        remaining_diagnostics:
+          - "features-prop-shorthand"
+        note: "Dynamic panel now parses cleanly and exposes three JSXDynamicTagName markers through Rust and TypeScript/NAPI. The remaining prop-shorthand diagnostic is the known standalone docs snippet boundary, while its prop shorthand markers are covered by tests."
+      summary: "Added offset-preserving dynamic JSX tag-name marker capture and same-width underscore placeholder normalization for opening, closing, and self-closing dynamic tags."
+
+  - id: T999
+    type: judge
+    assignee: Judge
+    status: done
+    reasoning_hint: high
+    objective: "Final audit against the original native-tsrx request."
+    inputs:
+      - "All done task receipts"
+      - "docs/goals/native-tsrx/goal.md"
+      - "docs/goals/native-tsrx/state.yaml"
+      - "Current dirty diff"
+      - "Verification command outputs"
+    constraints:
+      - "Do not implement."
+      - "Reject completion if the broader original outcome still has safe local follow-up slices."
+      - "Reject completion on planning-only, discovery-only, or scaffold-only proof."
+    expected_output:
+      - "complete | not_complete"
+      - "full_outcome_complete: true | false"
+      - "mapping from original request to receipts and verification"
+      - "next task if not complete"
+    receipt:
+      result: done
+      decision: complete
+      full_outcome_complete: true
+      mapping:
+        source_research: "T001 captured current TSRX website/spec/examples, Ripple packages/tsrx facts, Satteri architecture notes, and Oxc fit with source links."
+        project_scaffold: "T003 created /Users/jacksm5pro/dev/open-source/native-tsrx with Cargo, package metadata, docs, fixture manifest, and .gitignore."
+        codex_guidance: "T003 created .codex/rules/native-tsrx.md and four project-local skills before parser implementation; .codex is ignored at .gitignore:8."
+        fixtures: "21 TSRX website examples exist under fixtures/website and are covered by manifest/tests."
+        rust_oxc_parser: "T004-T017 implemented parse_tsrx on oxc_parser/oxc_semantic with native markers for statement containers, lazy binding, control flow, try/catch/pending, list rendering, style, prop shorthand, nested code blocks, and dynamic tag names."
+        typescript_exposure: "T009-T017 added the NAPI crate and TypeScript parseTsrx facade, including public syntax-kind mappings for implemented native markers."
+      proof_commands:
+        - cmd: "test -d /Users/jacksm5pro/dev/open-source/native-tsrx"
+          status: pass
+        - cmd: "grep -n '^.codex/$\\|^.codex$' /Users/jacksm5pro/dev/open-source/native-tsrx/.gitignore"
+          status: pass
+        - cmd: "find /Users/jacksm5pro/dev/open-source/native-tsrx/.codex -maxdepth 4 -type f"
+          status: pass
+        - cmd: "find /Users/jacksm5pro/dev/open-source/native-tsrx/fixtures/website -name '*.tsrx'"
+          status: pass
+        - cmd: "rg -n 'oxc_parser|oxc_semantic|napi|parseTsrx|parse_tsrx' /Users/jacksm5pro/dev/open-source/native-tsrx/Cargo.toml /Users/jacksm5pro/dev/open-source/native-tsrx/crates /Users/jacksm5pro/dev/open-source/native-tsrx/src /Users/jacksm5pro/dev/open-source/native-tsrx/package.json"
+          status: pass
+        - cmd: "cargo fmt --manifest-path /Users/jacksm5pro/dev/open-source/native-tsrx/Cargo.toml --check"
+          status: pass
+        - cmd: "cargo test --manifest-path /Users/jacksm5pro/dev/open-source/native-tsrx/Cargo.toml"
+          status: pass
+        - cmd: "npm test --prefix /Users/jacksm5pro/dev/open-source/native-tsrx"
+          status: pass
+      verification_summary:
+        - "Rust verification passes with 12 unit tests, 1 fixture-manifest test, and 18 website parser tests."
+        - "NAPI/TypeScript verification passes with 11 Node tests after build."
+        - "Post-slice fixture scan shows all component-style website examples clean; the standalone prop-shorthand docs snippet remains an expected diagnostic fixture while its marker behavior is covered."
+      residual_risk:
+        - "This is a parser/compiler foundation, not a complete TSRX runtime or full lowering implementation."
+        - "The prop-shorthand standalone docs snippet is included as a fixture and tested for markers, but still intentionally reports an adjacent-JSX semicolon diagnostic."
+        - "Current native normalization favors source-span preservation and marker capture over complete semantic lowering for directives such as @for."
+      summary: "Final audit accepts the goal: source-backed project creation, .codex guidance-before-implementation, website fixtures, Rust/Oxc parser foundation, and TypeScript/NAPI exposure are all present and verified."
+
+checks:
+  dirty_fingerprint: unknown
+  last_verification:
+    result: pass
+    task: T999
+    commands:
+      - "cargo fmt --manifest-path /Users/jacksm5pro/dev/open-source/native-tsrx/Cargo.toml --check"
+      - "cargo test --manifest-path /Users/jacksm5pro/dev/open-source/native-tsrx/Cargo.toml"
+      - "npm test --prefix /Users/jacksm5pro/dev/open-source/native-tsrx"
