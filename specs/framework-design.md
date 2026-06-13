@@ -14,6 +14,14 @@ Because the framework owns the language via a TSRX codegen plugin, the compiler
 sees every component, every state creation site, and every closure structurally —
 which is what makes marker-free resumability and a plain-value state API tractable.
 
+The central model is: UI structure is a tree-shaped graph, but state dependencies
+are a general directed graph. Current web frameworks often force that general
+graph through tree-shaped tools: provider ancestry, hook call order, component
+subscriptions, rerender boundaries, and hydration boundaries. This framework
+does the opposite: the dataflow graph is the boundary. Components project graph
+nodes into DOM; events write back into graph nodes; resumability serializes graph
+state and edges rather than re-entering component trees.
+
 JSX/TSX is explicitly **not** supported.
 
 ## Goals
@@ -64,7 +72,16 @@ become code-split entry points.
 
 ### Surface API
 
-Two intrinsics, available in any `.tsrx` file (components and shared logic alike):
+The entire author-facing data model is three intent-named words:
+
+- `state()` creates graph state.
+- `computed()` creates derived graph state.
+- `shared()` creates a named request/container/page graph root.
+
+Signals, stores, subscriptions, and proxy nodes are implementation details of
+graph management. `onVisible` is an element event prop, not a state primitive.
+The two local-state intrinsics, available in any `.tsrx` file (components and
+shared logic alike):
 
 ```tsx
 export function Counter() @{
@@ -76,9 +93,54 @@ export function Counter() @{
 ```
 
 - `state(initial)` — reactive value. Read it as a plain variable; write with
-  plain assignment/mutation.
+  plain assignment/mutation. Scalars compile to one reactive cell; objects and
+  collections compile to field/path-granular reactive data. There is no separate
+  `store()` primitive.
 - `computed(fn)` — lazy derived value. Read as a plain variable. Not writable
   (no optimistic-write semantics in v1; revisit if real apps demand it).
+
+```tsx
+let count = state(0);
+let session = state({ user: null, status: "anonymous" });
+
+count++;                  // invalidates the scalar cell
+session.user = user;      // invalidates only the `user` path
+session.status = "ready"; // invalidates only the `status` path
+```
+
+### Scoping model
+
+A tree is a constrained graph: one root, parent/child ancestry, no arbitrary
+cross-edges. UI structure is usefully tree-shaped, but state dependencies are
+not. One state path may feed unrelated DOM bindings; one derived value may depend
+on local state, shared request state, and another derived value; one event may
+write several paths. That is a general directed graph, not a component tree.
+
+State is therefore graph-scoped, not render-boundary-scoped. A component may
+create a local graph scope during server render, but updates do not belong to
+the component and never re-enter the component body on the client. Components
+are just ways to create local graph scopes, attach reads/writes, and project
+graph values into DOM.
+
+`shared()` lifts that same graph model out of any component instance and gives
+it request/container/page scope. This is different from hooks and context, which
+scope state through render order, provider ancestry, component subscriptions,
+and rerender boundaries. In this framework, the boundary is the dataflow:
+
+```txt
+where the graph instance lives
+which bindings read it
+which handlers write it
+where it must serialize
+where it must sync across runtimes
+```
+
+That distinction is core to marker-free resumability. Because the compiler owns
+the dataflow graph directly, authors do not mark lazy boundaries or manually
+construct state boundaries with providers; the graph itself is the resumable
+unit. Resuming means loading the symbol touched by an event, materializing its
+graph references, applying writes to graph nodes, and updating the DOM bindings
+that actually depend on those paths.
 
 ### No effects, no tasks — by design, not omission
 
@@ -153,11 +215,11 @@ These are **compiler intrinsics**, not imports of a value type. There is no
 (`onClick`, `onInput`), matching TSRX/JSX convention — no directive namespace.
 
 `state()`/`computed()` may be created anywhere in a call tree rooted in a
-component instance — including helper functions in non-component `.tsrx` files
-(custom-hook-style stores). Creation at **module scope** is a compile-time
+component or shared instance — including helper functions in non-component
+`.tsrx` files. Creation at **module scope** is a compile-time
 diagnostic in v1: module-scope state would be shared across requests on the
-server and has no home in the per-document serialization payload. App-wide state
-is shared via `context()` instead.
+server and has no home in the per-document serialization payload. Request,
+container, and page state is declared with `shared()` definitions instead.
 
 ### Implementation: hybrid compiler-rewrite + deep proxies
 
@@ -187,20 +249,233 @@ Destructuring from a known-reactive source (props, a `state()` object) compiles
 to alias bindings: `const { x } = props` means every later read of `x` emits
 `props.x`. No `&` marker, no lost reactivity. This is the Svelte 5 `$props()`
 behavior generalized to all compiler-known reactive sources. Rest/spread of a
-reactive source produces a derived proxy over the remaining keys.
+reactive source produces live forwarding fields rather than a value snapshot.
+That rule is what makes returning a state object plus methods from `shared()`
+ergonomic: `return { ...s, login() { ... } }` preserves `s.user` as a graph
+reference.
 
-### Props and shared state
+### Props
 
-- Component props are getter-backed; reads inside the child re-read the parent's
-  graph. Destructuring in the parameter list is auto-aliased as above.
-- The shared-state primitive (context vs. provider-free auto-scoped stores) is
-  under active design — see Open Design Threads. Whatever lands must follow the
-  same rules as state: compiler-known creation, serializable values,
-  graph-referenced by extracted closures, no module-scope instances. Requirements
-  already settled: no manual boundary ceremony (no `createContextId` +
-  provider + consumer triple), and it must work across nested containers and
-  separately-built micro-frontend containers (stable cross-bundle identity,
-  plain-data wire format).
+Component props are getter-backed; reads inside the child re-read the parent's
+graph. Destructuring in the parameter list is auto-aliased as above.
+
+### Shared state — `shared()`
+
+There is no `context()` and no `store()`. React-style context makes authors
+create tree boundaries (`Provider`, context IDs, wrapper hooks) for data that is
+usually request, container, or page scoped: auth, i18n, cart, feature flags,
+current org, route cache, websocket state. `shared()` names that dataflow
+directly.
+
+```tsx
+// session.tsrx - definition only; module scope holds no instance
+export const session = shared(() => {
+  const s = state({
+    user: null,
+    status: "anonymous",
+  });
+
+  const signedIn = computed(() => s.user !== null);
+
+  return {
+    ...s,
+    signedIn,
+
+    async login(creds) {
+      s.status = "loading";
+      s.user = await loginUser(creds);
+      s.status = "ready";
+    },
+
+    logout() {
+      s.user = null;
+      s.status = "anonymous";
+    },
+  };
+});
+
+function Header() @{
+  const s = session();
+
+  @if (s.signedIn) {
+    <Avatar user={s.user} />
+  }
+}
+```
+
+`session()` does not mean "run a hook." It means: resolve this named dataflow
+instance for the current request/container/page. The instance is created on the
+server per request, serialized into the graph payload, resumed lazily on the
+client, and synchronized by serialized patch events only when it crosses
+container/runtime boundaries.
+
+```txt
+shared definition
+  -> request-scoped server instance
+  -> serialized graph snapshot
+  -> lazy client graph instance
+  -> CustomEvent patches across container/runtime boundaries
+```
+
+Semantics:
+
+- **Identity:** compiler-emitted stable ID per definition (package + export
+  name). No `createContextId`, and IDs survive serialization and
+  separately-built bundles.
+- **Resolution:** bare call resolves the current request/container/page instance
+  of that shared definition. There is no `provide()` or `create()` in v1;
+  repeated local widget state stays ordinary component-owned `state()`.
+- **Boundaries are dataflow, not components.** The framework tracks who reads,
+  who writes, which runtime owns the instance, and where the state must
+  serialize or sync. Authors do not place provider components to define those
+  boundaries.
+- **Local writes are graph writes.** Inside one container, `s.user = user`
+  mutates the local reactive graph directly. Custom events are not the state
+  engine.
+- **Cross-runtime writes are event patches.** When a shared instance spans
+  nested containers, sibling micro-frontends, or a page shell boundary, the write
+  additionally emits a versioned `CustomEvent` carrying plain serialized data.
+  Other runtimes fold the patch into their own local graph.
+- **State crosses bundles; code does not.** Separately-built containers may each
+  bundle their own `session.login()` implementation. They synchronize through
+  shared definition IDs and data patches, not shared JS object identity.
+
+Rationale receipts (GitHub code search, June 2026): ~75% of React `useContext`
+call sites are hidden behind hand-rolled bare-call wrappers (`useAuth()`-style,
+~24k files) - when most users wrap an API before using it, the wrapper is the
+correct primitive. ~12k files hand-write orphan-provider errors, which this
+model deletes for root/request state instead of pushing into userland. Zustand's
+define-then-bare-call shape appears in ~60k files, with its ~21k selector call
+sites being pure re-render tax that a fine-grained graph deletes.
+
+#### Shared examples
+
+**Request session**
+
+```tsx
+export const session = shared(() => {
+  const s = state({ user: null, status: "anonymous" });
+
+  return {
+    ...s,
+    async login(creds) {
+      s.status = "loading";
+      s.user = await loginUser(creds);
+      s.status = "ready";
+    },
+  };
+});
+
+function AccountButton() @{
+  const s = session();
+
+  <button onClick={() => s.login(creds)}>
+    {s.user ? s.user.name : "Sign in"}
+  </button>
+}
+```
+
+**Composition between shared definitions**
+
+Factories may call other shared definitions. The call resolves from the creation
+context of the instance, so composed state keeps request/container isolation.
+
+```tsx
+export const cart = shared(() => {
+  const s = session();
+  const c = state({ id: "current", items: [] });
+
+  const total = computed(() => {
+    const subtotal = c.items.reduce((sum, item) => sum + item.price, 0);
+    return applyCustomerPricing(subtotal, s.user);
+  });
+
+  return {
+    ...c,
+    total,
+    add(item) {
+      c.items.push(item);
+    },
+  };
+});
+```
+
+The compiler can see shared-definition dependencies and should reject circular
+definition graphs with a diagnostic that prints the cycle.
+
+**Page-shell and micro-frontend state**
+
+```tsx
+export const shell = shared(() => {
+  const s = state({
+    sidebarOpen: false,
+    activeCartId: null,
+  });
+
+  return {
+    ...s,
+    toggleSidebar() {
+      s.sidebarOpen = !s.sidebarOpen;
+    },
+  };
+});
+
+// Header bundle
+function HeaderCartButton() @{
+  const s = shell();
+  const c = cart();
+
+  <button onClick={() => {
+    s.activeCartId = c.id;
+    s.sidebarOpen = true;
+  }}>
+    Cart
+  </button>
+}
+
+// Sidebar bundle, built separately
+function CartSidebar() @{
+  const s = shell();
+
+  @if (s.sidebarOpen) {
+    <aside>{s.activeCartId}</aside>
+  }
+}
+```
+
+The two bundles share live state without sharing code. The header write updates
+its local graph and emits a serialized patch for the `shell` shared ID; the
+sidebar runtime folds that patch into its own graph.
+
+**Local repeated widget state**
+
+Repeated component instances do not use `shared()`. Their boundary is local
+ownership, so ordinary `state()` is enough.
+
+```tsx
+export function Select({ options }) @{
+  const s = state({ open: false, value: null });
+
+  <button onClick={() => s.open = !s.open}>{s.value ?? "Select"}</button>
+
+  @if (s.open) {
+    <ul>
+      @for (option of options) {
+        <li onClick={() => {
+          s.value = option.value;
+          s.open = false;
+        }}>
+          {option.label}
+        </li>
+      }
+    </ul>
+  }
+}
+```
+
+This prevents `shared()` from becoming context under a different name. Shared
+state is named request/container/page dataflow; local state is component-owned
+dataflow.
 
 ## Resumability
 
@@ -221,7 +496,7 @@ no annotation:
 An extracted closure may capture only:
 
 1. `state()` / `computed()` references — serialized as graph references, not values
-2. props and context references
+2. props and `shared()` instance references
 3. module-level imports — re-imported by the emitted symbol module
 4. serializable constants (JSON-compatible values, plus the framework's extended
    set: Date, Map, Set, URL, BigInt, typed arrays)
@@ -241,9 +516,12 @@ The server renderer emits, alongside the HTML:
 1. **State values** — proxies unwrap to plain data; serialized with the extended
    serializer. `computed()` values are *not* serialized; they re-derive lazily
    from their dependencies on first read.
-2. **Subscription graph** — which symbol (binding, computed) depends on which
+2. **Shared instances** — shared definition IDs, request/container/page scope,
+   version counters, and the plain state snapshot for each touched shared
+   instance. Methods/actions are never serialized.
+3. **Subscription graph** — which symbol (binding, computed) depends on which
    state path.
-3. **Wiring** — DOM element → event → symbol map for listeners, and DOM element →
+4. **Wiring** — DOM element → event → symbol map for listeners, and DOM element →
    binding-symbol map for dynamic text/attributes.
 
 Format: a JSON script block plus element attributes for wiring (exact encoding is
@@ -258,6 +536,22 @@ it is not public API).
 - State writes during that run propagate through the graph; subscribed binding
   symbols are loaded on demand and update the DOM in place. Nothing re-renders;
   there is no component re-execution path in the client runtime at all.
+- If a write touches a shared instance that spans a container/runtime boundary,
+  the local graph write additionally emits a versioned `CustomEvent` patch. The
+  exact event name and encoding are private runtime protocol, but the shape is
+  plain data:
+
+```ts
+{
+  id: "pkg/session#session",
+  scope: "page",
+  version: 42,
+  patch: [
+    ["set", ["user"], user],
+    ["set", ["status"], "ready"],
+  ],
+}
+```
 
 ## Error Handling
 
@@ -282,15 +576,6 @@ it is not public API).
   interaction, then interact and assert only the expected symbols were fetched and
   the DOM updated. This e2e harness is the core invariant check and gets built
   early, not last.
-
-## Open Design Threads
-
-Settled in principle but not yet in shape:
-
-- **Shared state / DI primitive.** Leading candidate: provider-free auto-scoped
-  stores (module-scope *definitions*, per-container *instances*, compiler-emitted
-  stable IDs for cross-container/micro-frontend sharing via a page-level
-  registry). Not yet approved; see requirements under "Props and shared state."
 
 ## Deferred Decisions
 
