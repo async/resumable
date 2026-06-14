@@ -61,7 +61,10 @@ Expected shape:
   are installed
 - root `vite.config.ts` owns pack, test, lint, format, and staged configuration
   through vite-plus
-- initial package folders are `packages/resumable`, `packages/core`,
+- current proof implementation lives under `poc/packages/*`; do not extend it
+  when beginning production framework work unless the task is explicitly a POC
+  maintenance task
+- production package folders are `packages/resumable`, `packages/core`,
   `packages/protocol`, `packages/runtime`, `packages/serializer`,
   `packages/compiler`, `packages/rolldown`, `packages/vite`, and
   `packages/test-utils`
@@ -149,17 +152,18 @@ are valuable after the pass contracts exist.
 
 ## Proof Fixtures
 
-Before implementing framework internals, create the proof fixtures under
-`fixtures/proofs/`. These are executable-spec fixtures, not a throwaway POC
-implementation. Each proof should contain authored `.tsrx` source and a README
-describing which pass-boundary tests will consume it. Do not hand-write large
+The completed POC lives under `poc/`: proof fixtures under
+`poc/fixtures/proofs/` and proof implementation packages under
+`poc/packages/*`. These are executable specs and design evidence, not production
+framework packages. When beginning real implementation, create or modify root
+`packages/*` and use the POC as regression material. Do not hand-write large
 final artifact JSON before the relevant pass exists; add expected artifacts one
 pass at a time through failing tests.
 
 Each proof should be started as its own GoalBuddy-prepared goal. First use the
 GoalBuddy prompt/prep flow for the single proof, then run the generated `/goal`
 command. Do not launch raw proof goals directly from memory. The generated goal
-should scope ownership to exactly one `fixtures/proofs/<name>/` directory, allow
+should scope ownership to exactly one `poc/fixtures/proofs/<name>/` directory, allow
 shared index updates only when needed, and forbid framework-internal
 implementation work unless the proof task explicitly asks for it.
 

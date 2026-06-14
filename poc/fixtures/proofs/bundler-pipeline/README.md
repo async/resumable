@@ -28,15 +28,15 @@ Future pass-boundary and pipeline-boundary tests consume this fixture to prove:
 
 ## Focused Tests
 
-- `packages/compiler/test/bundler-pipeline.test.ts` checks the compiler transform
+- `poc/packages/compiler/test/bundler-pipeline.test.ts` checks the compiler transform
   artifact from this fixture.
-- `packages/rolldown/test/bundler-pipeline.test.ts` checks that the Rolldown POC
+- `poc/packages/rolldown/test/bundler-pipeline.test.ts` checks that the Rolldown POC
   plugin delegates to the compiler transform, exposes virtual modules, records
   emitted chunks, and returns inspectable receipts.
-- `packages/vite/test/bundler-pipeline.test.ts` checks that the Vite POC adapter
+- `poc/packages/vite/test/bundler-pipeline.test.ts` checks that the Vite POC adapter
   wraps the same Rolldown/base plugin and refreshes transform/manifest records
   during an HMR update.
-- `packages/test-utils/test/pipeline-receipts.test.ts` checks the local
+- `poc/packages/test-utils/test/pipeline-receipts.test.ts` checks the local
   Witness-style receipt helpers used by the POC tests.
 
 ## Non-Goals

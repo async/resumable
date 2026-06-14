@@ -121,11 +121,23 @@ importers:
         specifier: catalog:default
         version: 3.18.0
 
-  packages/compiler:
+  poc/packages/compiler:
     dependencies:
       '@tsrx/core':
         specifier: workspace:*
-        version: link:../../../ripple/packages/tsrx
+        version: link:../../../../ripple/packages/tsrx
+
+  poc/packages/protocol: {}
+
+  poc/packages/rolldown: {}
+
+  poc/packages/runtime: {}
+
+  poc/packages/serializer: {}
+
+  poc/packages/test-utils: {}
+
+  poc/packages/vite: {}
 
 packages:
 

@@ -105,7 +105,12 @@ expose only the main package and explicitly curated re-exports. `protocol` and
 their contracts; until then, do not document or rely on deep package APIs as
 public framework surface.
 
-Initial internal package map:
+The proof implementation lives under `poc/packages/*` and proof fixtures live
+under `poc/fixtures/proofs/*`. That POC tree is executable evidence that the
+design is possible, but it is not the production source tree. Real framework
+implementation begins in root `packages/*` using the same boundaries.
+
+Initial internal production package map:
 
 - `packages/resumable` — main package for `@async/resumable`; curated public
   re-exports only.

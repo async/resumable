@@ -62,7 +62,7 @@ a time through failing tests.
 Start each proof through GoalBuddy prompt/prep first, then run the generated
 `/goal` command. Do not write raw `/goal` prompts from memory.
 
-Each proof goal owns exactly one `fixtures/proofs/<name>/` directory. It may
+Each proof goal owns exactly one `poc/fixtures/proofs/<name>/` directory. It may
 update this shared index only when adding a link, status line, or clarified
 instruction. It must not edit framework internals unless the generated goal
 explicitly changes from fixture design to implementation work.

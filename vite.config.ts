@@ -6,7 +6,7 @@ export default defineConfig({
 	},
 	pack: {
 		entry: {
-			'compiler/index': './packages/compiler/src/index.ts',
+			'compiler/index': './poc/packages/compiler/src/index.ts',
 		},
 		format: ['esm'],
 		dts: true,
@@ -14,7 +14,7 @@ export default defineConfig({
 	},
 	test: {
 		environment: 'node',
-		include: ['packages/*/test/**/*.test.ts'],
+		include: ['poc/packages/*/test/**/*.test.ts', 'packages/*/test/**/*.test.ts'],
 	},
 	lint: {
 		ignorePatterns: ['dist/**', 'node_modules/**'],

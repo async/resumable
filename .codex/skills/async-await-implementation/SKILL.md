@@ -40,7 +40,8 @@ description: "Use when implementing the @async/resumable TSRX framework: compile
 - Use host adapters for file access, module resolution, environment data, hashing, dev-server hooks, and other runtime-specific capabilities.
 - Prefer Web APIs and portable libraries. Use `pathe` for filesystem-like path work and `ufo` for URL/pathname/query work.
 - Build the repo as a pnpm workspace and vite-plus monorepo with multiple libraries. `package.json`, `pnpm-workspace.yaml`, and `pnpm-lock.yaml` own the workspace/dependency source of truth; vite-plus is the preferred command/tooling surface for build/test/check/format/lint.
-- Initial package folders are `packages/resumable`, `packages/core`, `packages/protocol`, `packages/runtime`, `packages/serializer`, `packages/compiler`, `packages/rolldown`, `packages/vite`, and `packages/test-utils`. `packages/resumable` is the main package for `@async/resumable`; the rest are internal boundaries until tests prove what should become public. Do not create `packages/server`.
+- The completed proof implementation lives under `poc/packages/*`; do not extend it when beginning production framework work unless the task is explicitly POC maintenance.
+- Initial production package folders are `packages/resumable`, `packages/core`, `packages/protocol`, `packages/runtime`, `packages/serializer`, `packages/compiler`, `packages/rolldown`, `packages/vite`, and `packages/test-utils`. `packages/resumable` is the main package for `@async/resumable`; the rest are internal boundaries until tests prove what should become public. Do not create `packages/server`.
 - Use QDS/qwik-bundler as root vite-plus config and multi-lib/plugin structure references. Use Witness for pipeline/HMR proof behavior only, not as a workspace-structure reference.
 - Package/library builds should be vite-plus `pack` configs; prefer `vp pack`, `vp test`, `vp check`, `vp fmt`, `vp lint`, and `vp config` directly.
 - pnpm scripts should be thin aliases that invoke vite-plus commands; do not replace vite-plus as the default tooling surface with custom script stacks.
@@ -54,8 +55,8 @@ description: "Use when implementing the @async/resumable TSRX framework: compile
 - Use test-driven development for behavior changes: write the failing test, run the narrow command, implement, rerun.
 - Start with pass-boundary TDD before end-to-end browser demos. Preferred order: TSRX semantic graph, state lowering, payload arena planning, symbol resolver planning, runtime graph, browser resume.
 - Each pass should emit or expose a human-readable artifact that the next layer consumes. Do not hide contract decisions only inside generated code or browser behavior.
-- Create proof fixtures under `fixtures/proofs/` before implementing internals. They are executable specs, not throwaway POCs. Start with `resume-basic`, `state-lvalues`, `sync-event-policy`, `payload-locators`, `symbol-resolver`, `serializer-values`, `scheduler-journal`, and `bundler-pipeline`.
-- Start each proof through GoalBuddy prompt/prep first, then run the generated `/goal`. One proof goal owns one `fixtures/proofs/<name>/` directory.
+- Proof fixtures live under `poc/fixtures/proofs/` and proof implementation packages live under `poc/packages/*`. They are executable specs and design evidence, not production framework packages. Start with `resume-basic`, `state-lvalues`, `sync-event-policy`, `payload-locators`, `symbol-resolver`, `serializer-values`, `scheduler-journal`, and `bundler-pipeline`.
+- Start each proof through GoalBuddy prompt/prep first, then run the generated `/goal`. One proof goal owns one `poc/fixtures/proofs/<name>/` directory.
 - Unit and integration tests should use vite-plus (`vp test`) once the package exists.
 - Component/browser tests should use Vitest browser mode, modeled after `/Users/jacksm5pro/dev/open-source/vitest-browser-qwik` and adapted for this framework.
 - Pipeline/HMR/build-behavior tests should use `/Users/jacksm5pro/dev/open-source/witness` so the Vite/Rolldown pipeline produces receipts.

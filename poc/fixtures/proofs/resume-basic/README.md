@@ -43,7 +43,7 @@ The same authored fixture should be consumed one layer at a time:
 
 ## Current Implementation Proof
 
-- `packages/compiler/test/semantic-graph.test.ts` is the first red test. It
+- `poc/packages/compiler/test/semantic-graph.test.ts` is the first red test. It
   consumes [src/App.tsrx](./src/App.tsrx) and expects a human-readable TSRX
   semantic graph artifact.
 
