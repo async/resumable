@@ -16,13 +16,20 @@ their prerequisites exist:
 - Streaming SSR / out-of-order flushing.
 - Server functions / RPC story.
 - Devtools (graph visualization).
+- OXC/Rust/native compiler backend or parser replacement. The first prototype
+  uses JS/TS with `@tsrx/core`; native migration comes only after the artifact
+  contracts and behavior fixtures are proven.
+- Standalone build/minify/transform stacks outside Rolldown or Vite. Do not add
+  esbuild, terser, Rollup, SWC, webpack, Babel build pipelines, or similar tools
+  as framework build dependencies unless this spec is deliberately reopened.
 
 ## Build Order (high level)
 
 1. Reactive runtime core (graph + object state + async node status/versioning) —
    pure TS, testable standalone.
-2. Compiler: state rewriting + template codegen for client-side rendering (CSR
-   mode first, to validate the language surface without serialization).
+2. Compiler in JS/TS on `@tsrx/core`: state rewriting + template codegen for
+   client-side rendering (CSR mode first, to validate the language surface
+   without serialization).
 3. Async computed lowering + `@try`/`@pending`/`@catch` boundary lowering.
 4. Closure extraction + capture analysis + diagnostics.
 5. Server renderer + serialization + resumer; e2e resumability harness.

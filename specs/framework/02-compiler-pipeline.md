@@ -51,6 +51,38 @@ human-readable form. Tests should target both individual pass artifacts and
 end-to-end emitted output, so a regression in event policy extraction does not
 have to be diagnosed from a full generated bundle snapshot.
 
+### Initial compiler substrate
+
+The first implementation uses JavaScript/TypeScript with `@tsrx/core` as the
+parser, semantic, and codegen-plugin substrate. This is a prototype strategy, not
+a permanent architectural limit: prove the framework behavior first, then replace
+compiler internals later if needed.
+
+The compiler package is runtime-agnostic ESM. It should not import Node modules
+for paths, files, URL handling, crypto, or process state. Path/URL normalization
+should use portable helpers such as `pathe` and `ufo`; file access, module
+resolution, hashing, environment data, and dev-server capabilities come from the
+host adapter. The same compiler passes must be able to run under Node, Deno, Bun,
+or a browser-hosted test harness without changing framework semantics.
+
+The first compiler should focus on the framework contracts:
+
+- TSRX semantic graph artifacts
+- state read/write rewriting
+- template/view lowering
+- sync event policy extraction
+- lazy symbol extraction and capture analysis
+- payload arena planning
+- symbol resolver planning
+- human-readable diagnostics
+
+Do not start by building or depending on an OXC, Rust, or native compiler
+backend. OXC migration is deferred performance/integration work. It is allowed
+only when it preserves the same pass artifact contracts, fixture outputs,
+diagnostics, and runtime semantics. The artifact shapes should stay
+implementation-neutral so a backend swap changes compiler internals, not the
+framework model.
+
 ### TSRX semantic graph artifact
 
 The first framework-owned pass after parsing produces a TSRX semantic graph. It
@@ -128,6 +160,9 @@ Diagnostic quality is a first-class deliverable, not polish.
   policy extraction, capture diagnostics). Each pass has fixtures for
   input artifacts → output artifacts/diagnostics; full compiler snapshots still
   cover input `.tsrx` → emitted JS + symbol resolver/manifest.
+  The accepted state-lvalue surface is defined by these fixtures: each new
+  assignment/update/destructuring/collection-method form must prove its semantic
+  target, lowered graph operation, preserved JavaScript behavior, or diagnostic.
 - **Runtime:** unit tests on the graph (dependency tracking, path-level
   subscriptions, lazy computed, async computed status/versioning/cancellation).
 - **Resumability end-to-end:** render a fixture app on the server, load it in a

@@ -61,15 +61,19 @@ JSX/TSX is explicitly **not** supported.
 
 Five pieces:
 
-1. **Compiler** — a TSRX codegen plugin (the framework is a TSRX compile target,
-   alongside React/Solid/Vue targets). Responsible for: rewriting state reads and
-   writes, compiling templates to DOM instructions, extracting closures into
-   lazily-loadable symbols, splitting async derivations into key functions and
-   run functions, compiling async boundaries, computing capture sets, and emitting
-   diagnostics when the capture or async tracking rules are violated.
-2. **Runtime** — a small fine-grained reactive core (graph cells, object state
-   records, async node state, cancellation/versioning, DOM binding helpers).
-   Never exposed as user vocabulary.
+1. **Compiler** — first implemented in JS/TS on `@tsrx/core` as a TSRX codegen
+   plugin (the framework is a TSRX compile target, alongside React/Solid/Vue
+   targets). Responsible for: rewriting state reads and writes, compiling
+   templates to DOM instructions, extracting closures into lazily-loadable
+   symbols, splitting async derivations into key functions and run functions,
+   compiling async boundaries, computing capture sets, and emitting diagnostics
+   when the capture or async tracking rules are violated. A future OXC/native
+   backend may replace parser/lowering internals only behind the same pass
+   artifacts and behavior tests.
+2. **Runtime** — a small fine-grained reactive core (graph state, object state,
+   async node state, cancellation/versioning, DOM binding helpers). The
+   in-memory graph shape is private and is not a VDOM. Never exposed as user
+   vocabulary.
 3. **Server renderer** — runs component bodies once on the server, renders HTML,
    awaits demanded async nodes in v1 non-streaming mode, and serializes the
    resumability payload (state values, async snapshots, subscription graph,
@@ -92,6 +96,42 @@ environment detection, dev-server transforms, HMR, HTML/dev-tag injection, build
 orchestration, and public extension APIs. This mirrors the `qwik-bundler`
 structure: a reusable `rolldown` entry point is the core, and `vite` is one
 consumer of it.
+
+Build scripts and production optimization must go through Rolldown or Vite.
+Do not add standalone esbuild, terser, Rollup, SWC, webpack, Babel build
+pipelines, or similar secondary transformers/minifiers. If Vite or Rolldown use
+an internal tool as an implementation detail, that is owned by them; this
+framework's build surface depends only on Vite/Rolldown APIs.
+
+## Runtime And Build Portability
+
+Core framework code is runtime-agnostic ESM. The compiler, runtime graph,
+serializer, server renderer, resumer protocol, payload tools, and shared build
+helpers must not require Node as the execution environment. Node, Deno, Bun,
+edge workers, and browser-hosted tooling should be able to run the same framework
+semantics through thin host adapters.
+
+The implementation rules are:
+
+- no `node:*` imports, `fs`, `path`, `process`, `Buffer`, or `node:crypto` in
+  shared framework packages
+- file access, module resolution, environment variables, hashing, timers beyond
+  standard globals, and dev-server integration are host capabilities injected by
+  the build/runtime adapter
+- prefer Web-standard APIs (`URL`, `URLSearchParams`, `TextEncoder`,
+  `Uint8Array`, `ReadableStream`, `AbortController`, `crypto.subtle` when
+  available) and portable libraries for gaps
+- prefer runtime-agnostic path/URL helpers such as the unjs packages `pathe` and
+  `ufo` over Node's `path` or `url` modules
+- generated code uses standard ESM and `import()`; the symbol resolver receives
+  already-normalized URLs/specifiers from the build manifest rather than doing
+  environment-specific path math at runtime
+- Node/Vite/Rolldown-specific behavior lives only in adapter packages or clearly
+  isolated integration modules, never in the semantic compiler/runtime core
+
+This is a design constraint, not just packaging polish. If framework behavior
+differs between Node and Deno because core code depended on host-specific APIs,
+that is a framework bug.
 
 ## Split Spec Index
 

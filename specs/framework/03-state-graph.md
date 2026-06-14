@@ -217,10 +217,11 @@ container, and page state is declared with `shared()` definitions instead.
 
 **Primitives (compiler-rewritten).** The compiler knows every `state()`/`computed()`
 creation site statically, so every read of that binding compiles to a graph read
-(`_get(count)`) and every write to a graph write — including reads inside
-closures, template expressions, destructured aliases, and non-component helper
-functions in `.tsrx` files. Reactivity crosses `.tsrx` function boundaries with
-zero ceremony; "transporting reactivity" is not a concept users need.
+(`_get(count)`) and every supported write compiles to a graph write — including
+reads inside closures, template expressions, destructured aliases, and
+non-component helper functions in `.tsrx` files. Reactivity crosses `.tsrx`
+function boundaries with zero ceremony; "transporting reactivity" is not a
+concept users need.
 
 This rewrite is driven by TSRX semantic analysis, not by the lowered output or
 string matching. The state compiler consumes the TSRX structural graph plus
@@ -241,6 +242,46 @@ normal JavaScript/TypeScript AST and scope information:
   analysis can classify the origin and path; it does not pretend to know the
   concrete value returned by an opaque function, network request, or
   third-party library.
+
+#### State lvalue meta-contract
+
+The spec does not try to pre-enumerate every valid JavaScript lvalue shape.
+Implementation owns that table through semantic-analysis fixtures. The normative
+rule is:
+
+```txt
+If semantic analysis can resolve a read/write target to a graph binding or graph
+path, and the compiler/runtime can preserve normal JavaScript semantics, the
+form is supported.
+
+If the target is unresolved, ambiguous, read-only, or would require surprising
+semantics, compilation fails with a diagnostic.
+```
+
+Normal JavaScript binding semantics are preserved. Reassigning a `const` graph
+binding is still illegal, while mutating a property of a `const` object-state
+binding is allowed when the property path resolves:
+
+```tsx
+let count = state(0);
+count++; // supported when semantic analysis resolves `count`
+
+const frozenCount = state(0);
+frozenCount++; // diagnostic: const reassignment
+
+const menu = state({ open: false });
+menu.open = true; // supported: property mutation, not binding reassignment
+```
+
+`computed()` and props are read-only in v1. Writes to them, including writes
+through aliases, are diagnostics unless a future explicit writable-computed
+contract is added.
+
+The exact supported surface for update expressions, compound assignments,
+member writes, destructured aliases, rest/spread aliases, and collection methods
+is locked by compiler fixture tests rather than prose. New forms are added only
+when the fixture proves that the compiler can resolve the target and the runtime
+can preserve JavaScript-visible behavior.
 
 For example:
 
@@ -330,6 +371,11 @@ reactive source produces live forwarding fields rather than a value snapshot.
 That rule is what makes returning a state object plus methods from `shared()`
 ergonomic: `return { ...s, login() { ... } }` preserves `s.user` as a graph
 reference.
+
+Writes through destructured aliases follow the state lvalue meta-contract. If
+the alias can be resolved to a writable graph path while preserving normal
+JavaScript semantics, it may lower to a graph write; otherwise it is a
+diagnostic. Props and `computed()` aliases remain read-only in v1.
 
 ### Props
 

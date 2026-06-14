@@ -167,9 +167,10 @@ Event and behavior props accept either one expression or an array of expressions
 
 For `on*` event props, array entries run in authored order. The runtime stops at
 the first thrown or rejected entry and routes the error through the normal error
-boundary path. Return values are ignored for ordinary events. For event props
-with lifecycle cleanup semantics such as `onVisible`, returned cleanup functions
-are stored and later run in reverse order.
+boundary path. Graph writes already committed by earlier entries are not rolled
+back. Return values are ignored for ordinary events. For event props with
+lifecycle cleanup semantics such as `onVisible`, returned cleanup functions are
+stored and later run in reverse order.
 
 Event handlers are lazy-loaded behavior, so the browser cannot wait for handler
 chunks before deciding default actions. For v1, only browser-critical
