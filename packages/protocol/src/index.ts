@@ -20,7 +20,14 @@ export type PipelineReceiptStage =
 	| 'rolldown-transform'
 	| 'virtual-module-load'
 	| 'vite-transform'
-	| 'hmr-update';
+	| 'hmr-update'
+	| 'page-load'
+	| 'resume-graph-read'
+	| 'delegated-event-dispatch'
+	| 'sync-policy-evaluate'
+	| 'lazy-symbol-load'
+	| 'graph-write'
+	| 'dom-journal-apply';
 
 export type PipelineReceipt = {
 	readonly stage: PipelineReceiptStage;

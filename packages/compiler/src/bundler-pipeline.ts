@@ -126,7 +126,7 @@ export async function transformTsrxForBundler(
 			code: transformedModuleCode(input.filename, virtualModules),
 			map: null,
 		},
-		virtualModules: hydrateManifestVirtualModule(virtualModules, manifest),
+		virtualModules: withManifestVirtualModule(virtualModules, manifest),
 		emittedChunks,
 		manifest,
 		pipelineReceipts: [
@@ -207,7 +207,7 @@ function createVirtualModules(input: {
 	];
 }
 
-function hydrateManifestVirtualModule(
+function withManifestVirtualModule(
 	virtualModules: ReadonlyArray<PipelineVirtualModuleRecord>,
 	manifest: PipelineManifest,
 ): PipelineVirtualModuleRecord[] {
