@@ -105,8 +105,8 @@ Five pieces:
 5. **Build integration** — a Rolldown plugin base exported by `@async/await`,
    with framework adapters such as Vite consuming that base plugin. Extracted
    symbols become code-split entry points, and production builds emit the
-   manifest metadata needed by the server renderer, resumer, preload/runtime
-   graph, and cached SSR fragments.
+   generated symbol resolver plus manifest metadata needed by the server
+   renderer, resumer, preload/runtime graph, and cached SSR fragments.
 
 The build architecture is Rolldown-first, not Vite-first. The base Rolldown
 plugin owns compiler transforms, virtual modules, emitted symbol chunks,
@@ -1034,6 +1034,52 @@ no annotation:
 - DOM binding expressions (text/attribute bindings — the system's only effects)
 - component bodies (executed on the server only)
 
+### Symbol loading and event wiring
+
+Extracted symbols are lazy-loaded, but normal framework-owned wiring does not
+turn into QRL-like user values or per-node DOM closures. Authored event props
+compile to encoded `async/view` records:
+
+```txt
+DOM locator + event name + optional sync policy IR + ordered handler symbol IDs
+```
+
+The generated HTML does not need an `onClick={async (...) => import(...)}` shape,
+and production output should not require per-node event attributes. The
+`async/view` arena locates nodes by DOM-order streams, skip runs, branch anchors,
+or other private locator data, then the resumer builds internal side tables such
+as `WeakMap<Element, EventRecord>`.
+
+Dynamic imports are owned by a generated symbol resolver, not by each event prop.
+The resolver is a page/build-scoped module or equivalent compact runtime table
+that maps symbol IDs from `async/view` to chunks and exports:
+
+```ts
+export function loadSymbol(id: number) {
+  switch (id) {
+    case 7:
+      return import("/assets/menu.handlers.ab12.js")
+        .then((mod) => mod.onKeyDown_7);
+    case 8:
+      return import("/assets/menu.bindings.cd34.js")
+        .then((mod) => mod.textBinding_8);
+    default:
+      return Promise.reject(new Error(`Unknown async symbol ${id}`));
+  }
+}
+```
+
+The exact resolver syntax is private build output. The full symbol manifest is a
+build/server artifact. The browser receives only the resolver/table needed for
+the current build or page, plus enough build/protocol identity to fail closed if
+`async/view` references a symbol the resolver does not know.
+
+The same resolver path is used for event handlers, DOM binding symbols,
+`use={...}` behavior symbols, async computed run functions, and other lazy
+runtime behavior. Captures are materialized by the runtime from graph references,
+serializable constants, props/shared references, and element locators; they are
+not serialized as arbitrary function closures.
+
 ### The Capture Rule (replaces the marker)
 
 An extracted closure may capture only:
@@ -1184,8 +1230,10 @@ included.
   policy reads the already-materialized graph data plane by ID; it does not load
   app chunks or execute component/handler code.
 - First interaction: look up the ordered symbol list for that element/event,
-  dynamically import each symbol as needed, materialize its captured graph
-  references and element handles, and run handlers in authored order.
+  resolve each symbol through the generated symbol resolver, materialize its
+  captured graph references and element handles, and run handlers in authored
+  order. The resolver owns the dynamic import; event props are only encoded
+  symbol IDs in `async/view`.
 - Element handles resolve from serialized DOM locators at handler execution time.
   If the element was removed or the locator no longer matches, the handle reads
   as `undefined`.
