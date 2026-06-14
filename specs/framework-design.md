@@ -117,6 +117,55 @@ orchestration, and public extension APIs. This mirrors the `qwik-bundler`
 structure: a reusable `rolldown` entry point is the core, and `vite` is one
 consumer of it.
 
+### Compiler implementation pipeline
+
+The compiler implementation must be an explicit artifact pipeline, not one
+monolithic AST visitor. Each compiler feature owns one pass or a small set of
+passes that can be developed, tested, disabled, and debugged independently.
+
+Think of the compiler as a set of cooperating mini compilers. Each mini compiler
+has a narrow domain, its own intermediate representation or artifact shape, and
+a clear boundary with the rest of the pipeline. The state compiler should not
+need to know how the view payload is encoded; the sync event policy compiler
+should not need to know final chunk filenames; the symbol resolver planner should
+not need to re-walk source code to rediscover captures. They exchange typed
+artifacts through the orchestrator.
+
+Every pass has:
+
+1. a stable pass ID and human-readable description
+2. declared input artifact keys (`consumes`)
+3. declared output artifact keys (`produces`)
+4. a typed pass context containing only source files, compiler options,
+   declared input artifacts, and diagnostic sinks
+5. a separately runnable test fixture surface
+
+The orchestrator validates the pass graph before running it. Missing inputs,
+duplicate producers for the same artifact, dependency cycles, or undeclared
+artifact reads are compiler bugs and fail loudly. Pass order may be derived from
+`consumes`/`produces`, but observable behavior must not depend on hidden mutation
+between unrelated passes.
+
+Passes communicate through typed artifacts, not private shared state. A pass may
+append diagnostics and produce declared artifacts; it must not reach into another
+pass's internals, mutate another pass's output in place, or couple itself to the
+final emitted JavaScript shape. When a later optimization needs more data, the
+owning pass adds or versions an artifact instead of creating an ad hoc side
+channel.
+
+This is a stability rule for the compiler. Adding or changing a feature should
+mean adding/changing the smallest relevant pass and artifact contract, not
+rewiring the whole compiler. For example, state read/write lowering, async
+dependency-key extraction, sync event policy extraction, capture analysis,
+template/view lowering, payload arena planning, symbol resolver planning, and
+final code generation are separate responsibilities even if an early prototype
+runs some of them in one physical module.
+
+Developer tooling must be able to dump artifacts after each pass in a
+human-readable form. Tests should target both individual pass artifacts and
+end-to-end emitted output, so a regression in event policy extraction does not
+have to be diagnosed from a full generated bundle snapshot.
+
 ## State System
 
 ### Surface API
@@ -1283,10 +1332,12 @@ included.
 
 ## Testing Strategy
 
-- **Compiler:** snapshot tests per language feature (state rewrite, destructuring
-  aliasing, async dependency-key extraction, post-await diagnostics, boundary
-  lowering, extraction, capture diagnostics) — input `.tsrx` → emitted JS +
-  symbol manifest.
+- **Compiler:** pass-level artifact tests plus final-output snapshots per
+  language feature (state rewrite, destructuring aliasing, async dependency-key
+  extraction, post-await diagnostics, boundary lowering, extraction, sync event
+  policy extraction, capture diagnostics). Each pass has fixtures for
+  input artifacts → output artifacts/diagnostics; full compiler snapshots still
+  cover input `.tsrx` → emitted JS + symbol resolver/manifest.
 - **Runtime:** unit tests on the graph (dependency tracking, path-level
   subscriptions, lazy computed, async computed status/versioning/cancellation).
 - **Resumability end-to-end:** render a fixture app on the server, load it in a
