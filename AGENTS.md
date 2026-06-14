@@ -34,27 +34,45 @@ is the Codex-facing always-on guidance for building the TSRX resumable framework
 
 ## Vite-Plus Monorepo Shape
 
-This framework will be a vite-plus monorepo with multiple libraries. Structure
-the repo around a root `vite.config.ts` using `defineConfig` from `vite-plus`,
-modeled after:
+This framework will be a **Deno workspace** and vite-plus monorepo with multiple
+libraries. Deno owns the workspace/dependency source of truth; vite-plus is the
+preferred command and tooling surface for build, test, check, format, and lint.
+
+Use Witness as the Deno workspace reference:
+
+- `/Users/jacksm5pro/dev/open-source/witness/deno.json`
+- `/Users/jacksm5pro/dev/open-source/witness/vite.config.ts`
+
+Use QDS and qwik-bundler as shape references for the root vite-plus config,
+multi-lib pack configuration, and plugin/fixture organization:
 
 - `/Users/jacksm5pro/dev/open-source/qwik-design-system/vite.config.ts`
 - `/Users/jacksm5pro/dev/open-source/qwik-bundler/vite.config.ts`
 
 Expected shape:
 
+- root `deno.json` is the canonical workspace and dependency manifest
 - root `vite.config.ts` owns pack, test, lint, format, and staged configuration
   through vite-plus
 - package/library builds are represented as multiple vite-plus `pack` configs,
   similar to QDS's `buildOrder`
 - framework packages live as multiple libs/packages rather than one large package
-- use vite-plus scripts in `package.json`: `vp pack`, `vp test`, `vp check`,
+- prefer vite-plus commands directly: `vp pack`, `vp test`, `vp check`,
   `vp fmt`, `vp lint`, and `vp config`
+- Deno tasks are allowed as thin repo-boundary aliases or for Deno-specific host
+  scripts, but they should normally invoke vite-plus commands rather than
+  replacing them
 - use vite-plus test projects for Node/unit integration and browser/component
   testing where appropriate
 - use `vite-plus/test/browser-playwright` for Vitest browser-mode provider wiring
 - use vite-plus-managed formatting/linting tooling, including oxfmt/oxlint-style
   behavior exposed through `vp fmt`, `vp lint`, and `vp check`
+
+Do not introduce pnpm, npm, or yarn as the primary workspace package manager.
+If npm package metadata is needed for publishing or local package consumption,
+generate it from the Deno-owned source of truth rather than hand-maintaining a
+second manifest. Do not use this as an excuse to replace vite-plus commands with
+Deno-native build/test/lint/format commands.
 
 Do not add separate Jest, standalone Vitest CLI conventions, Prettier, ESLint,
 Biome, tsup, tsdown, or custom build script stacks unless the spec is explicitly

@@ -37,8 +37,11 @@ description: "Use when implementing the async-await TSRX framework: compiler pas
 - Core packages must be runtime-agnostic ESM. Avoid `node:*`, `fs`, `path`, `process`, `Buffer`, and Node-only assumptions in shared compiler/runtime/serializer/server-renderer code.
 - Use host adapters for file access, module resolution, environment data, hashing, dev-server hooks, and other runtime-specific capabilities.
 - Prefer Web APIs and portable libraries. Use `pathe` for filesystem-like path work and `ufo` for URL/pathname/query work.
-- Build the repo as a vite-plus monorepo with multiple libraries and a root `vite.config.ts` using `defineConfig` from `vite-plus`, modeled after the QDS and qwik-bundler configs.
-- Package/library builds should be vite-plus `pack` configs; package scripts should use `vp pack`, `vp test`, `vp check`, `vp fmt`, `vp lint`, and `vp config`.
+- Build the repo as a Deno workspace and vite-plus monorepo with multiple libraries. Deno owns the workspace/dependency source of truth; vite-plus is the preferred command/tooling surface for build/test/check/format/lint.
+- Use Witness as the Deno reference, and QDS/qwik-bundler as root vite-plus config and multi-lib/plugin structure references.
+- Package/library builds should be vite-plus `pack` configs; prefer `vp pack`, `vp test`, `vp check`, `vp fmt`, `vp lint`, and `vp config` directly.
+- Deno tasks may exist as thin aliases or Deno-specific host scripts, but should not replace vite-plus as the default tooling surface.
+- Do not introduce pnpm, npm, or yarn as the primary workspace package manager. Generate npm package metadata from Deno-owned source when needed.
 - Use vite-plus-managed test, format, and lint tooling, including Vitest and oxfmt/oxlint-style behavior exposed through `vp`.
 - Build scripts and production optimization go through Rolldown or Vite only. Do not add esbuild, terser, Rollup, SWC, webpack, Babel build pipelines, or similar secondary transformers/minifiers.
 - Generated code should use standard ESM and `import()`. The build manifest provides normalized symbol URLs/specifiers.
