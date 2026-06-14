@@ -1,9 +1,9 @@
 ---
 name: async-await-spec-maintenance
-description: "Use when updating, splitting, reviewing, or reconciling the async-await framework design specs under specs/framework*. Applies the current decisions without over-scoping implementation: TSRX-only, no hydration, no VDOM, graph-state resumability, compiler artifact pipeline, JS/TS on @tsrx/core first, runtime-agnostic ESM, Rolldown/Vite-only build tooling, and explicit deferred decisions."
+description: "Use when updating, splitting, reviewing, or reconciling the @async/resumable framework design specs under specs/framework*. Applies the current decisions without over-scoping implementation: TSRX-only, no hydration, no VDOM, graph-state resumability, compiler artifact pipeline, JS/TS on @tsrx/core first, runtime-agnostic ESM, Rolldown/Vite-only build tooling, and explicit deferred decisions."
 ---
 
-# Async Await Spec Maintenance
+# Async Resumable Spec Maintenance
 
 ## Source Order
 

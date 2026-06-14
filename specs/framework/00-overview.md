@@ -7,7 +7,7 @@ High-level product contract and index. Use this as the entry point before loadin
 **Date:** 2026-06-12
 **Status:** Approved direction, pre-implementation
 **Tagline:** A resumable UI framework for async-first apps.
-**Package:** `@async/await`
+**Package:** `@async/resumable`
 
 ## Summary
 
@@ -35,8 +35,9 @@ JSX/TSX is explicitly **not** supported.
 ## Goals
 
 1. **Full resumability.** Component bodies never execute on the client — not even
-   once. The server serializes state, the reactivity graph, and listener wiring
-   into HTML; a ~1KB resumer wakes up only the code a user actually interacts with.
+   once. Initial render serializes state, the reactivity graph, and listener
+   wiring into HTML; a ~1KB browser resume entry wakes up only the code a user
+   actually interacts with.
 2. **Zero markers.** No `$` suffixes, no `.value`, no `Tracked<T>` boxes, no
    special destructuring syntax, no reactive collection subclasses
    (`RippleArray`-style). The reactive surface is plain values and plain mutation.
@@ -59,7 +60,7 @@ JSX/TSX is explicitly **not** supported.
 
 ## Architecture Overview
 
-Five pieces:
+Four implementation areas:
 
 1. **Compiler** — first implemented in JS/TS on `@tsrx/core` as a TSRX codegen
    plugin (the framework is a TSRX compile target, alongside React/Solid/Vue
@@ -71,31 +72,71 @@ Five pieces:
    backend may replace parser/lowering internals only behind the same pass
    artifacts and behavior tests.
 2. **Runtime** — a small fine-grained reactive core (graph state, object state,
-   async node state, cancellation/versioning, DOM binding helpers). The
-   in-memory graph shape is private and is not a VDOM. Never exposed as user
-   vocabulary.
-3. **Server renderer** — runs component bodies once on the server, renders HTML,
-   awaits demanded async nodes in v1 non-streaming mode, and serializes the
-   resumability payload (state values, async snapshots, subscription graph,
-   listener→symbol map) into compact private data scripts in the document.
-4. **Resumer** — ~1KB client bootstrap. Attaches one global event listener
-   (plus a shared IntersectionObserver for `onVisible`-wired elements),
-   lazy-loads symbols on first interaction or visibility, re-attaches bindings
-   on first relevant state change. No hydration pass, no component execution.
-5. **Build integration** — a Rolldown plugin base exported by `@async/await`,
+   async node state, cancellation/versioning, DOM binding helpers, initial render
+   entry, and browser resume entry). The in-memory graph shape is private and is
+   not a VDOM. Never exposed as user vocabulary.
+3. **Serialization and render/resume protocol** — initial render runs component
+   bodies once, renders HTML, awaits demanded async nodes in v1 non-streaming
+   mode, and serializes the resumability payload (state values, async snapshots,
+   subscription graph, listener→symbol map) into compact private data scripts.
+   The browser resume entry attaches one global event listener (plus a shared
+   IntersectionObserver for `onVisible`-wired elements), lazy-loads symbols on
+   first interaction or visibility, and re-attaches bindings on first relevant
+   state change. No hydration pass, no component execution.
+4. **Build integration** — a Rolldown plugin base exported by
+   `@async/resumable`,
    with framework adapters such as Vite consuming that base plugin. Extracted
    symbols become code-split entry points, and production builds emit the
-   generated symbol resolver plus manifest metadata needed by the server
-   renderer, resumer, preload/runtime graph, and cached SSR fragments.
+   generated symbol resolver plus manifest metadata needed by the unified
+   render/resume runtime, preload/runtime graph, and cached SSR fragments.
+
+Do not split the framework into separate "server" and "client" products or
+packages. The authoring model is one unified render/resume model: initial render
+and browser resume are environment-specific phases of the same runtime and
+protocol. Implementation entry points may be environment-specific, but there is
+no standalone `server` package and no public two-sided deployment model for app
+authors to manage.
+
+Monorepo libraries are implementation boundaries first, not public API
+guarantees. The repo may contain internal packages such as protocol, core,
+runtime, serializer, compiler, Rolldown, Vite, and test utilities, but v1 should
+expose only the main package and explicitly curated re-exports. `protocol` and
+`compiler` may become independently consumable once implementation tests prove
+their contracts; until then, do not document or rely on deep package APIs as
+public framework surface.
+
+Initial internal package map:
+
+- `packages/resumable` — main package for `@async/resumable`; curated public
+  re-exports only.
+- `packages/core` — compiler-known author intrinsics and public types.
+- `packages/protocol` — private shared contracts: graph IDs, symbol IDs,
+  payload schema types, manifest types, diagnostics, and protocol/version
+  constants.
+- `packages/runtime` — graph state, computed/async nodes, scheduler, DOM
+  mutation journal, sync policy execution, DOM locator resolution, symbol
+  resolver integration, initial render, and browser resume.
+- `packages/serializer` — tiered value serializer and compact payload
+  encode/decode, talking to runtime through snapshot interfaces.
+- `packages/compiler` — TSRX semantic graph, lowering passes, capture analysis,
+  symbol extraction, artifact planning, and diagnostics.
+- `packages/rolldown` — Rolldown-first build plugin, virtual modules, symbol
+  chunks, and manifest output.
+- `packages/vite` — Vite adapter over the Rolldown plugin: dev/HMR/HTML
+  integration only.
+- `packages/test-utils` — fixture harnesses, artifact assertions,
+  serializer/resume helpers, browser helpers, and witness integration helpers.
+
+There is no `packages/server`.
 
 The build architecture is Rolldown-first, not Vite-first. The base Rolldown
 plugin owns compiler transforms, virtual modules, emitted symbol chunks,
-manifest generation, diagnostics, and client/server/library build modes. The
-Vite plugin is an adapter that wraps the Rolldown plugin with Vite-specific
-environment detection, dev-server transforms, HMR, HTML/dev-tag injection, build
-orchestration, and public extension APIs. This mirrors the `qwik-bundler`
-structure: a reusable `rolldown` entry point is the core, and `vite` is one
-consumer of it.
+manifest generation, diagnostics, and browser/initial-render/library build
+modes. The Vite plugin is an adapter that wraps the Rolldown plugin with
+Vite-specific environment detection, dev-server transforms, HMR, HTML/dev-tag
+injection, build orchestration, and public extension APIs. This mirrors the
+`qwik-bundler` structure: a reusable `rolldown` entry point is the core, and
+`vite` is one consumer of it.
 
 Build scripts and production optimization must go through Rolldown or Vite.
 Do not add standalone esbuild, terser, Rollup, SWC, webpack, Babel build
@@ -106,7 +147,7 @@ framework's build surface depends only on Vite/Rolldown APIs.
 ## Runtime And Build Portability
 
 Core framework code is runtime-agnostic ESM. The compiler, runtime graph,
-serializer, server renderer, resumer protocol, payload tools, and shared build
+serializer, render/resume protocol, payload tools, and shared build
 helpers must not require Node as the execution environment. Node, Deno, Bun,
 edge workers, and browser-hosted tooling should be able to run the same framework
 semantics through thin host adapters.
@@ -140,7 +181,7 @@ that is a framework bug.
 - [State Graph](./03-state-graph.md)
 - [Events, Symbols, And Behaviors](./04-events-symbols-behaviors.md)
 - [Resumability Payload](./05-resumability-payload.md)
-- [Runtime Resumer](./06-runtime-resumer.md)
+- [Runtime Render/Resume](./06-runtime-resumer.md)
 - [Diagnostics](./07-diagnostics.md)
 - [Deferred Decisions](./08-deferred-decisions.md)
 - [Archived design thread](./archive/design-thread.md)

@@ -1,6 +1,12 @@
-# Runtime Resumer
+# Runtime Render/Resume
 
-Client resume behavior, delegated event dispatch, graph writes, behavior setup, async invalidation, and shared patches.
+Unified runtime behavior for initial render, browser resume, delegated event dispatch, graph writes, behavior setup, async invalidation, and shared patches.
+
+There is no separate server runtime package. Initial render and browser resume
+are two environment-specific phases of the same runtime graph, serializer
+protocol, and symbol system. The implementation may expose environment-specific
+entry points, but app authors should experience one model rather than a
+two-sided deployment split.
 
 ### Runtime graph contract
 
@@ -15,7 +21,7 @@ choices are implementation details.
 
 Every runtime graph implementation must preserve:
 
-- stable graph references across server render, serialization, and client resume
+- stable graph references across initial render, serialization, and browser resume
 - path-granular reads and writes for object state
 - dependency tracking for computed nodes, async nodes, DOM bindings, and sync
   event policies
@@ -49,7 +55,7 @@ The v1 scheduler contract is:
   flush point.
 - The default flush point is a microtask scheduled by the first graph write in
   an otherwise idle turn. The runtime may also force an internal flush before it
-  must observe updated DOM or finish a server/resume operation.
+  must observe updated DOM or finish an initial render/resume operation.
 - A flush drains graph work until stable: recompute dirty sync computed nodes,
   discover newly dirty bindings, enqueue demanded binding symbols, and repeat
   until no synchronous graph work remains.
@@ -100,14 +106,15 @@ representation.
   If the element was removed or the locator no longer matches, the handle reads
   as `undefined`.
 - Element behaviors resolve from serialized DOM locators when the host element is
-  connected on the client. The resumer imports the behavior symbol, materializes
-  its serialized inputs, runs the behavior with the element, and stores cleanup
-  on the node. Behavior input changes clean up and rerun the behavior. Removed
-  nodes clean up their behaviors before their locators are discarded.
+  connected in the browser. The resumer imports the behavior symbol,
+  materializes its serialized inputs, runs the behavior with the element, and
+  stores cleanup on the node. Behavior input changes clean up and rerun the
+  behavior. Removed nodes clean up their behaviors before their locators are
+  discarded.
 - State writes during that run propagate through the graph and are flushed by
   the scheduler above; subscribed binding symbols are loaded on demand and
   update the DOM in place. Nothing re-renders; there is no component
-  re-execution path in the client runtime at all.
+  re-execution path in the browser runtime at all.
 - Async computed invalidation aborts the prior request version, imports the async
   run function only when a visible/demanded boundary needs it, and applies only the
   newest matching result to the graph.

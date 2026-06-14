@@ -130,7 +130,7 @@ no annotation:
 - `computed()` bodies
 - async computed run functions and async boundary branch bindings
 - DOM binding expressions (text/attribute bindings — the system's only effects)
-- component bodies (executed on the server only)
+- component bodies (executed during initial render only)
 
 ### The Capture Rule (replaces the marker)
 
@@ -165,8 +165,9 @@ Diagnostic quality is a first-class deliverable, not polish.
   target, lowered graph operation, preserved JavaScript behavior, or diagnostic.
 - **Runtime:** unit tests on the graph (dependency tracking, path-level
   subscriptions, lazy computed, async computed status/versioning/cancellation).
-- **Resumability end-to-end:** render a fixture app on the server, load it in a
-  headless browser with **zero framework JS executed**, assert no execution before
-  interaction, assert server-resolved async data does not refetch on resume, then
-  interact and assert only the expected symbols were fetched and the DOM updated.
+- **Resumability end-to-end:** perform initial render for a fixture app, load it
+  in a headless browser with **zero framework JS executed**, assert no execution
+  before interaction, assert initial-render-resolved async data does not refetch
+  on resume, then interact and assert only the expected symbols were fetched and
+  the DOM updated.
   This e2e harness is the core invariant check and gets built early, not last.

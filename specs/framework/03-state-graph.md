@@ -56,10 +56,10 @@ on local state, shared request state, and another derived value; one event may
 write several paths. That is a general directed graph, not a component tree.
 
 State is therefore graph-scoped, not render-boundary-scoped. A component may
-create a local graph scope during server render, but updates do not belong to
-the component and never re-enter the component body on the client. Components
-are just ways to create local graph scopes, attach reads/writes, and project
-graph values into DOM.
+create a local graph scope during initial render, but updates do not belong to
+the component and never re-enter the component body during browser resume.
+Components are just ways to create local graph scopes, attach reads/writes, and
+project graph values into DOM.
 
 `shared()` lifts that same graph model into a named dataflow. Some named graphs
 are request/container/page state; others are UI graph instances used by
@@ -108,7 +108,7 @@ The classic uses of effects each have a better home:
   bindings to targets the template can't express; solved at the template level,
   not with lifecycle APIs.
 - *React to state you don't own* → deliberately unsupported.
-- *Eager client setup* (third-party widgets, canvas init, observers) →
+- *Eager browser setup* (third-party widgets, canvas init, observers) →
   host element behavior through `use`.
 
 ### Async derivation and TSRX boundaries
@@ -169,11 +169,11 @@ const formattedUser = computed(() => formatUser(rawUser, locale));
   Missing boundaries are compile-time diagnostics in v1. A future router may
   provide route-level implicit boundaries, but the v1 compiler should keep the
   rule explicit.
-- In v1 non-streaming SSR, the server awaits all demanded async nodes inside
-  rendered boundaries before emitting final HTML. Streaming, out-of-order
-  flushing, stale-while-revalidate, and explicit cache policy are separate
-  features.
-- On client revalidation, a dependency-key change returns the boundary to
+- In v1 non-streaming initial render, the runtime awaits all demanded async
+  nodes inside rendered boundaries before emitting final HTML. Streaming,
+  out-of-order flushing, stale-while-revalidate, and explicit cache policy are
+  separate features.
+- On browser revalidation, a dependency-key change returns the boundary to
   `@pending` for the new key. Stale-content and cached-key policies are deferred.
 
 Internally, the compiler can lower the single author-facing function into a
@@ -210,8 +210,9 @@ element behavior expressions.
 component or shared instance — including helper functions in non-component
 `.tsrx` files. Creation at **module scope** is a compile-time
 diagnostic in v1: module-scope state would be shared across requests on the
-server and has no home in the per-document serialization payload. Request,
-container, and page state is declared with `shared()` definitions instead.
+host runtime and has no home in the per-document serialization payload.
+Request, container, and page state is declared with `shared()` definitions
+instead.
 
 ### Implementation: compiler-owned graph state
 
@@ -428,16 +429,16 @@ function Header() @{
 
 `session()` does not mean "run a hook." It means: resolve this named dataflow
 instance for the current graph context. For app data, that graph context is
-usually request/container/page. The instance is created on the server,
-serialized into the graph payload, resumed lazily on the client, and
+usually request/container/page. The instance is created during initial render,
+serialized into the graph payload, resumed lazily in the browser, and
 synchronized by serialized patch events only when it crosses container/runtime
 boundaries.
 
 ```txt
 shared definition
-  -> request-scoped server instance
+  -> request-scoped initial-render instance
   -> serialized graph snapshot
-  -> lazy client graph instance
+  -> lazy browser graph instance
   -> CustomEvent patches across container/runtime boundaries
 ```
 

@@ -5,8 +5,8 @@ DOM handles, node-owned behaviors, visibility events, event semantics, sync poli
 ### DOM element handles
 
 DOM elements are not graph state. They are host objects that may exist in the
-browser, may be absent on the server, and may disappear when a conditional or
-keyed item is removed.
+browser, may be absent during initial render, and may disappear when a
+conditional or keyed item is removed.
 
 Use `element<T>()` when lazy event code needs a typed, resumable handle to a host
 element. Bind it with the framework-owned `el` prop:
@@ -23,10 +23,10 @@ export function SearchBox() @{
 ```
 
 `element()` creates an element handle, not reactive data. `el={handle}` binds that
-handle to exactly one host element in the current graph scope. On the server, and
-after the element is removed, reading the handle produces `undefined`. When a
-lazy event or visibility handler runs in the browser, the resumer resolves the
-handle's serialized DOM locator to the current element.
+handle to exactly one host element in the current graph scope. During initial
+render, and after the element is removed, reading the handle produces
+`undefined`. When a lazy event or visibility handler runs in the browser, the
+resumer resolves the handle's serialized DOM locator to the current element.
 
 This covers the common design-system cases: focus registries, item navigation,
 measurement, pointer capture, popover/dialog/file-picker APIs, and cross-event
@@ -75,10 +75,10 @@ el={}       gives lazy access to this node later
 use={}      installs longer-lived DOM behavior owned by this node
 ```
 
-The behavior result is never serialized. The server records the host element
+The behavior result is never serialized. Initial render records the host element
 locator, the behavior code reference, and the serializable behavior inputs. The
-client resolves the element, lazy-loads the behavior symbol, runs it in the
-browser, and stores the cleanup with that node.
+browser resume phase resolves the element, lazy-loads the behavior symbol, runs
+it in the browser, and stores the cleanup with that node.
 
 `use` is compiler-special on host elements. In `use={chart(config)}`, the
 factory call is not normal eager SSR execution. The compiler treats it as:
@@ -113,8 +113,8 @@ in reverse order.
 `use` passed directly to a component is a diagnostic unless that component's
 compiler output explicitly forwards it to a host element. Behavior inputs use
 the same capture and serialization rules as event handlers: no request objects,
-secrets, server-only modules, DOM nodes, or runtime handles may cross into a
-client behavior input.
+secrets, host-only modules, DOM nodes, or runtime handles may cross into a
+browser behavior input.
 
 ### `onVisible` — visibility as an event, not a lifecycle
 
@@ -145,8 +145,8 @@ Semantics:
   element doesn't belong in a component.
 
 A pure pull graph also deletes a class of resumability hazards: resume is
-always re-derivation, with no effect-ordering or "did it already run on the
-server" semantics to replay.
+always re-derivation, with no effect-ordering or "did it already run during
+initial render" semantics to replay.
 
 This matters double in the AI age: with one way to express any data flow
 (derive it), generated code is reviewable by construction — stale-closure
@@ -254,7 +254,7 @@ export function loadSymbol(id: number) {
 ```
 
 The exact resolver syntax is private build output. The full symbol manifest is a
-build/server artifact. The browser receives only the resolver/table needed for
+build artifact. The browser receives only the resolver/table needed for
 the current build or page, plus enough build/protocol identity to fail closed if
 `async/view` references a symbol the resolver does not know.
 

@@ -1,4 +1,4 @@
-# Async Await Project Rules
+# Async Resumable Project Rules
 
 This repo is currently specification-first. When implementation starts, this file
 is the Codex-facing always-on guidance for building the TSRX resumable framework.
@@ -17,9 +17,16 @@ is the Codex-facing always-on guidance for building the TSRX resumable framework
 
 - TSRX-only. Do not add TSX/JSX support or reactive behavior in plain `.ts`
   files.
-- No hydration. Component bodies execute on the server, not during client resume.
+- No hydration. Component bodies execute during initial render, not during
+  browser resume.
 - No VDOM. Runtime graph data is state/dataflow and DOM locator metadata, not a
   virtual element tree or render-output reconciliation layer.
+- Do not create a standalone `server` package. Initial render and browser
+  resume are two phases of one unified runtime/render model, not separate
+  framework products or authoring models.
+- Treat monorepo libraries as internal implementation boundaries until tests
+  prove what should be public. Most consumers should use the main package and
+  curated re-exports; do not publish or document deep package APIs prematurely.
 - First compiler implementation is JS/TS on `@tsrx/core`. OXC/native work is
   deferred until the framework behavior and artifact contracts are proven.
 - Core packages are runtime-agnostic ESM. Avoid `node:*`, `fs`, `path`,
@@ -54,6 +61,14 @@ Expected shape:
 - root `deno.json` is the canonical workspace and dependency manifest
 - root `vite.config.ts` owns pack, test, lint, format, and staged configuration
   through vite-plus
+- initial package folders are `packages/resumable`, `packages/core`,
+  `packages/protocol`, `packages/runtime`, `packages/serializer`,
+  `packages/compiler`, `packages/rolldown`, `packages/vite`, and
+  `packages/test-utils`
+- `packages/resumable` is the main package for `@async/resumable`; the other
+  packages are internal implementation boundaries until tests prove what should
+  become public
+- do not create `packages/server`
 - package/library builds are represented as multiple vite-plus `pack` configs,
   similar to QDS's `buildOrder`
 - framework packages live as multiple libs/packages rather than one large package
@@ -80,7 +95,7 @@ reopened. The repo's default tooling entry point is vite-plus.
 
 The QDS config is a reference for the monorepo/vite-plus shape, not permission
 to copy Node-specific helpers into shared framework packages. The runtime-
-agnostic rule still applies to compiler/runtime/server-renderer code.
+agnostic rule still applies to compiler/runtime/render-resume code.
 
 ## Test-Driven Development
 
@@ -111,7 +126,7 @@ thing under test.
   compiler passes, graph runtime behavior, serializer units, symbol resolver
   helpers, path/URL utilities, and diagnostics.
 - **Integration tests:** use `vite-plus` / `vp test` for fixture-backed
-  integration across the compiler, runtime graph, server renderer, resumer,
+  integration across the compiler, runtime graph, unified render/resume runtime,
   Rolldown plugin, and Vite adapter.
 - **Component/browser tests:** use Vitest browser mode for component-level DOM,
   SSR/resume, event, and interaction behavior. Model the harness after

@@ -1,9 +1,9 @@
 ---
 name: async-await-implementation
-description: "Use when implementing the async-await TSRX framework: compiler passes, state graph runtime, resumability payloads, server renderer, resumer, event/symbol behavior, build plugins, package scripts, or tests. Enforces test-driven development, the split framework specs, TSRX-only no-hydration/no-VDOM model, JS/TS compiler on @tsrx/core first, runtime-agnostic ESM, Rolldown/Vite-only build tooling, and junior/AI-friendly diagnostics."
+description: "Use when implementing the @async/resumable TSRX framework: compiler passes, state graph runtime, resumability payloads, unified render/resume behavior, event/symbol behavior, build plugins, package scripts, or tests. Enforces test-driven development, the split framework specs, TSRX-only no-hydration/no-VDOM model, JS/TS compiler on @tsrx/core first, runtime-agnostic ESM, Rolldown/Vite-only build tooling, and junior/AI-friendly diagnostics."
 ---
 
-# Async Await Implementation
+# Async Resumable Implementation
 
 ## Before Editing
 
@@ -16,8 +16,10 @@ description: "Use when implementing the async-await TSRX framework: compiler pas
 ## Core Model
 
 - TSRX-only. Do not add TSX/JSX support or reactive behavior in plain `.ts` files.
-- No hydration. Component bodies execute on the server, not on client resume.
+- No hydration. Component bodies execute during initial render, not during browser resume.
 - No VDOM. Runtime graph records state/dataflow and DOM binding locators, not virtual element trees or render-output snapshots.
+- Do not create a standalone `server` package. Initial render and browser resume are phases of one unified runtime/render model.
+- Treat monorepo libraries as internal implementation boundaries until tests prove what should be public. Keep consumers on the main package and curated re-exports; do not document deep package APIs prematurely.
 - `state()` and `computed()` are compiled graph bindings. Reads/writes lower through the graph while preserving JavaScript behavior for supported forms.
 - Lazy handler and binding code resolves through the generated symbol resolver. Authored event props do not become DOM event closures.
 - Sync event policy is the only v1 path for synchronous `preventDefault()` / `stopPropagation()`. It may read already-materialized graph state by ID; it must not import app chunks.
@@ -34,10 +36,11 @@ description: "Use when implementing the async-await TSRX framework: compiler pas
 
 ## Runtime And Build Rules
 
-- Core packages must be runtime-agnostic ESM. Avoid `node:*`, `fs`, `path`, `process`, `Buffer`, and Node-only assumptions in shared compiler/runtime/serializer/server-renderer code.
+- Core packages must be runtime-agnostic ESM. Avoid `node:*`, `fs`, `path`, `process`, `Buffer`, and Node-only assumptions in shared compiler/runtime/serializer/render-resume code.
 - Use host adapters for file access, module resolution, environment data, hashing, dev-server hooks, and other runtime-specific capabilities.
 - Prefer Web APIs and portable libraries. Use `pathe` for filesystem-like path work and `ufo` for URL/pathname/query work.
 - Build the repo as a Deno workspace and vite-plus monorepo with multiple libraries. Deno owns the workspace/dependency source of truth; vite-plus is the preferred command/tooling surface for build/test/check/format/lint.
+- Initial package folders are `packages/resumable`, `packages/core`, `packages/protocol`, `packages/runtime`, `packages/serializer`, `packages/compiler`, `packages/rolldown`, `packages/vite`, and `packages/test-utils`. `packages/resumable` is the main package for `@async/resumable`; the rest are internal boundaries until tests prove what should become public. Do not create `packages/server`.
 - Use Witness as the Deno reference, and QDS/qwik-bundler as root vite-plus config and multi-lib/plugin structure references.
 - Package/library builds should be vite-plus `pack` configs; prefer `vp pack`, `vp test`, `vp check`, `vp fmt`, `vp lint`, and `vp config` directly.
 - Deno tasks may exist as thin aliases or Deno-specific host scripts, but should not replace vite-plus as the default tooling surface.

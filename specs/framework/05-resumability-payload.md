@@ -28,7 +28,7 @@ The serializer checks reachable graph values in this order:
    the value lazily after resume.
 6. **DOM/resource behavior** — values that need a live element, browser API,
    observer, editor, chart, map, canvas context, worker, socket, or cleanup
-   belong in `use={...}` or server/meta-framework code. The serializer stores
+   belong in `use={...}` or host/meta-framework code. The serializer stores
    only the behavior code reference and serializable inputs.
 7. **Unsupported values** — private hidden state, WeakMap-only state, live DOM
    nodes, request objects, secrets, DB clients, streams, native handles, and
@@ -56,15 +56,15 @@ serializable state.
 
 ### Serialization payload
 
-The server renderer emits, alongside the HTML:
+The initial render phase emits, alongside the HTML:
 
 1. **State values** — object state serializes with the tiered serializer above.
    Sync `computed()` values are *not* serialized; they re-derive lazily from
    their dependencies on first read.
 2. **Async snapshots** — demanded async computed IDs, dependency keys, request
    versions, status (`pending`, `resolved`, `rejected`), and settled value/error
-   data when available. This prevents resume from refetching data the server
-   already resolved.
+   data when available. This prevents resume from refetching data the initial
+   render already resolved.
 3. **Shared instances** — shared definition IDs, request/container/page scope,
    version counters, and the plain state snapshot for each touched shared
    instance. Methods/actions are never serialized.
@@ -109,7 +109,7 @@ arena. The renderer may merge, split, or stream these payloads when the
 resumer/runtime protocol supports it, but these two script types are the
 canonical core containers and the names used by documentation, devtools, and
 diagnostics. Token alphabets, tag IDs, table layouts, and compression choices
-inside those scripts are private renderer/resumer protocol.
+inside those scripts are private render/resume protocol.
 
 The production wire format should optimize for HTML size and parse cost:
 typed tables or arenas, small numeric/string tags, root IDs, backrefs/forward
@@ -121,7 +121,7 @@ VNode format and does not imply a client VDOM or component re-render path.
 
 The v1 `async/view` locator model uses a browser-native `TreeWalker` over
 `ELEMENT` and `COMMENT` nodes to materialize encoded DOM-order records onto the
-existing server-rendered DOM. This is a locator-decoding step only:
+existing initially-rendered DOM. This is a locator-decoding step only:
 
 ```txt
 async/view locator stream

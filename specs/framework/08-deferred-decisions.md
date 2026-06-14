@@ -32,4 +32,4 @@ their prerequisites exist:
    without serialization).
 3. Async computed lowering + `@try`/`@pending`/`@catch` boundary lowering.
 4. Closure extraction + capture analysis + diagnostics.
-5. Server renderer + serialization + resumer; e2e resumability harness.
+5. Unified render/resume runtime + serialization; e2e resumability harness.

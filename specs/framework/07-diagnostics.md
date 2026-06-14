@@ -82,7 +82,7 @@ codes and machine fields are compatibility surface.
 Diagnostic documentation follows the stable code:
 
 ```txt
-https://async-await.dev/errors/AA_CAPTURE_DOM_NODE
+https://example.dev/errors/AA_CAPTURE_DOM_NODE
 ```
 
 Runtime diagnostics must link back to compiler artifacts whenever possible. A
