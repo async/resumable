@@ -193,12 +193,88 @@ measurement, pointer capture, popover/dialog/file-picker APIs, and cross-event
 DOM access. It also keeps two jobs separate:
 
 - `element()` names an element for later imperative use.
-- attach/detach setup and cleanup, if needed, should use a separate lifecycle
-  surface rather than overloading element handles.
+- element behavior setup and cleanup belongs on the host node through `use`,
+  not inside `element()` handles or serialized state.
 
 `state()` cannot hold DOM nodes, and `element()` handles are not serialized as
 data. Passing element handles through component context, arrays, and helpers is
 valid when the values remain inside `.tsrx` compiler-owned code.
+
+### Element behaviors
+
+DOM-backed libraries are not durable state. Chart.js, Monaco, Mapbox, tooltips,
+observers, gesture libraries, and drag/resize helpers all need a real browser
+element and often need cleanup. They should not be stored in `state()` and they
+should not become serializer problems.
+
+Use the framework-owned `use` prop on host elements for node-owned DOM behavior:
+
+```tsx
+import { Chart } from "chart.js";
+
+function chart(config: ChartConfig) {
+  return (canvas: HTMLCanvasElement) => {
+    const instance = new Chart(canvas, config);
+    return () => instance.destroy();
+  };
+}
+
+export function SalesChart({ points }: { points: Point[] }) @{
+  const config = computed(() => makeChartConfig(points));
+
+  <canvas use={chart(config)} />
+}
+```
+
+`use` is the declarative bridge from imperative DOM/library code to the node
+that owns it. It is similar in spirit to events and element handles:
+
+```txt
+onClick={}  runs event behavior owned by this node
+el={}       gives lazy access to this node later
+use={}      installs longer-lived DOM behavior owned by this node
+```
+
+The behavior result is never serialized. The server records the host element
+locator, the behavior code reference, and the serializable behavior inputs. The
+client resolves the element, lazy-loads the behavior symbol, runs it in the
+browser, and stores the cleanup with that node.
+
+`use` is compiler-special on host elements. In `use={chart(config)}`, the
+factory call is not normal eager SSR execution. The compiler treats it as:
+
+```txt
+behavior: chart
+input: config
+owner: current host element
+```
+
+The v1 supported forms are:
+
+```tsx
+<input use={autofocus} />
+<canvas use={chart(config)} />
+<div use={[tooltip(options), clickOutside(close)]} />
+```
+
+Behavior functions receive the element and may return a cleanup function:
+
+```ts
+type ElementBehavior<T extends Element> =
+  (element: T) => void | (() => void);
+```
+
+When behavior inputs change, v1 cleans up the existing behavior and runs it
+again. Future versions may support an explicit update contract for libraries
+that can update in place. Multiple behaviors install in array order and clean up
+in reverse order.
+
+`use` is host-element-only. Components can expose higher-level wrappers, but
+`use` passed directly to a component is a diagnostic unless that component's
+compiler output explicitly forwards it to a host element. Behavior inputs use
+the same capture and serialization rules as event handlers: no request objects,
+secrets, server-only modules, DOM nodes, or runtime handles may cross into a
+client behavior input.
 
 ### Scoping model
 
@@ -392,18 +468,17 @@ The classic uses of effects each have a better home:
   not with lifecycle APIs.
 - *React to state you don't own* → deliberately unsupported.
 - *Eager client setup* (third-party widgets, canvas init, observers) →
-  `onVisible` (below).
+  host element behavior through `use`.
 
 ### `onVisible` — visibility as an event, not a lifecycle
 
-The one sanctioned home for mount-shaped imperative code is an element prop,
-parallel to `onClick`:
+Visibility is modeled as an element event, parallel to `onClick`:
 
 ```tsx
-<canvas onVisible={el => {
-  const chart = initChart(el, points.slice());
-  return () => chart.destroy();
-}} />
+<img
+  src={src}
+  onVisible={() => analytics.recordImageSeen(src)}
+/>
 ```
 
 Semantics:
@@ -415,9 +490,8 @@ Semantics:
 - Fires once per element instance, receives the element, may return a cleanup
   that runs on element removal.
 - **Not a reactive computation.** State reads inside are current-value reads —
-  no subscriptions, no re-runs. Keeping imperative third-party state in sync
-  after init (e.g. `chart.update` on data change) is explicitly unsolved in v1;
-  Qwik's answer (`track()` inside the task) is a marker, so it is not ours.
+  no subscriptions, no re-runs. DOM-backed libraries that need setup, updates,
+  and cleanup belong in `use`, not `onVisible`.
 - The zero-JS guarantee gets a *scoped*, greppable asterisk: pages without
   `onVisible` ship zero eager behavior; pages with it run exactly the symbols
   whose elements are on screen. There is no free-floating equivalent
@@ -522,11 +596,31 @@ can recover some async dependencies in compiler-visible expressions. This
 framework takes the TSRX-only route: no marker, but strict compiler diagnostics
 at the async boundary.
 
-The state, async, element, and event primitives are **compiler intrinsics**, not
-imports of a value type. There is no `Signal`/`Tracked` type in the public API.
-Event handler props are camelCase (`onClick`, `onInput`), matching TSRX/JSX
-convention — no directive namespace. Element handles use the host prop `el`,
-which only accepts `element()` handles.
+The state, async, element, event, and element-behavior primitives are
+**compiler intrinsics**, not imports of a value type. There is no
+`Signal`/`Tracked` type in the public API. Event handler props are camelCase
+(`onClick`, `onInput`), matching TSRX/JSX convention — no directive namespace.
+Element handles use the host prop `el`, which only accepts `element()` handles.
+Element behaviors use the host prop `use`, which only accepts compiler-known
+element behavior expressions.
+
+Event and behavior props accept either one expression or an array of expressions:
+
+```tsx
+<button onClick={[saveDraft, closeDialog]} />
+<div onVisible={[recordImpression, preloadDetails]} />
+<canvas use={[chart(config), resizeCanvas]} />
+```
+
+For `on*` event props, array entries run in authored order. The runtime stops at
+the first thrown or rejected entry and routes the error through the normal error
+boundary path. Return values are ignored for ordinary events. For event props
+with lifecycle cleanup semantics such as `onVisible`, returned cleanup functions
+are stored and later run in reverse order.
+
+For `use`, behavior entries install in authored order and clean up in reverse
+order. Each behavior has its own serialized input and code reference, so one
+behavior can be lazy-loaded or diagnosed independently from the others.
 
 `state()`/`computed()` may be created anywhere in a call tree rooted in a
 component or shared instance — including helper functions in non-component
@@ -862,7 +956,10 @@ opt-in. Here the boundaries are structural and the compiler already knows them.
 Every one of the following is extracted into its own lazily-loadable symbol, with
 no annotation:
 
-- event handler expressions (`onClick={...}`, `onVisible={...}`)
+- event handler expressions (`onClick={...}`, `onVisible={...}`), including
+  each entry in event handler arrays
+- element behavior expressions (`use={...}` on host elements), including each
+  entry in behavior arrays
 - `computed()` bodies
 - async computed run functions and async boundary branch bindings
 - DOM binding expressions (text/attribute bindings — the system's only effects)
@@ -883,9 +980,10 @@ Capturing anything else — a local class instance, a raw function, a DOM node h
 in a plain variable — is a **compile-time diagnostic** pointing at the exact
 variable, explaining why it can't cross a resume boundary and what to do instead
 (usually: make it state, make it an `element()` handle, hoist it to module scope,
-or derive it inside the closure). The diagnostic does the job Qwik's `$` does,
-but only fires when something is actually unserializable instead of taxing every
-line. Diagnostic quality is a first-class deliverable, not polish.
+derive it inside the closure, or move DOM-backed setup into a host element
+behavior with `use`). The diagnostic does the job Qwik's `$` does, but only fires
+when something is actually unserializable instead of taxing every line.
+Diagnostic quality is a first-class deliverable, not polish.
 
 ### Serialization payload
 
@@ -903,11 +1001,15 @@ The server renderer emits, alongside the HTML:
    instance. Methods/actions are never serialized.
 4. **Subscription graph** — which symbol (binding, computed, async dependency
    key) depends on which state path.
-5. **Wiring** — DOM element → event → symbol map for listeners, and DOM element →
-   binding-symbol map for dynamic text/attributes/async boundaries.
+5. **Wiring** — DOM element → event → ordered symbol list for listeners, and DOM
+   element → binding-symbol map for dynamic text/attributes/async boundaries.
 6. **Element handles** — `element()` handle IDs mapped to DOM locators emitted by
    `el={handle}` bindings. The payload identifies where the element is; it never
    serializes the element object itself.
+7. **Element behaviors** — host element locators mapped to ordered behavior
+   symbol IDs and serialized behavior inputs from `use={...}`. The payload never
+   serializes the behavior result, DOM-backed class instance, observer, editor,
+   map, chart, canvas context, or cleanup function.
 
 Format: a JSON script block plus element attributes for wiring (exact encoding is
 an implementation detail of the renderer/resumer pair and may change freely —
@@ -916,12 +1018,17 @@ it is not public API).
 ### Resume behavior
 
 - One global delegated event listener (capture phase) from the resumer.
-- First interaction: look up the symbol for that element/event, dynamically
-  import it, materialize its captured graph references and element handles, run
-  it.
+- First interaction: look up the ordered symbol list for that element/event,
+  dynamically import each symbol as needed, materialize its captured graph
+  references and element handles, and run handlers in authored order.
 - Element handles resolve from serialized DOM locators at handler execution time.
   If the element was removed or the locator no longer matches, the handle reads
   as `undefined`.
+- Element behaviors resolve from serialized DOM locators when the host element is
+  connected on the client. The resumer imports the behavior symbol, materializes
+  its serialized inputs, runs the behavior with the element, and stores cleanup
+  on the node. Behavior input changes clean up and rerun the behavior. Removed
+  nodes clean up their behaviors before their locators are discarded.
 - State writes during that run propagate through the graph; subscribed binding
   symbols are loaded on demand and update the DOM in place. Nothing re-renders;
   there is no component re-execution path in the client runtime at all.
