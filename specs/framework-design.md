@@ -97,7 +97,7 @@ Five pieces:
 3. **Server renderer** — runs component bodies once on the server, renders HTML,
    awaits demanded async nodes in v1 non-streaming mode, and serializes the
    resumability payload (state values, async snapshots, subscription graph,
-   listener→symbol map) into the document.
+   listener→symbol map) into compact private data scripts in the document.
 4. **Resumer** — ~1KB client bootstrap. Attaches one global event listener
    (plus a shared IntersectionObserver for `onVisible`-wired elements),
    lazy-loads symbols on first interaction or visibility, re-attaches bindings
@@ -618,6 +618,43 @@ boundary path. Return values are ignored for ordinary events. For event props
 with lifecycle cleanup semantics such as `onVisible`, returned cleanup functions
 are stored and later run in reverse order.
 
+Event handlers are lazy-loaded behavior, so the browser cannot wait for handler
+chunks before deciding default actions. For v1, only browser-critical
+cancellation/propagation is allowed to run synchronously. When the compiler sees
+`event.preventDefault()` or `event.stopPropagation()` inside an event handler, it
+tries to extract the smallest equivalent sync policy from the surrounding
+condition. That policy may read only already-resumed framework graph state,
+serializable constants/props, and simple event fields. It may not import code,
+call arbitrary user functions, await async work, read DOM resources, or perform
+graph writes in v1. State writes remain in the lazy handler chunk.
+
+```tsx
+let menuOpen = state(false);
+
+<input
+  onKeyDown={(event) => {
+    if (menuOpen && event.key === "Escape") {
+      event.preventDefault();
+      menuOpen = false;
+    }
+  }}
+/>
+```
+
+The compiler records a sync policy equivalent to:
+
+```ts
+if (graph.read(menuOpenId) && event.key === "Escape") {
+  event.preventDefault();
+}
+```
+
+The `menuOpen = false` write still runs in the lazy handler symbol after the
+runtime imports it. If the cancellation/propagation condition cannot be proven
+from graph state, constants/props, and event fields, compilation fails with a
+diagnostic rather than silently emitting a handler whose default action is too
+late to matter.
+
 For `use`, behavior entries install in authored order and clean up in reverse
 order. Each behavior has its own serialized input and code reference, so one
 behavior can be lazy-loaded or diagnosed independently from the others.
@@ -644,9 +681,41 @@ subclasses. `user.profile.name = x` and `items.push(x)` are graph writes with
 path-level invalidation semantics, so a deep mutation updates only the bindings
 that read that path.
 
+Object identity is part of the state graph contract. If two state paths point to
+the same object before SSR serialization, they point to the same object after
+resume:
+
+```ts
+const user = { id: 1 };
+let task = state({ author: user, assignee: user });
+
+// After resume:
+task.author === task.assignee; // true
+```
+
+Cycles are supported when every reachable value is otherwise serializable:
+
+```ts
+const user = { id: 1, manager: null as null | typeof user };
+user.manager = user;
+let session = state({ user });
+
+// After resume:
+session.user.manager === session.user; // true
+```
+
+The serializer fails because a reachable value is unsupported, not because the
+graph is circular. Diagnostics must point at the unsupported state path:
+
+```txt
+Cannot serialize state.session.user.socket because WebSocket is a live runtime
+object. Move it to a host element behavior or recreate it from serializable
+state.
+```
+
 The concrete object-state representation is private and may vary by target or
 optimization level. The public contract is plain JavaScript read/write syntax,
-path-granular dependency tracking, serialization to plain data, and no
+path-granular dependency tracking, identity-preserving serialization, and no
 author-facing marker type.
 
 A pure-compiler approach (Svelte-4-style static dependency tracking) is rejected
@@ -974,7 +1043,7 @@ An extracted closure may capture only:
 3. props and `shared()` instance references
 4. module-level imports — re-imported by the emitted symbol module
 5. serializable constants (JSON-compatible values, plus the framework's extended
-   set: Date, Map, Set, URL, BigInt, typed arrays)
+   set: Date, RegExp, Map, Set, URL, BigInt, typed arrays, ArrayBuffer)
 
 Capturing anything else — a local class instance, a raw function, a DOM node held
 in a plain variable — is a **compile-time diagnostic** pointing at the exact
@@ -985,13 +1054,65 @@ behavior with `use`). The diagnostic does the job Qwik's `$` does, but only fire
 when something is actually unserializable instead of taxing every line.
 Diagnostic quality is a first-class deliverable, not polish.
 
+### Serialization tiers
+
+Serialization is for durable graph state, not runtime resources. `computed()`
+and `use={...}` deliberately remove most expensive cases from the serializer:
+derived values are recreated, and DOM-backed libraries are owned by the host
+node that uses them.
+
+The serializer checks reachable graph values in this order:
+
+1. **Built-ins** — primitives, plain objects, arrays, `Date`, `RegExp`, `Map`,
+   `Set`, `URL`, `BigInt`, typed arrays, and `ArrayBuffer`. Object identity and
+   cycles are preserved across the whole serialized graph.
+2. **Framework graph values** — `state()` references, `shared()` roots, async
+   snapshots, code references, event references, element handles, and behavior
+   references. These serialize as framework IDs/locators, not as user objects.
+3. **App-owned value classes** — importable classes defined in app source whose
+   durable state is represented by serializable own fields. Methods are code,
+   not data, so method bodies are never serialized.
+4. **Third-party value classes** — importable third-party classes with
+   serializable own fields and prototype methods that do not depend on hidden
+   constructor-only state. These use the same restore path as app-owned classes.
+5. **Recreated values** — derived objects that should not be durable state belong
+   in `computed()`. The serialized graph stores their dependencies, then rebuilds
+   the value lazily after resume.
+6. **DOM/resource behavior** — values that need a live element, browser API,
+   observer, editor, chart, map, canvas context, worker, socket, or cleanup
+   belong in `use={...}` or server/meta-framework code. The serializer stores
+   only the behavior code reference and serializable inputs.
+7. **Unsupported values** — private hidden state, WeakMap-only state, live DOM
+   nodes, request objects, secrets, DB clients, streams, native handles, and
+   other values that cannot be restored from safe durable data.
+
+Class restoration is prototype restoration, not constructor re-execution. For an
+app-owned or third-party value class, the runtime imports the class and restores
+the instance as if it had done:
+
+```ts
+const instance = Object.create(Class.prototype);
+Object.assign(instance, serializedOwnFields);
+```
+
+Constructors do not run during resume. Public own fields are durable data;
+prototype methods are imported behavior. Private fields are only supported when
+they are initialized from serialized public state by an explicit library adapter
+or by recreating the value in `computed()`. `toJSON()`/`fromJSON()` may be used by
+library adapters, but ad hoc class serialization is not the default authoring
+model.
+
+If a class wraps DOM or runtime resources, it is not a value class. Put the
+resource setup on the host element with `use={...}` or recreate it from
+serializable state.
+
 ### Serialization payload
 
 The server renderer emits, alongside the HTML:
 
-1. **State values** — object state serializes to plain data with the extended
-   serializer. Sync `computed()` values are *not* serialized; they re-derive
-   lazily from their dependencies on first read.
+1. **State values** — object state serializes with the tiered serializer above.
+   Sync `computed()` values are *not* serialized; they re-derive lazily from
+   their dependencies on first read.
 2. **Async snapshots** — demanded async computed IDs, dependency keys, request
    versions, status (`pending`, `resolved`, `rejected`), and settled value/error
    data when available. This prevents resume from refetching data the server
@@ -1001,8 +1122,9 @@ The server renderer emits, alongside the HTML:
    instance. Methods/actions are never serialized.
 4. **Subscription graph** — which symbol (binding, computed, async dependency
    key) depends on which state path.
-5. **Wiring** — DOM element → event → ordered symbol list for listeners, and DOM
-   element → binding-symbol map for dynamic text/attributes/async boundaries.
+5. **Wiring** — DOM element → event → optional sync event policy plus ordered
+   symbol list for listeners, and DOM element → binding-symbol map for dynamic
+   text/attributes/async boundaries.
 6. **Element handles** — `element()` handle IDs mapped to DOM locators emitted by
    `el={handle}` bindings. The payload identifies where the element is; it never
    serializes the element object itself.
@@ -1011,13 +1133,56 @@ The server renderer emits, alongside the HTML:
    serializes the behavior result, DOM-backed class instance, observer, editor,
    map, chart, canvas context, or cleanup function.
 
-Format: a JSON script block plus element attributes for wiring (exact encoding is
-an implementation detail of the renderer/resumer pair and may change freely —
-it is not public API).
+State and shared snapshots use an identity table, not naive JSON tree cloning.
+Every serializable object, array, collection, or restorable class instance gets a
+payload ID. Repeated references encode that ID, and cyclic graphs allocate shells
+first before fields/entries are filled. This preserves object identity while
+still rejecting unsupported values at their exact graph path.
+
+Payloads are specified as logical arenas, not as public object-shaped JSON:
+
+1. **State arena** — graph cells, typed roots, object/collection/class refs,
+   async snapshots, shared snapshots, constants, backrefs, and forward refs.
+2. **View/wiring arena** — DOM locator stream, listener symbol IDs, sync event
+   policies, binding records, element handle locators, async boundary anchors,
+   and `use={...}` host metadata.
+
+Production payloads should encode all arena data into compact private data
+scripts, rather than relying on verbose JSON objects or scattered per-node
+attributes. By default, the core renderer emits two inert data scripts:
+
+```html
+<script type="async/state">...</script>
+<script type="async/view">...</script>
+```
+
+`async/state` carries the state arena. `async/view` carries the view/wiring
+arena. The renderer may merge, split, or stream these payloads when the
+resumer/runtime protocol supports it, but these two script types are the
+canonical core containers and the names used by documentation, devtools, and
+diagnostics. Token alphabets, tag IDs, table layouts, and compression choices
+inside those scripts are private renderer/resumer protocol.
+
+The production wire format should optimize for HTML size and parse cost:
+typed tables or arenas, small numeric/string tags, root IDs, backrefs/forward
+refs, and DOM-order skip runs for static nodes are all expected tools. The
+view/wiring arena encodes metadata for the existing DOM; it is not a public
+VNode format and does not imply a client VDOM or component re-render path.
+
+Development output must remain debuggable. Dev mode may emit a more readable
+encoding, but production compactness remains the contract. The runtime and tools
+must provide a decoded human-readable dump of the private payload so authors can
+inspect why state, listeners, sync policies, bindings, or element behaviors were
+included.
 
 ### Resume behavior
 
 - One global delegated event listener (capture phase) from the resumer.
+- Before importing handler symbols, the delegated listener evaluates any
+  compiler-emitted sync event policy for the target/event. This is the only v1
+  path for synchronous `preventDefault()` / `stopPropagation()` behavior. The
+  policy reads the already-materialized graph data plane by ID; it does not load
+  app chunks or execute component/handler code.
 - First interaction: look up the ordered symbol list for that element/event,
   dynamically import each symbol as needed, materialize its captured graph
   references and element handles, and run handlers in authored order.
@@ -1058,7 +1223,8 @@ it is not public API).
   a `.tsrx` reactive scope, reactive reads after `await` in async computed
   bodies, async reads outside an async boundary, `el` used with a non-`element()`
   handle, one `element()` handle bound to multiple live host elements, an element
-  handle stored in `state()` or serialized data, unserializable initial state.
+  handle stored in `state()` or serialized data, unserializable initial state,
+  unextractable sync event policy for `preventDefault()` / `stopPropagation()`.
   All diagnostics name the offending identifier and span.
 - **Runtime (dev):** serialization failures at SSR time fail the render loudly
   with the state path included. Async result serialization failures include the
