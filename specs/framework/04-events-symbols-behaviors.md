@@ -181,6 +181,11 @@ serializable constants/props, and simple event fields. It may not import code,
 call arbitrary user functions, await async work, read DOM resources, or perform
 graph writes in v1. State writes remain in the lazy handler chunk.
 
+This extraction uses the TSRX semantic graph: `onKeyDown={...}` is an event
+attribute, its value is a normal function AST, the guard is an `IfStatement`,
+and graph-state reads/writes are resolved through the same binding map used by
+state lowering. No inline DOM closure is required for the authored handler.
+
 ```tsx
 let menuOpen = state(false);
 

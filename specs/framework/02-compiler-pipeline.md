@@ -51,6 +51,39 @@ human-readable form. Tests should target both individual pass artifacts and
 end-to-end emitted output, so a regression in event policy extraction does not
 have to be diagnosed from a full generated bundle snapshot.
 
+### TSRX semantic graph artifact
+
+The first framework-owned pass after parsing produces a TSRX semantic graph. It
+is not the lowered TSX output and it is not borrowed from another framework's
+AST model. The artifact combines:
+
+- TSRX structural nodes and relations: statement containers, nested `@{...}`
+  scopes, `@if`, `@for`, `@switch`, `@try`, `@empty`, branch/fallback
+  relations, source spans, and hierarchy
+- normal JavaScript/TypeScript semantic analysis inside those TSRX scopes:
+  lexical bindings, imports, declarations, aliases, destructuring paths,
+  reads, writes, calls, literals, object/array expressions, and event
+  attributes
+- host-specific annotations: graph-state creation sites, computed bodies,
+  DOM binding expressions, event/behavior boundaries, capture candidates, and
+  DOM locator ownership
+
+The compiler must prefer this semantic artifact over ad hoc source-string
+inspection. For example, an authored event prop is an element attribute whose
+value is a normal function expression; a text binding is a TSRX expression child;
+a `count++` is an `UpdateExpression`; `menu.open = false` is an
+`AssignmentExpression` with a member path; an object literal passed to
+`state()` is an object expression whose static keys and literal values are known
+before lowering.
+
+Semantic analysis decides what an expression *refers to*. Runtime serialization
+still validates what a dynamic value *is*. The compiler can know that
+`state({ open: false })` starts as a serializable object and can track later
+path writes such as `menu.open = true`; it cannot prove that every value flowing
+through a server fetch, third-party call, or opaque function remains
+serializable. Those dynamic cases are checked by the serializer and reported
+with state-path diagnostics.
+
 ### Extraction is the compilation model
 
 Qwik requires `$` because it operates on arbitrary TS where extraction must be

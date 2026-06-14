@@ -222,6 +222,57 @@ closures, template expressions, destructured aliases, and non-component helper
 functions in `.tsrx` files. Reactivity crosses `.tsrx` function boundaries with
 zero ceremony; "transporting reactivity" is not a concept users need.
 
+This rewrite is driven by TSRX semantic analysis, not by the lowered output or
+string matching. The state compiler consumes the TSRX structural graph plus
+normal JavaScript/TypeScript AST and scope information:
+
+- `state()` / `computed()` calls in variable declarators become graph bindings
+  owned by the nearest stable TSRX graph scope.
+- Reads in TSRX expression children, element attributes, event handlers,
+  behavior inputs, computed bodies, and nested helper functions resolve through
+  the lexical binding map and lower to graph reads when they target a known
+  graph binding or alias.
+- `AssignmentExpression` and `UpdateExpression` nodes lower to graph writes
+  when their left-hand side resolves to a graph binding or graph path.
+- Object and array literals passed to `state()` are analyzed as syntax, so
+  static keys, literal values, and initial nested paths are known before the
+  serializer runs.
+- Dynamic values are still validated at runtime serialization. Semantic
+  analysis can classify the origin and path; it does not pretend to know the
+  concrete value returned by an opaque function, network request, or
+  third-party library.
+
+For example:
+
+```tsx
+function Counter() @{
+  let count = state(0);
+
+  <button onClick={() => count++}>Count {count}</button>
+}
+```
+
+The semantic graph records one graph binding (`count`), one event attribute
+(`onClick`), one update expression (`count++`), and one text binding read
+(`{count}`). The event symbol write lowers to `graph.update(countId, +1)`;
+the text binding lowers to `graph.read(countId)`.
+
+For object state:
+
+```tsx
+function Menu() @{
+  const menu = state({ open: false });
+
+  <button onClick={() => menu.open = !menu.open}>
+    Toggle
+  </button>
+}
+```
+
+The compiler resolves both sides of `menu.open = !menu.open` to the same graph
+path. The read subscribes to `menu.open`; the assignment invalidates that path
+without treating the whole object as an opaque value.
+
 **Objects and collections.** `state(obj)` supports objects, arrays, `Map`, `Set`,
 and `Date` without a separate `store()` primitive or reactive collection
 subclasses. `user.profile.name = x` and `items.push(x)` are graph writes with
