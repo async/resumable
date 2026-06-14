@@ -1264,6 +1264,37 @@ refs, and DOM-order skip runs for static nodes are all expected tools. The
 view/wiring arena encodes metadata for the existing DOM; it is not a public
 VNode format and does not imply a client VDOM or component re-render path.
 
+### View locator materialization
+
+The v1 `async/view` locator model uses a browser-native `TreeWalker` over
+`ELEMENT` and `COMMENT` nodes to materialize encoded DOM-order records onto the
+existing server-rendered DOM. This is a locator-decoding step only:
+
+```txt
+async/view locator stream
+-> TreeWalker over existing DOM
+-> skip static nodes and ignored/nested regions
+-> attach records to real elements/comment anchors
+```
+
+The resumer stores the result in internal side tables such as:
+
+```ts
+WeakMap<Element, EventRecord | BindingRecord | BehaviorRecord>;
+Map<number, Comment>;
+```
+
+Element records attach to real DOM elements. Comment records are reserved for
+dynamic anchors such as branches, keyed lists, async boundaries, fragments, and
+streamed/patch segments. Static nodes should have no per-node attributes and no
+runtime record.
+
+This is deliberately not VDOM recovery. The `TreeWalker` pass does not
+materialize component VNodes, child VNode trees, or client render functions. It
+only maps compact `async/view` metadata to existing DOM nodes so later graph
+writes, events, visibility triggers, and behavior setup can address those nodes
+directly.
+
 Development output must remain debuggable. Dev mode may emit a more readable
 encoding, but production compactness remains the contract. The runtime and tools
 must provide a decoded human-readable dump of the private payload so authors can
