@@ -129,6 +129,12 @@ Initial internal package map:
 
 There is no `packages/server`.
 
+The repository/package-manager model is a pnpm workspace. The root
+`package.json`, `pnpm-workspace.yaml`, and `pnpm-lock.yaml` own dependency
+resolution and workspace package membership. Vite-plus remains the preferred
+tooling surface, so pnpm scripts should be thin aliases for `vp pack`,
+`vp test`, `vp check`, `vp fmt`, `vp lint`, and related vite-plus commands.
+
 The build architecture is Rolldown-first, not Vite-first. The base Rolldown
 plugin owns compiler transforms, virtual modules, emitted symbol chunks,
 manifest generation, diagnostics, and browser/initial-render/library build
@@ -148,9 +154,9 @@ framework's build surface depends only on Vite/Rolldown APIs.
 
 Core framework code is runtime-agnostic ESM. The compiler, runtime graph,
 serializer, render/resume protocol, payload tools, and shared build
-helpers must not require Node as the execution environment. Node, Deno, Bun,
-edge workers, and browser-hosted tooling should be able to run the same framework
-semantics through thin host adapters.
+helpers must not require a specific JavaScript host as the execution environment.
+Server runtimes, edge workers, and browser-hosted tooling should be able to run
+the same framework semantics through thin host adapters.
 
 The implementation rules are:
 
@@ -171,7 +177,7 @@ The implementation rules are:
   isolated integration modules, never in the semantic compiler/runtime core
 
 This is a design constraint, not just packaging polish. If framework behavior
-differs between Node and Deno because core code depended on host-specific APIs,
+differs between supported hosts because core code depended on host-specific APIs,
 that is a framework bug.
 
 ## Split Spec Index

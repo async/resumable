@@ -62,8 +62,9 @@ The compiler package is runtime-agnostic ESM. It should not import Node modules
 for paths, files, URL handling, crypto, or process state. Path/URL normalization
 should use portable helpers such as `pathe` and `ufo`; file access, module
 resolution, hashing, environment data, and dev-server capabilities come from the
-host adapter. The same compiler passes must be able to run under Node, Deno, Bun,
-or a browser-hosted test harness without changing framework semantics.
+host adapter. The same compiler passes must be able to run under supported
+server runtimes, edge runtimes, or a browser-hosted test harness without changing
+framework semantics.
 
 The first compiler should focus on the framework contracts:
 

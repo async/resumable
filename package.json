@@ -1,0 +1,22 @@
+{
+	"name": "@async/resumable-workspace",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"build": "vp pack",
+		"check": "vp check",
+		"fmt": "vp fmt",
+		"lint": "vp lint",
+		"test": "vp test",
+		"test:compiler": "vp test packages/compiler/test/semantic-graph.test.ts"
+	},
+	"devDependencies": {
+		"@types/node": "24.12.2",
+		"typescript": "5.9.3",
+		"vite": "8.0.16",
+		"vite-plus": "0.1.20",
+		"vitest": "4.1.5"
+	},
+	"packageManager": "pnpm@10.33.2"
+}

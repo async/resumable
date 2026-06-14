@@ -39,16 +39,12 @@ is the Codex-facing always-on guidance for building the TSRX resumable framework
   not add standalone esbuild, terser, Rollup, SWC, webpack, Babel build
   pipelines, or similar secondary transformers/minifiers.
 
-## Vite-Plus Monorepo Shape
+## Pnpm / Vite-Plus Monorepo Shape
 
-This framework will be a **Deno workspace** and vite-plus monorepo with multiple
-libraries. Deno owns the workspace/dependency source of truth; vite-plus is the
-preferred command and tooling surface for build, test, check, format, and lint.
-
-Use Witness as the Deno workspace reference:
-
-- `/Users/jacksm5pro/dev/open-source/witness/deno.json`
-- `/Users/jacksm5pro/dev/open-source/witness/vite.config.ts`
+This framework will be a **pnpm workspace** and vite-plus monorepo with multiple
+libraries. `package.json`, `pnpm-workspace.yaml`, and the pnpm lockfile own the
+workspace/dependency source of truth; vite-plus is the preferred command and
+tooling surface for build, test, check, format, and lint.
 
 Use QDS and qwik-bundler as shape references for the root vite-plus config,
 multi-lib pack configuration, and plugin/fixture organization:
@@ -58,7 +54,11 @@ multi-lib pack configuration, and plugin/fixture organization:
 
 Expected shape:
 
-- root `deno.json` is the canonical workspace and dependency manifest
+- root `package.json` owns scripts, package-manager metadata, and shared dev
+  dependencies
+- root `pnpm-workspace.yaml` owns workspace package globs
+- root `pnpm-lock.yaml` is the committed dependency lockfile once dependencies
+  are installed
 - root `vite.config.ts` owns pack, test, lint, format, and staged configuration
   through vite-plus
 - initial package folders are `packages/resumable`, `packages/core`,
@@ -74,20 +74,18 @@ Expected shape:
 - framework packages live as multiple libs/packages rather than one large package
 - prefer vite-plus commands directly: `vp pack`, `vp test`, `vp check`,
   `vp fmt`, `vp lint`, and `vp config`
-- Deno tasks are allowed as thin repo-boundary aliases or for Deno-specific host
-  scripts, but they should normally invoke vite-plus commands rather than
-  replacing them
+- pnpm scripts should be thin repo-boundary aliases that invoke vite-plus
+  commands rather than replacing them with custom script stacks
 - use vite-plus test projects for Node/unit integration and browser/component
   testing where appropriate
 - use `vite-plus/test/browser-playwright` for Vitest browser-mode provider wiring
 - use vite-plus-managed formatting/linting tooling, including oxfmt/oxlint-style
   behavior exposed through `vp fmt`, `vp lint`, and `vp check`
 
-Do not introduce pnpm, npm, or yarn as the primary workspace package manager.
-If npm package metadata is needed for publishing or local package consumption,
-generate it from the Deno-owned source of truth rather than hand-maintaining a
-second manifest. Do not use this as an excuse to replace vite-plus commands with
-Deno-native build/test/lint/format commands.
+Do not introduce another primary workspace package manager. The
+monorepo/package-manager model is pnpm, and the root workspace source of truth
+is `package.json` plus `pnpm-workspace.yaml` unless this spec is deliberately
+reopened.
 
 Do not add separate Jest, standalone Vitest CLI conventions, Prettier, ESLint,
 Biome, tsup, tsdown, or custom build script stacks unless the spec is explicitly
@@ -119,6 +117,79 @@ Tests should assert observable behavior or artifact contracts, not incidental
 implementation details. Compiler tests should prefer pass artifacts and
 diagnostics over giant generated-bundle snapshots unless the final emit is the
 thing under test.
+
+## Implementation Sequencing
+
+Start implementation with pass-boundary TDD, not an end-to-end browser demo.
+Each layer should produce a human-readable artifact that the next layer consumes.
+This keeps the compiler/runtime contract inspectable and prevents architecture
+from disappearing into generated code or browser-only behavior.
+
+Preferred first sequence:
+
+1. TSRX semantic graph: prove the compiler can identify components, host nodes,
+   bindings, event props, `state()` sites, writes, async reads, and DOM locator
+   ownership.
+2. State lowering: prove plain-looking reads and writes such as `count++`,
+   `obj.x = y`, template reads, and closure reads lower through graph access.
+3. Payload arena planning: prove graph cells, view records, event records, sync
+   policy records, symbol IDs, and locators can be represented without runtime
+   DOM code.
+4. Symbol resolver planning: prove lazy event handlers, bindings, behaviors,
+   and async run functions become symbol IDs whose dynamic imports are owned by
+   the generated resolver.
+5. Runtime graph: prove reads, writes, subscriptions, computed invalidation,
+   async state, and flush journal semantics against the planned payload shapes.
+6. Browser resume: decode payloads, locate nodes, attach delegated events, run
+   sync policy, resolve symbols, write graph state, and flush concrete DOM
+   mutations.
+
+Do not skip earlier pass artifacts just to make a demo work. End-to-end fixtures
+are valuable after the pass contracts exist.
+
+## Proof Fixtures
+
+Before implementing framework internals, create the proof fixtures under
+`fixtures/proofs/`. These are executable-spec fixtures, not a throwaway POC
+implementation. Each proof should contain authored `.tsrx` source and a README
+describing which pass-boundary tests will consume it. Do not hand-write large
+final artifact JSON before the relevant pass exists; add expected artifacts one
+pass at a time through failing tests.
+
+Each proof should be started as its own GoalBuddy-prepared goal. First use the
+GoalBuddy prompt/prep flow for the single proof, then run the generated `/goal`
+command. Do not launch raw proof goals directly from memory. The generated goal
+should scope ownership to exactly one `fixtures/proofs/<name>/` directory, allow
+shared index updates only when needed, and forbid framework-internal
+implementation work unless the proof task explicitly asks for it.
+
+Initial proof set:
+
+- `resume-basic`: canonical vertical slice covering scalar `state()` counter,
+  object path write, lazy event symbol, sync `preventDefault()` policy, async
+  `computed()` with `@try`/`@pending`/`@catch`, one `use={...}` behavior, and
+  one `element()` / `el={...}` locator.
+- `state-lvalues`: plain JavaScript mutation lowering, including `count++`,
+  assignment, object paths, nested paths, array mutation expectations, aliases,
+  and invalid writes.
+- `sync-event-policy`: isolated extraction of synchronous
+  `preventDefault()` / `stopPropagation()` policy from graph state and event
+  fields, leaving writes in lazy symbols.
+- `payload-locators`: DOM-order locators, branch anchors, keyed list item
+  locators, text binding locators, behavior host locators, and element handle
+  locators without per-node attributes or VDOM semantics.
+- `symbol-resolver`: handler, binding, behavior, and async run symbols whose
+  dynamic imports are owned by the generated resolver, plus unknown-symbol
+  fail-closed behavior.
+- `serializer-values`: serialization tiers, object identity/cycles, built-ins,
+  app value class restore, unsupported DOM/runtime diagnostics, and secret-leak
+  warning shape when applicable.
+- `scheduler-journal`: batched writes, microtask flush, computed invalidation,
+  concrete DOM mutation journal entries, async completion versioning, and no
+  rollback after committed writes.
+- `bundler-pipeline`: Vite/Rolldown/Witness proof for TSRX transforms, virtual
+  modules, emitted chunks, manifest output, HMR artifact updates, and no
+  Node-only assumptions in shared packages.
 
 ## Test Types
 
