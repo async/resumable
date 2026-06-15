@@ -18,29 +18,30 @@ All diagnostics use one structured shape across compiler and runtime:
 
 ```ts
 type Diagnostic = {
-  code: string; // stable, e.g. "AA_CAPTURE_DOM_NODE"
-  severity: "error" | "warning" | "info";
-  phase:
-    | "parse"
-    | "state-lowering"
-    | "capture-analysis"
-    | "sync-policy"
-    | "serialization"
-    | "payload"
-    | "resume"
-    | "runtime";
-  title: string;
-  message: string;
-  why: string;
-  primarySpan?: SourceSpan;
-  secondarySpans?: LabeledSpan[];
-  passId?: string;
-  artifactKeys?: string[];
-  statePath?: string;
-  symbolId?: string;
-  elementLocator?: string;
-  suggestions: Suggestion[];
-  docsUrl: string;
+	code: string; // stable, e.g. "AA_CAPTURE_UNSUPPORTED_VALUE"
+	severity: 'error' | 'warning' | 'info';
+	phase:
+		| 'parse'
+		| 'semantic-graph'
+		| 'state-lowering'
+		| 'capture-analysis'
+		| 'sync-policy'
+		| 'serialization'
+		| 'payload'
+		| 'resume'
+		| 'runtime';
+	title: string;
+	message: string;
+	why: string;
+	primarySpan?: SourceSpan;
+	secondarySpans?: LabeledSpan[];
+	passId?: string;
+	artifactKeys?: string[];
+	statePath?: string;
+	symbolId?: string;
+	elementLocator?: string;
+	suggestions: Suggestion[];
+	docsUrl: string;
 };
 ```
 
@@ -52,7 +53,7 @@ cannot safely rewrite, it still gives a precise migration path.
 Example shape:
 
 ```txt
-AA_CAPTURE_DOM_NODE: Cannot capture a DOM node in a lazy event handler
+AA_CAPTURE_UNSUPPORTED_VALUE: Cannot capture local DOM node in lazy symbol
 
 src/Menu.tsrx:13:27
   12 | const menuEl = document.querySelector("#menu");
@@ -82,7 +83,7 @@ codes and machine fields are compatibility surface.
 Diagnostic documentation follows the stable code:
 
 ```txt
-https://example.dev/errors/AA_CAPTURE_DOM_NODE
+https://async.await.dev/errors/AA_CAPTURE_UNSUPPORTED_VALUE
 ```
 
 Runtime diagnostics must link back to compiler artifacts whenever possible. A
@@ -101,9 +102,9 @@ unserializable initial state, and unextractable sync event policy for
 `preventDefault()` / `stopPropagation()`.
 
 Runtime dev diagnostics fail loudly with the same structured shape.
-Serialization failures at SSR time include state path and value kind. Async
-result serialization failures include async computed ID and dependency key.
-Resumer errors include symbol ID, graph reference, payload script, and
+Serialization failures during initial render include state path and value kind.
+Async result serialization failures include async computed ID and dependency
+key. Resumer errors include symbol ID, graph reference, payload script, and
 version/hash mismatch details.
 
 Runtime production errors may minimize human text, but they still preserve the

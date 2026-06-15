@@ -19,7 +19,7 @@ prop, not a state primitive.
 The two local-state intrinsics, available in any `.tsrx` file (components and
 shared logic alike):
 
-```tsx
+```tsrx
 export function Counter() @{
   let count = state(0);
   let double = computed(() => count * 2);
@@ -38,7 +38,7 @@ export function Counter() @{
   keys. Computeds are not writable (no optimistic-write semantics in v1; revisit
   if real apps demand it).
 
-```tsx
+```tsrx
 let count = state(0);
 let session = state({ user: null, status: "anonymous" });
 
@@ -99,16 +99,16 @@ core invariant:
 
 The classic uses of effects each have a better home:
 
-- *Derive state from state* → `computed()`.
-- *Fetch data from state* → `computed(async ...)` plus a TSRX async boundary.
-- *"When X changes, update Y"* → an antipattern in every fine-grained system;
+- _Derive state from state_ → `computed()`.
+- _Fetch data from state_ → `computed(async ...)` plus a TSRX async boundary.
+- _"When X changes, update Y"_ → an antipattern in every fine-grained system;
   with no render loop, every mutation originates at an identifiable site (an
   event handler), so co-locate the side work there as a plain function.
-- *Sync external targets* (`document.title`, imperative DOM) → these are
+- _Sync external targets_ (`document.title`, imperative DOM) → these are
   bindings to targets the template can't express; solved at the template level,
   not with lifecycle APIs.
-- *React to state you don't own* → deliberately unsupported.
-- *Eager browser setup* (third-party widgets, canvas init, observers) →
+- _React to state you don't own_ → deliberately unsupported.
+- _Eager browser setup_ (third-party widgets, canvas init, observers) →
   host element behavior through `use`.
 
 ### Async derivation and TSRX boundaries
@@ -117,7 +117,7 @@ Async is v1 core, not a deferred resource layer. Without a first-class async
 path, users will rebuild effects by hand with `loading`, `error`, and `data`
 state. The framework instead treats async as derived graph state:
 
-```tsx
+```tsrx
 function UserRoute() @{
   const user = computed(async ({ signal }) => {
     const id = route.params.userId;
@@ -149,7 +149,7 @@ Semantics:
   the value before awaiting, or split the logic into an async computed plus a
   sync computed:
 
-```tsx
+```tsrx
 const rawUser = computed(async ({ signal }) =>
   fetchUser(route.params.userId, signal)
 );
@@ -181,8 +181,8 @@ resource-shaped pair:
 
 ```ts
 _asyncComputed({
-  key: () => ({ id: route.params.userId }),
-  run: async ({ key, signal }) => fetchUser(key.id, signal),
+	key: () => ({ id: route.params.userId }),
+	run: async ({ key, signal }) => fetchUser(key.id, signal),
 });
 ```
 
@@ -201,8 +201,9 @@ at the async boundary.
 The state, async, element, event, and element-behavior primitives are
 **compiler intrinsics**, not imports of a value type. There is no
 `Signal`/`Tracked` type in the public API. Event handler props are camelCase
-(`onClick`, `onInput`), matching TSRX/JSX convention — no directive namespace.
-Element handles use the host prop `el`, which only accepts `element()` handles.
+(`onClick`, `onInput`), matching TSRX event-prop convention — no directive
+namespace. Element handles use the host prop `el`, which only accepts
+`element()` handles.
 Element behaviors use the host prop `use`, which only accepts compiler-known
 element behavior expressions.
 
@@ -263,7 +264,7 @@ Normal JavaScript binding semantics are preserved. Reassigning a `const` graph
 binding is still illegal, while mutating a property of a `const` object-state
 binding is allowed when the property path resolves:
 
-```tsx
+```tsrx
 let count = state(0);
 count++; // supported when semantic analysis resolves `count`
 
@@ -286,7 +287,7 @@ can preserve JavaScript-visible behavior.
 
 For example:
 
-```tsx
+```tsrx
 function Counter() @{
   let count = state(0);
 
@@ -301,7 +302,7 @@ the text binding lowers to `graph.read(countId)`.
 
 For object state:
 
-```tsx
+```tsrx
 function Menu() @{
   const menu = state({ open: false });
 
@@ -322,8 +323,8 @@ path-level invalidation semantics, so a deep mutation updates only the bindings
 that read that path.
 
 Object identity is part of the state graph contract. If two state paths point to
-the same object before SSR serialization, they point to the same object after
-resume:
+the same object before initial-render serialization, they point to the same
+object after resume:
 
 ```ts
 const user = { id: 1 };
@@ -391,7 +392,7 @@ usually just named dataflow: auth, i18n, cart, feature flags, current org, route
 cache, websocket state, or component-library state shared by root/trigger/item/
 content pieces. `shared()` names that dataflow directly.
 
-```tsx
+```tsrx
 // session.tsrx - definition only; module scope holds no instance
 export const session = shared(() => {
   const s = state({
@@ -482,7 +483,7 @@ sites being pure re-render tax that a fine-grained graph deletes.
 
 **Request session**
 
-```tsx
+```tsrx
 export const session = shared(() => {
   const s = state({ user: null, status: "anonymous" });
 
@@ -510,7 +511,7 @@ function AccountButton() @{
 Factories may call other shared definitions. The call resolves from the creation
 context of the instance, so composed state keeps request/container isolation.
 
-```tsx
+```tsrx
 export const cart = shared(() => {
   const s = session();
   const c = state({ id: "current", items: [] });
@@ -535,7 +536,7 @@ definition graphs with a diagnostic that prints the cycle.
 
 **Page-shell and micro-frontend state**
 
-```tsx
+```tsrx
 export const shell = shared(() => {
   const s = state({
     sidebarOpen: false,
@@ -584,7 +585,7 @@ root, trigger, content, item, label, indicator. Qwik Design System solves this
 with Qwik context because Qwik needs a provider mechanism. In this framework,
 the same pattern is a named graph.
 
-```tsx
+```tsrx
 // select.tsrx - definition only; module scope holds no instance
 export const select = shared(() => {
   const s = state({
@@ -628,14 +629,15 @@ All three components read and write the same select graph instance for that
 rendered widget. A second `<SelectRoot>` gets a different graph instance. No
 provider component, context ID, wrapper hook, or tree-shaped public API is
 introduced; the compiler/runtime records graph instance identity in the same
-SSR/resume metadata used for events, projection, keyed loops, and DOM bindings.
+render/resume metadata used for events, projection, keyed loops, and DOM
+bindings.
 
 **Self-contained local widget state**
 
 Self-contained component instances usually do not need `shared()`. Their
 boundary is local ownership, so ordinary `state()` is enough.
 
-```tsx
+```tsrx
 export function Select({ options }) @{
   const s = state({ open: false, value: null });
 

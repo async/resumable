@@ -1,0 +1,465 @@
+import { asNodes, getIdentifierName, type AnyNode } from '../../ast/nodes.ts';
+import { sourceSpan } from '../../ast/source.ts';
+import type { SemanticGraphBinding, SemanticLocalBinding } from '../../artifacts.ts';
+import { collectDestructuredAliases } from './collect-aliases.ts';
+import { collectAsyncComputedPostAwaitReads, collectGraphDependencies } from './collect-async.ts';
+import { collectExpressionReads } from './collect-expressions.ts';
+import type { WalkState } from './types.ts';
+
+export function collectVariableDeclaration(node: AnyNode, state: WalkState): void {
+	const declarationKind = variableDeclarationKind(node);
+
+	for (const declaration of asNodes(node.declarations)) {
+		const id = declaration.id as AnyNode | undefined;
+		const init = declaration.init as AnyNode | undefined;
+		if (init) {
+			collectDestructuredAliases(id, init, declarationKind, state);
+			collectUnsupportedDestructuredLocalBindings(id, init, declarationKind, state);
+		}
+
+		const name = getIdentifierName(id);
+		const callName = getCallName(init);
+
+		if (!name || !init) continue;
+
+		const localBindingAlias = aliasedLocalBinding(init, state);
+		if (localBindingAlias) {
+			state.graph.localBindings.push({
+				name,
+				kind: localBindingAlias.kind,
+				declarationKind,
+				sourceSpan: sourceSpan(id, state.filename),
+			});
+		}
+
+		if (isFunctionValue(init)) {
+			state.graph.localBindings.push({
+				name,
+				kind: 'function',
+				declarationKind,
+				sourceSpan: sourceSpan(id, state.filename),
+			});
+		}
+
+		if (isClassInstanceValue(init)) {
+			state.graph.localBindings.push({
+				name,
+				kind: 'class-instance',
+				declarationKind,
+				sourceSpan: sourceSpan(id, state.filename),
+			});
+		}
+
+		if (isDomNodeValue(init)) {
+			state.graph.localBindings.push({
+				name,
+				kind: 'dom-node',
+				declarationKind,
+				sourceSpan: sourceSpan(id, state.filename),
+			});
+		}
+
+		if (isNonSerializableConstantValue(init, state)) {
+			state.graph.localBindings.push({
+				name,
+				kind: 'non-serializable-constant',
+				declarationKind,
+				sourceSpan: sourceSpan(id, state.filename),
+			});
+		}
+
+		if (callName === 'state') {
+			const initial = firstArgument(init);
+			state.graph.graphBindings.push({
+				id: `state:${name}`,
+				name,
+				kind: 'state',
+				declarationKind,
+				writable: true,
+				valueKind: initialValueKind(initial),
+				initialValue: evaluateInitialStateValue(initial),
+			});
+		}
+
+		if (callName === 'computed') {
+			const body = firstArgument(init);
+			const isAsync = body?.async === true;
+			const dependencies = collectGraphDependencies(body, state);
+			state.graph.graphBindings.push({
+				id: `computed:${name}`,
+				name,
+				kind: 'computed',
+				declarationKind,
+				writable: false,
+				async: isAsync,
+				asyncCapable: isAsync,
+				dependencies,
+			});
+			collectExpressionReads(body, state);
+			if (isAsync) collectAsyncComputedPostAwaitReads(name, body, state);
+		}
+
+		if (callName === 'element') {
+			state.graph.graphBindings.push({
+				id: `element:${name}`,
+				name,
+				kind: 'element',
+				declarationKind,
+				writable: false,
+			});
+		}
+	}
+}
+
+function collectUnsupportedDestructuredLocalBindings(
+	id: AnyNode | undefined,
+	init: AnyNode,
+	declarationKind: SemanticGraphBinding['declarationKind'],
+	state: WalkState,
+): void {
+	if (id?.type !== 'ObjectPattern' && id?.type !== 'ArrayPattern') return;
+
+	const binding = aliasedLocalBinding(init, state);
+	if (binding) {
+		for (const local of bindingPatternIdentifiers(id)) {
+			state.graph.localBindings.push({
+				name: local.name,
+				kind: binding.kind,
+				declarationKind,
+				sourceSpan: sourceSpan(local, state.filename),
+			});
+		}
+
+		return;
+	}
+
+	collectUnsupportedInlineDestructuredLocalBindings(id, init, declarationKind, state);
+}
+
+function collectUnsupportedInlineDestructuredLocalBindings(
+	pattern: AnyNode | undefined,
+	value: AnyNode | undefined,
+	declarationKind: SemanticGraphBinding['declarationKind'],
+	state: WalkState,
+): void {
+	if (!pattern || !value) return;
+
+	if (typeof pattern.name === 'string') {
+		const kind = unsupportedLocalBindingKind(value, state);
+		if (!kind) return;
+
+		state.graph.localBindings.push({
+			name: pattern.name,
+			kind,
+			declarationKind,
+			sourceSpan: sourceSpan(pattern, state.filename),
+		});
+		return;
+	}
+
+	if (pattern.type === 'ObjectPattern' && value.type === 'ObjectExpression') {
+		collectUnsupportedObjectPatternValueBindings(pattern, value, declarationKind, state);
+		return;
+	}
+
+	if (pattern.type === 'ArrayPattern' && value.type === 'ArrayExpression') {
+		const elements = asNodes(value.elements);
+		asNodes(pattern.elements).forEach((element, index) => {
+			collectUnsupportedInlineDestructuredLocalBindings(
+				element,
+				elements[index],
+				declarationKind,
+				state,
+			);
+		});
+		return;
+	}
+
+	if (pattern.type === 'AssignmentPattern') {
+		const left = pattern.left as AnyNode | undefined;
+		const fallback = pattern.right as AnyNode | undefined;
+		collectUnsupportedInlineDestructuredLocalBindings(
+			left,
+			unsupportedLocalBindingKind(value, state) ? value : fallback,
+			declarationKind,
+			state,
+		);
+	}
+}
+
+function collectUnsupportedObjectPatternValueBindings(
+	pattern: AnyNode,
+	value: AnyNode,
+	declarationKind: SemanticGraphBinding['declarationKind'],
+	state: WalkState,
+): void {
+	for (const property of asNodes(pattern.properties)) {
+		if (property.type !== 'Property') continue;
+
+		const key = objectPropertyKey(property.key as AnyNode | undefined);
+		if (!key) continue;
+
+		collectUnsupportedInlineDestructuredLocalBindings(
+			property.value as AnyNode | undefined,
+			objectExpressionPropertyValue(value, key),
+			declarationKind,
+			state,
+		);
+	}
+}
+
+function objectExpressionPropertyValue(node: AnyNode, key: string): AnyNode | undefined {
+	for (const property of asNodes(node.properties)) {
+		if (property.type !== 'Property') continue;
+		if (objectPropertyKey(property.key as AnyNode | undefined) !== key) continue;
+
+		return property.value as AnyNode | undefined;
+	}
+
+	return undefined;
+}
+
+function unsupportedLocalBindingKind(
+	node: AnyNode,
+	state: WalkState,
+): SemanticLocalBinding['kind'] | null {
+	const binding = aliasedLocalBinding(node, state);
+	if (binding) return binding.kind;
+	if (isFunctionValue(node)) return 'function';
+	if (isClassInstanceValue(node)) return 'class-instance';
+	if (isDomNodeValue(node)) return 'dom-node';
+	if (isNonSerializableConstantValue(node, state)) return 'non-serializable-constant';
+
+	return null;
+}
+
+function bindingPatternIdentifiers(
+	node: AnyNode | undefined,
+): Array<{ readonly name: string } & AnyNode> {
+	if (!node) return [];
+	if (typeof node.name === 'string') return [node as { readonly name: string } & AnyNode];
+
+	if (node.type === 'ObjectPattern') {
+		return asNodes(node.properties).flatMap((property) => {
+			if (property.type === 'RestElement') {
+				return bindingPatternIdentifiers(property.argument as AnyNode | undefined);
+			}
+
+			if (property.type !== 'Property') return [];
+
+			return bindingPatternIdentifiers(property.value as AnyNode | undefined);
+		});
+	}
+
+	if (node.type === 'ArrayPattern') {
+		return asNodes(node.elements).flatMap((element) => bindingPatternIdentifiers(element));
+	}
+
+	if (node.type === 'RestElement') {
+		return bindingPatternIdentifiers(node.argument as AnyNode | undefined);
+	}
+
+	if (node.type === 'AssignmentPattern') {
+		return bindingPatternIdentifiers(node.left as AnyNode | undefined);
+	}
+
+	return [];
+}
+
+function aliasedLocalBinding(node: AnyNode, state: WalkState): SemanticLocalBinding | null {
+	const name = localBindingReferenceName(node);
+	if (!name) return null;
+
+	for (let index = state.graph.localBindings.length - 1; index >= 0; index--) {
+		const binding = state.graph.localBindings[index];
+		if (binding?.name === name) return binding;
+	}
+
+	return null;
+}
+
+function localBindingReferenceName(node: AnyNode): string | null {
+	const name = getIdentifierName(node);
+	if (!name) return null;
+
+	return name.startsWith('...') ? name.slice(3) : name;
+}
+
+function isFunctionValue(node: AnyNode): boolean {
+	return node.type === 'ArrowFunctionExpression' || node.type === 'FunctionExpression';
+}
+
+function isClassInstanceValue(node: AnyNode): boolean {
+	const constructorName = getNewConstructorName(node);
+	if (constructorName) return !isSerializableBuiltInConstructorName(constructorName);
+
+	return false;
+}
+
+function getNewConstructorName(node: AnyNode): string | null {
+	if (node.type === 'NewExpression') {
+		return getIdentifierName(node.callee as AnyNode | undefined);
+	}
+
+	if (node.type !== 'CallExpression') return null;
+
+	const calleeName = getIdentifierName(node.callee as AnyNode | undefined);
+	if (typeof calleeName !== 'string' || !calleeName.startsWith('new ')) return null;
+
+	return calleeName.slice('new '.length);
+}
+
+function isSerializableBuiltInConstructorName(name: string | null): boolean {
+	return (
+		name === 'Date' ||
+		name === 'RegExp' ||
+		name === 'Map' ||
+		name === 'Set' ||
+		name === 'URL' ||
+		name === 'ArrayBuffer' ||
+		name === 'Int8Array' ||
+		name === 'Uint8Array' ||
+		name === 'Uint8ClampedArray' ||
+		name === 'Int16Array' ||
+		name === 'Uint16Array' ||
+		name === 'Int32Array' ||
+		name === 'Uint32Array' ||
+		name === 'Float32Array' ||
+		name === 'Float64Array' ||
+		name === 'BigInt64Array' ||
+		name === 'BigUint64Array'
+	);
+}
+
+function isDomNodeValue(node: AnyNode): boolean {
+	if (node.type !== 'CallExpression') return false;
+
+	const callee = node.callee as AnyNode | undefined;
+	if (callee?.type !== 'MemberExpression') return false;
+
+	const objectName = getIdentifierName(callee.object as AnyNode | undefined);
+	const propertyName = getIdentifierName(callee.property as AnyNode | undefined);
+
+	return (
+		objectName === 'document' &&
+		(propertyName === 'querySelector' ||
+			propertyName === 'getElementById' ||
+			propertyName === 'createElement')
+	);
+}
+
+function isNonSerializableConstantValue(node: AnyNode, state: WalkState): boolean {
+	const constructorName = getNewConstructorName(node);
+	if (isSerializableBuiltInConstructorName(constructorName)) {
+		return asNodes(node.arguments).some((argument) =>
+			containsNonSerializableConstantValue(argument, state),
+		);
+	}
+
+	if (node.type === 'ObjectExpression') {
+		return asNodes(node.properties).some((property) => {
+			if (property.type === 'SpreadElement') {
+				return containsNonSerializableConstantValue(
+					property.argument as AnyNode | undefined,
+					state,
+				);
+			}
+
+			if (property.type !== 'Property') return false;
+
+			return containsNonSerializableConstantValue(
+				property.value as AnyNode | undefined,
+				state,
+			);
+		});
+	}
+
+	if (node.type === 'ArrayExpression') {
+		return asNodes(node.elements).some((element) =>
+			containsNonSerializableConstantValue(element, state),
+		);
+	}
+
+	return false;
+}
+
+function containsNonSerializableConstantValue(
+	node: AnyNode | undefined,
+	state: WalkState,
+): boolean {
+	if (!node) return false;
+	if (node.type === 'SpreadElement') {
+		return containsNonSerializableConstantValue(node.argument as AnyNode | undefined, state);
+	}
+	if (aliasedLocalBinding(node, state)) return true;
+	if (isFunctionValue(node) || isClassInstanceValue(node) || isDomNodeValue(node)) return true;
+
+	return isNonSerializableConstantValue(node, state);
+}
+
+function getCallName(node: AnyNode | undefined | null): string | null {
+	if (node?.type !== 'CallExpression') return null;
+
+	return getIdentifierName(node.callee as AnyNode | undefined);
+}
+
+function variableDeclarationKind(node: AnyNode): SemanticGraphBinding['declarationKind'] {
+	if (node.kind === 'const' || node.kind === 'let' || node.kind === 'var') {
+		return node.kind;
+	}
+
+	return undefined;
+}
+
+function firstArgument(node: AnyNode): AnyNode | undefined {
+	return asNodes(node.arguments)[0];
+}
+
+function initialValueKind(node: AnyNode | undefined): SemanticGraphBinding['valueKind'] {
+	if (!node) return 'unknown';
+
+	if (node.type === 'ObjectExpression') return 'object';
+	if (node.type === 'ArrayExpression') return 'array';
+	if (node.type === 'Literal') return 'scalar';
+
+	return 'unknown';
+}
+
+function evaluateInitialStateValue(node: AnyNode | undefined): unknown {
+	if (!node) return undefined;
+
+	if (node.type === 'Literal') return node.value;
+	if (node.type === 'ObjectExpression') return evaluateObjectExpression(node);
+	if (node.type === 'ArrayExpression')
+		return asNodes(node.elements).map(evaluateInitialStateValue);
+	if (node.type === 'UnaryExpression') {
+		const argument = evaluateInitialStateValue(node.argument as AnyNode | undefined);
+		if (node.operator === '-') return -Number(argument);
+		if (node.operator === '+') return Number(argument);
+		if (node.operator === '!') return !argument;
+	}
+
+	return undefined;
+}
+
+function evaluateObjectExpression(node: AnyNode): Record<string, unknown> {
+	const output: Record<string, unknown> = {};
+
+	for (const property of asNodes(node.properties)) {
+		if (property.type !== 'Property') continue;
+
+		const key = objectPropertyKey(property.key as AnyNode | undefined);
+		if (!key) continue;
+
+		output[key] = evaluateInitialStateValue(property.value as AnyNode | undefined);
+	}
+
+	return output;
+}
+
+function objectPropertyKey(node: AnyNode | undefined): string | null {
+	if (!node) return null;
+	if (typeof node.name === 'string') return node.name;
+	if (typeof node.value === 'string' || typeof node.value === 'number') return String(node.value);
+	return null;
+}

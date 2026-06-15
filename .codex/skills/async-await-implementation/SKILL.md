@@ -29,7 +29,11 @@ description: "Use when implementing the @async/resumable TSRX framework: compile
 
 - Build the first compiler in JS/TS on `@tsrx/core`.
 - Do not start with OXC, Rust, or a native compiler backend. Keep artifact contracts backend-neutral so OXC can replace internals later.
+- Do not use the sibling `../native-tsrx` repository: do not inspect it, edit it, run commands in it, or make async-await work depend on changes there. Treat `@tsrx/core` as an external dependency boundary; if its current parser artifacts are insufficient for a compiler behavior, keep coverage at the async-await compiler artifact boundary, record the caveat, or ask the user before any dependency work.
 - Structure compiler work as cooperating mini-compilers with typed artifacts: TSRX semantic graph, state lowering, async dependency extraction, sync event policy, capture analysis, template/view lowering, payload arena planning, symbol resolver planning, and final emit.
+- Treat compiler maintainability as product behavior. A contributor should be able to find the owning pass, read its artifact types, run its focused tests, and change it without understanding the whole compiler.
+- Before adding compiler semantics, inspect the production compiler module layout. If behavior is still concentrated in a large `index.ts`, broad AST visitor, or other orchestrator/barrel file, first extract the owning pass into a pass module or add the missing pass boundary. The package entry may re-export and the orchestrator may run the pass graph; neither should absorb pass implementation details.
+- Every compiler change should name the pass ID it touches, the artifacts it consumes/produces, the pass-owned module where the behavior lives, and the focused artifact fixture/test that proves that pass boundary. End-to-end output snapshots are secondary evidence, not a substitute for pass-level artifacts.
 - Prefer pass-level fixture tests over only final bundle snapshots.
 - Keep intermediate artifacts human-readable and easy for agents to inspect.
 - Treat diagnostics as product behavior. Include source span, short reason, allowed alternatives, and the suggested fix.
@@ -40,7 +44,8 @@ description: "Use when implementing the @async/resumable TSRX framework: compile
 - Use host adapters for file access, module resolution, environment data, hashing, dev-server hooks, and other runtime-specific capabilities.
 - Prefer Web APIs and portable libraries. Use `pathe` for filesystem-like path work and `ufo` for URL/pathname/query work.
 - Build the repo as a pnpm workspace and vite-plus monorepo with multiple libraries. `package.json`, `pnpm-workspace.yaml`, and `pnpm-lock.yaml` own the workspace/dependency source of truth; vite-plus is the preferred command/tooling surface for build/test/check/format/lint.
-- Initial package folders are `packages/resumable`, `packages/core`, `packages/protocol`, `packages/runtime`, `packages/serializer`, `packages/compiler`, `packages/rolldown`, `packages/vite`, and `packages/test-utils`. `packages/resumable` is the main package for `@async/resumable`; the rest are internal boundaries until tests prove what should become public. Do not create `packages/server`.
+- The completed proof implementation lives under `poc/packages/*`; do not extend it when beginning production framework work unless the task is explicitly POC maintenance.
+- Initial production package folders are `packages/resumable`, `packages/core`, `packages/protocol`, `packages/runtime`, `packages/serializer`, `packages/compiler`, `packages/rolldown`, `packages/vite`, and `packages/test-utils`. `packages/resumable` is the main package for `@async/resumable`; the rest are internal boundaries until tests prove what should become public. Do not create `packages/server`.
 - Use QDS/qwik-bundler as root vite-plus config and multi-lib/plugin structure references. Use Witness for pipeline/HMR proof behavior only, not as a workspace-structure reference.
 - Package/library builds should be vite-plus `pack` configs; prefer `vp pack`, `vp test`, `vp check`, `vp fmt`, `vp lint`, and `vp config` directly.
 - pnpm scripts should be thin aliases that invoke vite-plus commands; do not replace vite-plus as the default tooling surface with custom script stacks.
@@ -54,8 +59,8 @@ description: "Use when implementing the @async/resumable TSRX framework: compile
 - Use test-driven development for behavior changes: write the failing test, run the narrow command, implement, rerun.
 - Start with pass-boundary TDD before end-to-end browser demos. Preferred order: TSRX semantic graph, state lowering, payload arena planning, symbol resolver planning, runtime graph, browser resume.
 - Each pass should emit or expose a human-readable artifact that the next layer consumes. Do not hide contract decisions only inside generated code or browser behavior.
-- Create proof fixtures under `fixtures/proofs/` before implementing internals. They are executable specs, not throwaway POCs. Start with `resume-basic`, `state-lvalues`, `sync-event-policy`, `payload-locators`, `symbol-resolver`, `serializer-values`, `scheduler-journal`, and `bundler-pipeline`.
-- Start each proof through GoalBuddy prompt/prep first, then run the generated `/goal`. One proof goal owns one `fixtures/proofs/<name>/` directory.
+- Proof fixtures live under `poc/fixtures/proofs/` and proof implementation packages live under `poc/packages/*`. They are executable specs and design evidence, not production framework packages. Start with `resume-basic`, `state-lvalues`, `sync-event-policy`, `payload-locators`, `symbol-resolver`, `serializer-values`, `scheduler-journal`, and `bundler-pipeline`.
+- Start each proof through GoalBuddy prompt/prep first, then run the generated `/goal`. One proof goal owns one `poc/fixtures/proofs/<name>/` directory.
 - Unit and integration tests should use vite-plus (`vp test`) once the package exists.
 - Component/browser tests should use Vitest browser mode, modeled after `/Users/jacksm5pro/dev/open-source/vitest-browser-qwik` and adapted for this framework.
 - Pipeline/HMR/build-behavior tests should use `/Users/jacksm5pro/dev/open-source/witness` so the Vite/Rolldown pipeline produces receipts.

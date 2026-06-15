@@ -7,6 +7,8 @@ is the Codex-facing always-on guidance for building the TSRX resumable framework
 
 - Read `specs/framework-design.md` first, then the relevant split spec under
   `specs/framework/`.
+- Use `specs/state.md` only as an implementation progress ledger. It records
+  completed work and caveats, not framework behavior requirements.
 - Treat `specs/framework/archive/design-thread.md` as historical context, not the
   current implementation contract.
 - Project-local task skills live under `.codex/skills/`. Use
@@ -29,6 +31,11 @@ is the Codex-facing always-on guidance for building the TSRX resumable framework
   curated re-exports; do not publish or document deep package APIs prematurely.
 - First compiler implementation is JS/TS on `@tsrx/core`. OXC/native work is
   deferred until the framework behavior and artifact contracts are proven.
+- Do not use the sibling `../native-tsrx` repository for this project: do not
+  inspect it, edit it, run commands in it, or make async-await work depend on
+  changes there. Treat `@tsrx/core` as an external dependency boundary; when a
+  parser artifact is missing, keep async-await tests at the compiler artifact
+  boundary, document the caveat, or ask the user before any dependency work.
 - Core packages are runtime-agnostic ESM. Avoid `node:*`, `fs`, `path`,
   `process`, `Buffer`, and Node-only assumptions in shared compiler/runtime code.
   Use host adapters for file access, module resolution, hashing, environment
@@ -61,7 +68,10 @@ Expected shape:
   are installed
 - root `vite.config.ts` owns pack, test, lint, format, and staged configuration
   through vite-plus
-- initial package folders are `packages/resumable`, `packages/core`,
+- current proof implementation lives under `poc/packages/*`; do not extend it
+  when beginning production framework work unless the task is explicitly a POC
+  maintenance task
+- production package folders are `packages/resumable`, `packages/core`,
   `packages/protocol`, `packages/runtime`, `packages/serializer`,
   `packages/compiler`, `packages/rolldown`, `packages/vite`, and
   `packages/test-utils`
@@ -147,19 +157,51 @@ Preferred first sequence:
 Do not skip earlier pass artifacts just to make a demo work. End-to-end fixtures
 are valuable after the pass contracts exist.
 
+### Compiler Pass Boundary Guardrail
+
+Compiler maintainability is a product requirement. A new contributor should be
+able to find the pass that owns a behavior, read its input/output artifacts, run
+its focused tests, and make a change without understanding the whole compiler.
+
+Before adding or expanding compiler behavior in `packages/compiler`, inspect the
+current compiler module layout, pass registry, and pass-level tests. The
+mini-compiler architecture from `specs/framework/02-compiler-pipeline.md` is
+mandatory: the production compiler should be organized around pass-owned modules
+and typed artifacts, not one growing `index.ts`, one broad AST visitor, or one
+mutable compiler context shared by unrelated passes.
+
+If compiler behavior is still concentrated in a large orchestrator/barrel file,
+stop and make the next compiler change a pass-boundary extraction or pass module
+split before adding more semantics. `index.ts` may re-export. The orchestrator
+may validate and run the pass graph. Semantic graph collection, state lowering,
+async dependency extraction, sync event policy extraction, capture analysis,
+template/view lowering, payload arena planning, symbol resolver planning, and
+final emit should each have visible ownership and focused artifact tests.
+
+Future compiler PRs/goals should report:
+
+- the pass ID touched or created
+- the artifacts it consumes and produces
+- the pass-owned module where the behavior lives
+- the focused artifact fixture or test that proves the boundary
+
+A green end-to-end fixture is useful evidence, but it is not enough to justify
+bypassing pass-level artifacts.
+
 ## Proof Fixtures
 
-Before implementing framework internals, create the proof fixtures under
-`fixtures/proofs/`. These are executable-spec fixtures, not a throwaway POC
-implementation. Each proof should contain authored `.tsrx` source and a README
-describing which pass-boundary tests will consume it. Do not hand-write large
+The completed POC lives under `poc/`: proof fixtures under
+`poc/fixtures/proofs/` and proof implementation packages under
+`poc/packages/*`. These are executable specs and design evidence, not production
+framework packages. When beginning real implementation, create or modify root
+`packages/*` and use the POC as regression material. Do not hand-write large
 final artifact JSON before the relevant pass exists; add expected artifacts one
 pass at a time through failing tests.
 
 Each proof should be started as its own GoalBuddy-prepared goal. First use the
 GoalBuddy prompt/prep flow for the single proof, then run the generated `/goal`
 command. Do not launch raw proof goals directly from memory. The generated goal
-should scope ownership to exactly one `fixtures/proofs/<name>/` directory, allow
+should scope ownership to exactly one `poc/fixtures/proofs/<name>/` directory, allow
 shared index updates only when needed, and forbid framework-internal
 implementation work unless the proof task explicitly asks for it.
 

@@ -9,7 +9,7 @@
 		"fmt": "vp fmt",
 		"lint": "vp lint",
 		"test": "vp test",
-		"test:compiler": "vp test packages/compiler/test/semantic-graph.test.ts"
+		"test:compiler": "vp test packages/compiler/test/*.test.ts"
 	},
 	"devDependencies": {
 		"@types/node": "24.12.2",

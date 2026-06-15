@@ -1,77 +1,102 @@
-export type PipelineSourceKind = 'tsrx';
+export const ASYNC_PROTOCOL_VERSION = 1;
 
-export type PipelineVirtualModuleKind = 'symbol-resolver' | 'manifest' | 'runtime-entry';
+export type ProtocolSyncPolicyCondition =
+	| {
+			readonly type: 'and';
+			readonly conditions: ReadonlyArray<ProtocolSyncPolicyCondition>;
+	  }
+	| {
+			readonly type: 'or';
+			readonly conditions: ReadonlyArray<ProtocolSyncPolicyCondition>;
+	  }
+	| {
+			readonly type: 'not';
+			readonly condition: ProtocolSyncPolicyCondition;
+	  }
+	| {
+			readonly type: 'graph-truthy';
+			readonly bindingId: string;
+			readonly path?: ReadonlyArray<string>;
+	  }
+	| {
+			readonly type: 'event-equals';
+			readonly field: string;
+			readonly value: unknown;
+	  };
 
-export type PipelineChunkKind = 'app' | 'symbol' | 'runtime';
-
-export type PipelineChunkOwner =
-	| 'app-module'
-	| 'generated-symbol-resolver'
-	| 'runtime-resume-entry';
-
-export type PipelineRelationshipKind =
-	| 'owns-symbols'
-	| 'uses-runtime'
-	| 'describes-manifest'
-	| 'emits-chunk';
-
-export type PipelineReceiptStage =
-	| 'compiler-transform'
-	| 'rolldown-transform'
-	| 'virtual-module-load'
-	| 'vite-transform'
-	| 'hmr-update';
-
-export type PipelineReceipt = {
-	readonly stage: PipelineReceiptStage;
-	readonly moduleId: string;
-	readonly inspectable: true;
-	readonly summary: string;
-	readonly details: Readonly<Record<string, unknown>>;
+export type ProtocolSyncPolicy = {
+	readonly when: ProtocolSyncPolicyCondition;
+	readonly actions: ReadonlyArray<'preventDefault' | 'stopPropagation'>;
 };
 
-export type PipelineVirtualModuleRecord = {
-	readonly id: string;
-	readonly kind: PipelineVirtualModuleKind;
-	readonly ownerModuleId: string;
-	readonly code: string;
+export type ProtocolStatePayload = {
+	readonly version: typeof ASYNC_PROTOCOL_VERSION;
+	readonly cells: ReadonlyArray<{
+		readonly bindingId: string;
+		readonly name: string;
+		readonly valueKind: 'scalar' | 'object' | 'array' | 'unknown';
+		readonly value?: unknown;
+	}>;
+	readonly computed: ReadonlyArray<{
+		readonly bindingId: string;
+		readonly name: string;
+		readonly async: boolean;
+	}>;
 };
 
-export type PipelineEmittedChunkRecord = {
-	readonly id: string;
-	readonly kind: PipelineChunkKind;
-	readonly owner: PipelineChunkOwner;
-	readonly moduleIds: ReadonlyArray<string>;
+export type ProtocolViewPayload = {
+	readonly version: typeof ASYNC_PROTOCOL_VERSION;
+	readonly locators: ReadonlyArray<{
+		readonly hostNodeId: string;
+		readonly strategy: 'dom-order';
+		readonly index: number;
+		readonly tagName: string;
+	}>;
+	readonly events: ReadonlyArray<{
+		readonly hostNodeId: string;
+		readonly eventName: string;
+		readonly syncPolicy?: ProtocolSyncPolicy;
+		readonly symbolIds: ReadonlyArray<string>;
+	}>;
+	readonly bindings: ReadonlyArray<{
+		readonly hostNodeId: string;
+		readonly source: string;
+		readonly bindingId: string;
+		readonly path: ReadonlyArray<string>;
+		readonly symbolId?: string;
+	}>;
+	readonly behaviors: ReadonlyArray<{
+		readonly hostNodeId: string;
+		readonly source: string;
+		readonly symbolId?: string;
+	}>;
+	readonly elementHandles: ReadonlyArray<{
+		readonly hostNodeId: string;
+		readonly handleId: string;
+		readonly name: string;
+	}>;
+	readonly asyncBoundaries: ReadonlyArray<{
+		readonly id: string;
+		readonly startAnchor: {
+			readonly strategy: 'dom-order-comment';
+			readonly index: number;
+		};
+		readonly endAnchor: {
+			readonly strategy: 'dom-order-comment';
+			readonly index: number;
+		};
+		readonly asyncReads: ReadonlyArray<{
+			readonly source: string;
+			readonly bindingId: string;
+			readonly path: ReadonlyArray<string>;
+			readonly runnerSymbolId?: string;
+		}>;
+	}>;
 };
 
-export type PipelineTransformedModuleRecord = {
-	readonly id: string;
-	readonly sourceKind: PipelineSourceKind;
-	readonly sourceFingerprint: string;
-	readonly virtualModuleIds: ReadonlyArray<string>;
-	readonly chunkIds: ReadonlyArray<string>;
-	readonly symbolIds: ReadonlyArray<string>;
-	readonly eventNames: ReadonlyArray<string>;
-};
-
-export type PipelineRelationshipRecord = {
-	readonly from: string;
-	readonly to: string;
-	readonly relationship: PipelineRelationshipKind;
-};
-
-export type PipelineManifest = {
-	readonly protocol: 'async-resumable-pipeline-poc';
-	readonly revision: number;
-	readonly transformedModules: ReadonlyArray<PipelineTransformedModuleRecord>;
-	readonly virtualModules: ReadonlyArray<Omit<PipelineVirtualModuleRecord, 'code'>>;
-	readonly emittedChunks: ReadonlyArray<PipelineEmittedChunkRecord>;
-	readonly relationships: ReadonlyArray<PipelineRelationshipRecord>;
-};
-
-export type PipelineTransformConstraints = {
-	readonly usesHydration: false;
-	readonly usesVdom: false;
-	readonly sharedCodeUsesNodeApis: false;
-	readonly buildTooling: 'vite-rolldown-vite-plus';
+export type ProtocolPayloadScripts = {
+	readonly state: ProtocolStatePayload;
+	readonly view: ProtocolViewPayload;
+	readonly stateScript: string;
+	readonly viewScript: string;
 };

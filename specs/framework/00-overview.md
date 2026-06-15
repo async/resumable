@@ -5,7 +5,8 @@ High-level product contract and index. Use this as the entry point before loadin
 **Original title:** Resumable TSRX Framework — Design
 
 **Date:** 2026-06-12
-**Status:** Approved direction, pre-implementation
+**Status:** Approved direction; production implementation started. See
+`../state.md` for current worktree progress.
 **Tagline:** A resumable UI framework for async-first apps.
 **Package:** `@async/resumable`
 
@@ -88,7 +89,8 @@ Four implementation areas:
    with framework adapters such as Vite consuming that base plugin. Extracted
    symbols become code-split entry points, and production builds emit the
    generated symbol resolver plus manifest metadata needed by the unified
-   render/resume runtime, preload/runtime graph, and cached SSR fragments.
+   render/resume runtime, preload/runtime graph, and cached initial-render
+   fragments.
 
 Do not split the framework into separate "server" and "client" products or
 packages. The authoring model is one unified render/resume model: initial render
@@ -105,7 +107,12 @@ expose only the main package and explicitly curated re-exports. `protocol` and
 their contracts; until then, do not document or rely on deep package APIs as
 public framework surface.
 
-Initial internal package map:
+The proof implementation lives under `poc/packages/*` and proof fixtures live
+under `poc/fixtures/proofs/*`. That POC tree is executable evidence that the
+design is possible, but it is not the production source tree. Real framework
+implementation begins in root `packages/*` using the same boundaries.
+
+Initial internal production package map:
 
 - `packages/resumable` — main package for `@async/resumable`; curated public
   re-exports only.
@@ -190,6 +197,7 @@ that is a framework bug.
 - [Runtime Render/Resume](./06-runtime-resumer.md)
 - [Diagnostics](./07-diagnostics.md)
 - [Deferred Decisions](./08-deferred-decisions.md)
+- [Compiler Module Split Plan](./09-compiler-module-split-plan.md)
 - [Archived design thread](./archive/design-thread.md)
 
 The split files are the implementation-facing specs. The archive preserves the design conversation as a single document for historical context.

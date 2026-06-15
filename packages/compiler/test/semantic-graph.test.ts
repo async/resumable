@@ -1,336 +1,192 @@
-import { readFile } from 'node:fs/promises';
 import { expect, test } from 'vitest';
 import { buildSemanticGraph } from '../src/index.ts';
 
-function includes(values: ReadonlyArray<string>, expected: string, label: string): void {
-	expect(values, `${label} should include ${expected}`).toContain(expected);
+const source = `
+import { makeChart } from './chart';
+
+export function App({ label }: { label: string }) @{
+	let count = state(0);
+	const menu = state({ open: true, title: 'Menu', meta: { label: 'Main' } });
+	const { title: menuTitle } = menu;
+	const { meta: { label: menuLabel } } = menu;
+	const { title: restTitle, ...menuRest } = menu;
+	const doubled = computed(() => count * 2);
+	const details = computed(async ({ signal }) => {
+		const id = menu.title;
+		const response = await fetch('/api/details/' + id, { signal });
+		return await response.json();
+	});
+	let input = element<HTMLInputElement>();
+
+	<section>
+		<input
+			el={input}
+			value={menu.title}
+			onKeyDown={(event) => {
+				if (menu.open && event.key === 'Escape') {
+					event.preventDefault();
+					event.stopPropagation();
+					menu.open = false;
+				}
+			}}
+		/>
+		<button onClick={() => count++}>{label}: {count} and {doubled} and {menuTitle} and {menuLabel} and {menuRest.meta.label}</button>
+		<canvas use={makeChart(details)} />
+		@try {
+			<p>{details.title}</p>
+		} @pending {
+			<p>Loading</p>
+		} @catch (error) {
+			<p>{error.message}</p>
+		}
+	</section>
 }
+`;
 
-function hasWrite(
-	writes: ReadonlyArray<{ target: string; operation: string; method?: string }>,
-	expected: { target: string; operation: string; method?: string },
-	label: string,
-): void {
-	expect(
-		writes.some(
-			(write) =>
-				write.target === expected.target &&
-				write.operation === expected.operation &&
-				write.method === expected.method,
-		),
-		`${label} should include ${expected.operation} ${expected.target}${
-			expected.method ? `.${expected.method}` : ''
-		}`,
-	).toBe(true);
-}
-
-test('resume-basic semantic graph exposes pass-boundary facts', async () => {
-	const fixturePath = 'fixtures/proofs/resume-basic/src/App.tsrx';
-	const fixtureUrl = new URL(`../../../${fixturePath}`, import.meta.url);
-	const source = await readFile(fixtureUrl, 'utf8');
-
+test('buildSemanticGraph creates the first production compiler artifact', async () => {
 	const graph = await buildSemanticGraph({
-		filename: fixturePath,
+		filename: 'src/App.tsrx',
 		source,
 	});
 
-	expect(graph.passId, 'passId should identify the semantic graph pass').toBe(
-		'tsrx-semantic-graph',
-	);
+	expect(graph.passId).toBe('tsrx-semantic-graph');
+	expect(graph.components).toEqual([{ name: 'App' }]);
 
-	includes(
-		graph.components.map((component) => component.name),
-		'App',
-		'components',
-	);
-	includes(
-		graph.stateSites.map((site) => site.name),
-		'count',
-		'state sites',
-	);
-	includes(
-		graph.stateSites.map((site) => site.name),
-		'menu',
-		'state sites',
-	);
-	includes(
-		graph.computedSites.map((site) => site.name),
-		'details',
-		'computed sites',
-	);
-	expect(
-		graph.computedSites.some((site) => site.name === 'details' && site.async),
-		'details should be marked as an async computed site',
-	).toBe(true);
-	includes(
-		graph.elementHandles.map((handle) => handle.name),
-		'searchInput',
-		'element handles',
-	);
-	includes(
-		graph.eventProps.map((event) => event.eventName),
-		'keydown',
-		'event props',
-	);
-	expect(
-		graph.eventProps.some((event) => event.eventName === 'keydown' && event.hasSyncPolicy),
-		'keydown should expose a sync preventDefault policy',
-	).toBe(true);
-	expect(graph.behaviorProps, 'one use behavior should be discovered').toHaveLength(1);
-	expect(graph.asyncBoundaries, 'one @try async boundary should be discovered').toHaveLength(1);
-	includes(
-		graph.stateWrites.map((write) => write.target),
-		'count',
-		'state writes',
-	);
-	includes(
-		graph.stateWrites.map((write) => write.target),
-		'menu.open',
-		'state writes',
-	);
-	includes(
-		graph.bindingReads.map((read) => read.source),
-		'details.title',
-		'binding reads',
-	);
-});
-
-test('state-lvalues semantic graph exposes valid lvalue pass-boundary facts', async () => {
-	const fixturePath = 'fixtures/proofs/state-lvalues/src/valid.tsrx';
-	const fixtureUrl = new URL(`../../../${fixturePath}`, import.meta.url);
-	const source = await readFile(fixtureUrl, 'utf8');
-
-	const graph = await buildSemanticGraph({
-		filename: fixturePath,
-		source,
-	});
-
-	includes(
-		graph.components.map((component) => component.name),
-		'App',
-		'components',
-	);
-	expect(graph.stateSites).toContainEqual({ name: 'count', kind: 'scalar' });
-	expect(graph.stateSites).toContainEqual({ name: 'obj', kind: 'object' });
-	expect(graph.computedSites).toContainEqual({ name: 'total', async: false });
-	expect(graph.computedSites).toContainEqual({ name: 'currentTitle', async: false });
-	includes(
-		graph.eventProps.map((event) => event.eventName),
-		'click',
-		'event props',
-	);
-	includes(
-		graph.eventProps.map((event) => event.eventName),
-		'input',
-		'event props',
-	);
-	includes(
-		graph.eventProps.map((event) => event.eventName),
-		'change',
-		'event props',
-	);
-
-	hasWrite(graph.stateWrites, { target: 'count', operation: 'update' }, 'state writes');
-	hasWrite(graph.stateWrites, { target: 'count', operation: 'assign' }, 'state writes');
-	hasWrite(graph.stateWrites, { target: 'obj.x', operation: 'assign' }, 'state writes');
-	hasWrite(graph.stateWrites, { target: 'obj.nested.title', operation: 'assign' }, 'state writes');
-	hasWrite(
-		graph.stateWrites,
-		{ target: 'obj.nested.meta.saves', operation: 'update' },
-		'state writes',
-	);
-	hasWrite(graph.stateWrites, { target: 'obj.tags.0', operation: 'assign' }, 'state writes');
-	hasWrite(
-		graph.stateWrites,
-		{ target: 'obj.items', operation: 'call', method: 'push' },
-		'state writes',
-	);
-	hasWrite(
-		graph.stateWrites,
-		{ target: 'obj.items', operation: 'call', method: 'splice' },
-		'state writes',
-	);
-	hasWrite(
-		graph.stateWrites,
-		{ target: 'obj.items.index.done', operation: 'assign' },
-		'state writes',
-	);
-	hasWrite(
-		graph.stateWrites,
-		{ target: 'obj.items.index.meta.edits', operation: 'update' },
-		'state writes',
-	);
-
-	expect(graph.destructuredAliases).toContainEqual({
-		name: 'nested',
-		source: 'obj.nested',
-		kind: 'state-path',
-		writability: 'writable-path',
-	});
-});
-
-test('state-lvalues semantic graph exposes invalid write diagnostic targets', async () => {
-	const fixturePath = 'fixtures/proofs/state-lvalues/src/diagnostics.tsrx';
-	const fixtureUrl = new URL(`../../../${fixturePath}`, import.meta.url);
-	const source = await readFile(fixtureUrl, 'utf8');
-
-	const graph = await buildSemanticGraph({
-		filename: fixturePath,
-		source,
-	});
-
-	expect(graph.computedSites).toContainEqual({ name: 'doubled', async: false });
-	hasWrite(graph.stateWrites, { target: 'doubled', operation: 'assign' }, 'invalid writes');
-	hasWrite(graph.stateWrites, { target: 'computedAlias', operation: 'update' }, 'invalid writes');
-	hasWrite(graph.stateWrites, { target: 'props.count', operation: 'assign' }, 'invalid writes');
-	hasWrite(graph.stateWrites, { target: 'propCount', operation: 'update' }, 'invalid writes');
-	hasWrite(graph.stateWrites, { target: 'settings.x', operation: 'assign' }, 'invalid writes');
-	hasWrite(
-		graph.stateWrites,
-		{ target: 'settings.nested.title', operation: 'assign' },
-		'invalid writes',
-	);
-	hasWrite(graph.stateWrites, { target: 'items', operation: 'call', method: 'push' }, 'invalid writes');
-	hasWrite(graph.stateWrites, { target: 'xAlias', operation: 'assign' }, 'invalid writes');
-	hasWrite(graph.stateWrites, { target: 'dynamicAlias', operation: 'assign' }, 'invalid writes');
-	hasWrite(graph.stateWrites, { target: 'firstItem', operation: 'assign' }, 'invalid writes');
-
-	expect(graph.destructuredAliases).toEqual(
+	expect(graph.graphBindings).toEqual(
 		expect.arrayContaining([
-			{
-				name: 'propCount',
-				source: 'props.count',
-				kind: 'props-path',
-				writability: 'read-only',
-			},
-			{
-				name: 'xAlias',
-				source: 'obj.x',
-				kind: 'state-path',
-				writability: 'ambiguous-write',
-			},
-			{
-				name: 'dynamicAlias',
-				source: null,
-				kind: 'state-path',
-				writability: 'ambiguous-write',
-			},
-			{
-				name: 'firstItem',
-				source: 'obj.items.*',
-				kind: 'state-path',
-				writability: 'local-copy',
-			},
+			expect.objectContaining({
+				name: 'count',
+				kind: 'state',
+				writable: true,
+				valueKind: 'scalar',
+			}),
+			expect.objectContaining({
+				name: 'menu',
+				kind: 'state',
+				writable: true,
+				valueKind: 'object',
+			}),
+			expect.objectContaining({
+				name: 'doubled',
+				kind: 'computed',
+				writable: false,
+				async: false,
+			}),
+			expect.objectContaining({
+				name: 'details',
+				kind: 'computed',
+				writable: false,
+				async: true,
+			}),
+			expect.objectContaining({
+				name: 'input',
+				kind: 'element',
+				writable: false,
+			}),
+			expect.objectContaining({
+				name: 'props',
+				kind: 'prop',
+				writable: false,
+				valueKind: 'object',
+			}),
 		]),
 	);
-});
-
-test('payload-locators semantic graph exposes locator ownership facts', async () => {
-	const fixturePath = 'fixtures/proofs/payload-locators/src/App.tsrx';
-	const fixtureUrl = new URL(`../../../${fixturePath}`, import.meta.url);
-	const source = await readFile(fixtureUrl, 'utf8');
-
-	const graph = await buildSemanticGraph({
-		filename: fixturePath,
-		source,
-	});
-	const locatorGraph = graph as typeof graph & {
-		readonly elementHandleBindings: ReadonlyArray<{
-			readonly handleName: string;
-			readonly hostNodeId: string;
-		}>;
-		readonly textBindings: ReadonlyArray<{ readonly source: string; readonly hostNodeId: string }>;
-		readonly branchAnchors: ReadonlyArray<{
-			readonly condition: string;
-			readonly firstHostNodeId: string | null;
-		}>;
-		readonly keyedLoops: ReadonlyArray<{
-			readonly iterable: string;
-			readonly itemName: string;
-			readonly indexName: string | null;
-			readonly key: string | null;
-			readonly firstHostNodeId: string | null;
-		}>;
-		readonly emptyFallbacks: ReadonlyArray<{ readonly firstHostNodeId: string | null }>;
-	};
 
 	expect(graph.hostNodes.map((node) => node.tagName)).toEqual([
-		'main',
-		'header',
-		'h1',
-		'p',
-		'label',
+		'section',
 		'input',
 		'button',
-		'section',
-		'h2',
-		'p',
-		'section',
-		'h2',
+		'canvas',
 		'p',
 		'p',
-		'button',
-		'ol',
-		'li',
-		'article',
-		'h3',
 		'p',
-		'button',
-		'li',
-		'p',
-		'footer',
-		'button',
-		'output',
 	]);
-	expect(locatorGraph.elementHandleBindings).toEqual(
-		expect.arrayContaining([
-			expect.objectContaining({ handleName: 'filterInput', hostNodeId: 'h5' }),
-			expect.objectContaining({ handleName: 'detailsPanel', hostNodeId: 'h10' }),
-		]),
-	);
-	expect(locatorGraph.textBindings).toEqual(
-		expect.arrayContaining([
-			expect.objectContaining({ source: 'summary', hostNodeId: 'h2' }),
-			expect.objectContaining({ source: 'view.message', hostNodeId: 'h3' }),
-			expect.objectContaining({ source: 'view.open ? "Hide" : "Show"', hostNodeId: 'h6' }),
-			expect.objectContaining({ source: 'selected.title', hostNodeId: 'h11' }),
-			expect.objectContaining({ source: 'selected.status', hostNodeId: 'h12' }),
-			expect.objectContaining({ source: 'selected.count', hostNodeId: 'h13' }),
-			expect.objectContaining({ source: 'index + 1', hostNodeId: 'h18' }),
-			expect.objectContaining({ source: 'item.title', hostNodeId: 'h18' }),
-			expect.objectContaining({
-				source: 'item.status === "ready" ? "Ready" : "Blocked"',
-				hostNodeId: 'h19',
+
+	expect(graph.aliases).toEqual([
+		{
+			name: 'label',
+			target: 'props.label',
+			declarationKind: 'const',
+			sourceSpan: expect.objectContaining({
+				filename: 'src/App.tsrx',
 			}),
-			expect.objectContaining({ source: 'item.count', hostNodeId: 'h19' }),
-			expect.objectContaining({ source: 'view.filter', hostNodeId: 'h22' }),
-			expect.objectContaining({ source: 'view.message', hostNodeId: 'h25' }),
-		]),
-	);
-	expect(locatorGraph.branchAnchors).toEqual(
+		},
+		{
+			name: 'menuTitle',
+			target: 'menu.title',
+			declarationKind: 'const',
+			sourceSpan: expect.objectContaining({
+				filename: 'src/App.tsrx',
+			}),
+		},
+		{
+			name: 'menuLabel',
+			target: 'menu.meta.label',
+			declarationKind: 'const',
+			sourceSpan: expect.objectContaining({
+				filename: 'src/App.tsrx',
+			}),
+		},
+		{
+			name: 'restTitle',
+			target: 'menu.title',
+			declarationKind: 'const',
+			sourceSpan: expect.objectContaining({
+				filename: 'src/App.tsrx',
+			}),
+		},
+		{
+			name: 'menuRest',
+			target: 'menu',
+			declarationKind: 'const',
+			excludedPaths: [['title']],
+			sourceSpan: expect.objectContaining({
+				filename: 'src/App.tsrx',
+			}),
+		},
+	]);
+
+	expect(graph.events).toEqual(
 		expect.arrayContaining([
 			expect.objectContaining({
-				condition: 'view.open',
-				firstHostNodeId: 'h10',
+				eventName: 'keydown',
+				handlerCount: 1,
+				hasSyncPolicyCandidate: true,
+			}),
+			expect.objectContaining({
+				eventName: 'click',
+				handlerCount: 1,
+				hasSyncPolicyCandidate: false,
 			}),
 		]),
 	);
-	expect(locatorGraph.keyedLoops).toEqual(
+
+	expect(graph.behaviors).toEqual([
+		expect.objectContaining({
+			source: 'makeChart(details)',
+		}),
+	]);
+
+	expect(graph.templateReads).toEqual(
 		expect.arrayContaining([
-			expect.objectContaining({
-				iterable: 'visibleItems',
-				itemName: 'item',
-				indexName: 'index',
-				key: 'item.id',
-				firstHostNodeId: 'h16',
-			}),
+			expect.objectContaining({ source: 'menu.title' }),
+			expect.objectContaining({ source: 'label' }),
+			expect.objectContaining({ source: 'count' }),
+			expect.objectContaining({ source: 'doubled' }),
+			expect.objectContaining({ source: 'menuTitle' }),
+			expect.objectContaining({ source: 'menuLabel' }),
+			expect.objectContaining({ source: 'menuRest.meta.label' }),
+			expect.objectContaining({ source: 'details.title' }),
+			expect.objectContaining({ source: 'error.message' }),
 		]),
 	);
-	expect(locatorGraph.emptyFallbacks).toEqual(
+
+	expect(graph.stateWrites).toEqual(
 		expect.arrayContaining([
-			expect.objectContaining({
-				firstHostNodeId: 'h21',
-			}),
+			expect.objectContaining({ target: 'menu.open', operation: 'assign' }),
+			expect.objectContaining({ target: 'count', operation: 'update' }),
 		]),
 	);
+
+	expect(graph.asyncBoundaries).toHaveLength(1);
 });

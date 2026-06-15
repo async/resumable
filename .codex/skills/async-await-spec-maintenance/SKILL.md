@@ -1,6 +1,6 @@
 ---
 name: async-await-spec-maintenance
-description: "Use when updating, splitting, reviewing, or reconciling the @async/resumable framework design specs under specs/framework*. Applies the current decisions without over-scoping implementation: TSRX-only, no hydration, no VDOM, graph-state resumability, compiler artifact pipeline, JS/TS on @tsrx/core first, runtime-agnostic ESM, Rolldown/Vite-only build tooling, and explicit deferred decisions."
+description: "Use when updating, splitting, reviewing, or reconciling the @async/resumable framework design specs under specs/framework* or the specs/state.md progress ledger. Applies the current decisions without over-scoping implementation: TSRX-only, no hydration, no VDOM, graph-state resumability, compiler artifact pipeline, JS/TS on @tsrx/core first, runtime-agnostic ESM, Rolldown/Vite-only build tooling, and explicit deferred decisions."
 ---
 
 # Async Resumable Spec Maintenance
@@ -11,6 +11,7 @@ description: "Use when updating, splitting, reviewing, or reconciling the @async
 2. Read only the relevant split spec files under [specs/framework](../../../specs/framework).
 3. Treat [archive/design-thread.md](../../../specs/framework/archive/design-thread.md) as historical context, not the current implementation contract.
 4. Keep deferred or intentionally unresolved topics in [08-deferred-decisions.md](../../../specs/framework/08-deferred-decisions.md).
+5. Use [specs/state.md](../../../specs/state.md) only for completed-work status and caveats, not behavior requirements.
 
 ## Maintenance Rules
 
@@ -22,6 +23,7 @@ description: "Use when updating, splitting, reviewing, or reconciling the @async
   - Dynamic imports are owned by the symbol resolver, not event props.
   - Sync event policy handles browser-immediate behavior before lazy imports.
   - First compiler implementation uses JS/TS with `@tsrx/core`; OXC/native work is deferred.
+  - Do not use the sibling `../native-tsrx` repository: do not inspect it, edit it, run commands in it, or make async-await work depend on changes there.
   - Shared packages are runtime-agnostic ESM and avoid Node-only APIs.
   - Build scripts and optimization use Rolldown or Vite only.
 - Do not specify low-level runtime storage shapes unless the user asks. Specify behavioral contracts instead.
@@ -39,6 +41,8 @@ description: "Use when updating, splitting, reviewing, or reconciling the @async
 - `06-runtime-resumer.md`: graph behavior, scheduler, flush, resume.
 - `07-diagnostics.md`: compiler/runtime diagnostic shape and examples.
 - `08-deferred-decisions.md`: known later decisions and build order.
+- `09-compiler-module-split-plan.md`: concrete production compiler split target and migration order.
+- `../state.md`: implementation progress ledger and caveats, not contract.
 
 ## Checklist
 

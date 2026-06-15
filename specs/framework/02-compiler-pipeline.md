@@ -51,12 +51,70 @@ human-readable form. Tests should target both individual pass artifacts and
 end-to-end emitted output, so a regression in event policy extraction does not
 have to be diagnosed from a full generated bundle snapshot.
 
+### Production compiler contribution boundary
+
+Maintainability and contributor experience are compiler requirements. A new
+contributor should be able to open `packages/compiler`, find the pass that owns
+the behavior they are changing, read that pass's input/output artifact types, run
+its focused fixture tests, and understand the change without mentally executing
+the whole compiler.
+
+Once `packages/compiler` exists, new compiler behavior must not keep
+accumulating in one large source file, one hidden AST visitor, or one mutable
+"compiler state" object shared by unrelated passes. The public package entry may
+re-export APIs. The orchestrator may validate and run the pass graph. They must
+not absorb pass implementation details.
+
+Each production compiler pass or small pass family should have visible ownership
+in source layout and tests:
+
+- a pass module with a narrow domain and a stable pass ID
+- declared `consumes` and `produces` artifact keys in the pass registry
+- typed input and output artifact contracts
+- diagnostics whose `phase`, `passId`, and `artifactKeys` identify that pass
+- focused fixture tests that assert input artifacts to output
+  artifacts/diagnostics
+- optional shared helpers only when they sit behind artifact contracts
+
+Before adding a new compiler feature or expanding an existing one, check whether
+the owning pass already has that shape. If behavior is still buried inside a
+large orchestrator/barrel file, first split the owning pass boundary or add the
+missing pass module as part of the change. A temporary single-file prototype is
+acceptable only while proving the first vertical slice. It must not become the
+place where later semantic graph, state lowering, async extraction, sync policy,
+capture, template/view, payload, resolver, or final emit behavior is added.
+
+Raw TSRX/JavaScript AST traversal belongs in the semantic graph pass and other
+explicit syntax-analysis passes. Downstream passes should consume artifacts such
+as `semanticGraph`, `stateLowering`, or `payloadArena`, not re-walk source code
+or reach into walker-local state. If a downstream pass needs more information,
+the upstream pass should add or version an artifact.
+
+The preferred production shape is:
+
+- `index` / public entry modules: curated package surface and re-exports only
+- pass registry / orchestrator: pass IDs, `consumes` / `produces`, graph
+  validation, execution order, and artifact dump wiring
+- pass-owned modules: one focused domain per pass or small pass family
+- shared artifact types: typed contracts between passes, not private mutable
+  state
+- fixture tests: readable input artifacts to output artifacts/diagnostics for
+  each pass
+
+If a later implementation discovers that two pass domains must share logic,
+extract a shared helper behind the artifact contract. Do not merge the pass
+domains back into one broad visitor or one "compiler context" that every pass
+mutates.
+
+See `09-compiler-module-split-plan.md` for the concrete production module split
+target and migration order.
+
 ### Initial compiler substrate
 
 The first implementation uses JavaScript/TypeScript with `@tsrx/core` as the
-parser, semantic, and codegen-plugin substrate. This is a prototype strategy, not
-a permanent architectural limit: prove the framework behavior first, then replace
-compiler internals later if needed.
+parser, semantic, and codegen-plugin substrate. This is an initial
+implementation strategy, not a permanent architectural limit: prove the
+framework behavior first, then replace compiler internals later if needed.
 
 The compiler package is runtime-agnostic ESM. It should not import Node modules
 for paths, files, URL handling, crypto, or process state. Path/URL normalization
@@ -109,8 +167,8 @@ a `count++` is an `UpdateExpression`; `menu.open = false` is an
 `state()` is an object expression whose static keys and literal values are known
 before lowering.
 
-Semantic analysis decides what an expression *refers to*. Runtime serialization
-still validates what a dynamic value *is*. The compiler can know that
+Semantic analysis decides what an expression _refers to_. Runtime serialization
+still validates what a dynamic value _is_. The compiler can know that
 `state({ open: false })` starts as a serializable object and can track later
 path writes such as `menu.open = true`; it cannot prove that every value flowing
 through a server fetch, third-party call, or opaque function remains

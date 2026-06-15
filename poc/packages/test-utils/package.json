@@ -1,0 +1,9 @@
+{
+	"name": "@async/resumable-test-utils",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"exports": {
+		"./pipeline-receipts": "./src/pipeline-receipts.ts"
+	}
+}

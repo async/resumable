@@ -11,7 +11,7 @@ conditional or keyed item is removed.
 Use `element<T>()` when lazy event code needs a typed, resumable handle to a host
 element. Bind it with the framework-owned `el` prop:
 
-```tsx
+```tsrx
 export function SearchBox() @{
   let input = element<HTMLInputElement>();
 
@@ -49,7 +49,7 @@ should not become serializer problems.
 
 Use the framework-owned `use` prop on host elements for node-owned DOM behavior:
 
-```tsx
+```tsrx
 import { Chart } from "chart.js";
 
 function chart(config: ChartConfig) {
@@ -81,7 +81,8 @@ browser resume phase resolves the element, lazy-loads the behavior symbol, runs
 it in the browser, and stores the cleanup with that node.
 
 `use` is compiler-special on host elements. In `use={chart(config)}`, the
-factory call is not normal eager SSR execution. The compiler treats it as:
+factory call is not normal eager initial-render execution. The compiler treats
+it as:
 
 ```txt
 behavior: chart
@@ -91,7 +92,7 @@ owner: current host element
 
 The v1 supported forms are:
 
-```tsx
+```tsrx
 <input use={autofocus} />
 <canvas use={chart(config)} />
 <div use={[tooltip(options), clickOutside(close)]} />
@@ -100,8 +101,7 @@ The v1 supported forms are:
 Behavior functions receive the element and may return a cleanup function:
 
 ```ts
-type ElementBehavior<T extends Element> =
-  (element: T) => void | (() => void);
+type ElementBehavior<T extends Element> = (element: T) => void | (() => void);
 ```
 
 When behavior inputs change, v1 cleans up the existing behavior and runs it
@@ -120,7 +120,7 @@ browser behavior input.
 
 Visibility is modeled as an element event, parallel to `onClick`:
 
-```tsx
+```tsrx
 <img
   src={src}
   onVisible={() => analytics.recordImageSeen(src)}
@@ -138,7 +138,7 @@ Semantics:
 - **Not a reactive computation.** State reads inside are current-value reads —
   no subscriptions, no re-runs. DOM-backed libraries that need setup, updates,
   and cleanup belong in `use`, not `onVisible`.
-- The zero-JS guarantee gets a *scoped*, greppable asterisk: pages without
+- The zero-JS guarantee gets a _scoped_, greppable asterisk: pages without
   `onVisible` ship zero eager behavior; pages with it run exactly the symbols
   whose elements are on screen. There is no free-floating equivalent
   (`onMount()`, `client()`) and there never will be — anything without an
@@ -159,7 +159,7 @@ your effect.")
 
 Event and behavior props accept either one expression or an array of expressions:
 
-```tsx
+```tsrx
 <button onClick={[saveDraft, closeDialog]} />
 <div onVisible={[recordImpression, preloadDetails]} />
 <canvas use={[chart(config), resizeCanvas]} />
@@ -187,7 +187,7 @@ attribute, its value is a normal function AST, the guard is an `IfStatement`,
 and graph-state reads/writes are resolved through the same binding map used by
 state lowering. No inline DOM closure is required for the authored handler.
 
-```tsx
+```tsrx
 let menuOpen = state(false);
 
 <input
@@ -203,8 +203,8 @@ let menuOpen = state(false);
 The compiler records a sync policy equivalent to:
 
 ```ts
-if (graph.read(menuOpenId) && event.key === "Escape") {
-  event.preventDefault();
+if (graph.read(menuOpenId) && event.key === 'Escape') {
+	event.preventDefault();
 }
 ```
 
@@ -240,16 +240,14 @@ that maps symbol IDs from `async/view` to chunks and exports:
 
 ```ts
 export function loadSymbol(id: number) {
-  switch (id) {
-    case 7:
-      return import("/assets/menu.handlers.ab12.js")
-        .then((mod) => mod.onKeyDown_7);
-    case 8:
-      return import("/assets/menu.bindings.cd34.js")
-        .then((mod) => mod.textBinding_8);
-    default:
-      return Promise.reject(new Error(`Unknown async symbol ${id}`));
-  }
+	switch (id) {
+		case 7:
+			return import('/assets/menu.handlers.ab12.js').then((mod) => mod.onKeyDown_7);
+		case 8:
+			return import('/assets/menu.bindings.cd34.js').then((mod) => mod.textBinding_8);
+		default:
+			return Promise.reject(new Error(`Unknown async symbol ${id}`));
+	}
 }
 ```
 
