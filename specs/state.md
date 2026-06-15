@@ -367,9 +367,10 @@ in the split specs.
 ### Runtime, Serializer, And Build Adapters
 
 - The runtime graph supports path-granular invalidation, microtask flush
-  scheduling, sync computed recomputation, async computed request versioning,
-  stale async completion suppression, and collection of subscriber-produced DOM
-  mutation journal records.
+  scheduling, direct sync computed lazy recomputation after path-granular
+  invalidation, async computed request versioning, abort-signal wiring, stale
+  fulfilled async completion suppression, and collection of subscriber-produced
+  DOM mutation journal records.
 - The runtime graph can return either the previous or next value from graph
   updates, giving generated update-expression code a target for preserving
   postfix and prefix JavaScript value semantics.
@@ -428,18 +429,18 @@ in the split specs.
 - Runtime payload helpers parse canonical JSON `async/state` and `async/view`
   data scripts, check the shared protocol version, deserialize serialized cell
   values into a runtime graph, and return decoded view records.
-- The runtime exposes a composed browser-resume entry that decodes payload
-  scripts, creates the runtime graph from serialized `async/state` cell values,
-  materializes the `async/view` resume runtime, and starts delegated
-  event/boundary wiring.
-- The pure-value serializer preserves identity/cycles and supports primitives,
-  plain objects/arrays, `Date`, `RegExp`, `URL`, `BigInt`, `Map`, `Set`,
-  `ArrayBuffer`, and the current typed-array source table; direct unsupported
-  values report the state path.
+- The runtime exposes a payload-driven resume helper that decodes caller-supplied
+  payload script strings, creates the runtime graph from serialized
+  `async/state` cell values, materializes the `async/view` resume runtime, and
+  starts delegated event/boundary wiring against a caller-supplied DOM-like root.
+- The pure-value `serializeGraphValue` / `deserializeGraphValue` path preserves
+  identity/cycles and supports primitives, plain objects/arrays, `Date`,
+  `RegExp`, `URL`, `BigInt`, `Map`, `Set`, `ArrayBuffer`, and the current
+  typed-array source table; direct unsupported values report the state path.
 - The main package exposes the curated public surface, including author
-  intrinsics, the browser resume entry, and source-entry Rolldown/Vite adapters.
-  Current adapter tests cover `.tsrx` transform metadata, resolver/payload
-  virtual module loading, and Vite transform/load forwarding.
+  intrinsics, the payload-driven resume helper, and source-entry Rolldown/Vite
+  adapters. Current adapter tests cover `.tsrx` transform metadata,
+  resolver/payload virtual module loading, and Vite transform/load forwarding.
 
 ## Remaining Major Work
 
@@ -547,12 +548,12 @@ package/unit-integration evidence. They do not prove browser-mode component
 tests, real browser resume, witness HMR/build-pipeline behavior, or end-to-end
 no-component-execution-on-resume behavior.
 
-Because much of this implementation is currently untracked, `git diff --check`
-only proves whitespace for tracked modifications. Use `vp fmt --check`,
-`vp check`, focused tests, and explicit file scans to cover untracked
-`packages/`, `specs/state.md`, and
-`specs/framework/09-compiler-module-split-plan.md`
-until those files are added to git.
+The production package implementation and split spec files are now tracked on
+the current `impl` branch. `git diff --check` proves whitespace only for the
+current tracked modifications; use `vp fmt --check`, `vp check`, focused tests,
+and explicit file scans when verification needs to include the broader tracked
+package/source set. The current untracked `dist/` directory is generated
+pack-output evidence, not source-of-truth implementation state.
 
 Historical focused implementation receipts retained for context:
 
@@ -643,10 +644,10 @@ commands are listed in the implementation/build section above.
   diagnostics for post-`await` reads and missing async boundaries, payload/view
   runner symbol wiring, runtime async request versioning/stale suppression, and
   Node fake-DOM boundary runner dispatch for pending/fulfilled status changes.
-- runtime-async-status audit confirmed the graph source has pending,
-  fulfilled, and rejected async snapshot paths, but current focused runtime
-  tests assert pending/fulfilled snapshots and stale fulfilled completion
-  suppression only.
+- runtime-async-status audit confirmed the graph source has pending, fulfilled,
+  and rejected async snapshot paths and applies version/abort guards before
+  fulfilled and rejected commits, but current focused runtime tests assert
+  pending/fulfilled snapshots and stale fulfilled completion suppression only.
 - async-boundary DOM audit confirmed current resume tests use a boundary runner
   symbol that returns `setText` journal records for pending/fulfilled status; no
   package source or test applies pending, fulfilled, or catch branch DOM
@@ -702,6 +703,11 @@ commands are listed in the implementation/build section above.
   script wrapper and shared protocol version, while
   `createRuntimeGraphFromStatePayload` deserializes protocol state cell values
   into runtime graph cells only.
+- runtime payload-resume audit confirmed `resumeFromPayloadScripts` composes
+  payload decoding, runtime graph creation, `async/view` materialization, and
+  delegated event/boundary startup for caller-supplied payload strings and a
+  DOM-like root. It does not scan a real browser document for payload scripts or
+  prove real DOM/browser startup behavior.
 - package/spec inventory scan confirmed nine production package manifests, no
   `packages/server` manifest, and split spec files `00` through `09` under
   `specs/framework/`.
@@ -732,13 +738,14 @@ commands are listed in the implementation/build section above.
   shared dependency versions in the default pnpm catalog, and the current
   `vite.config.ts` uses a flat ten-entry source map for `vp pack` plus a
   Node-only package test include.
-- pack-output audit confirmed `vp pack` currently emits root `dist/` ESM and
-  declaration files for the configured entry map plus hashed shared chunks, and
-  reports dependency-bundling hints for packages such as `pathe`, `acorn`, and
-  TSRX parser support dependencies.
+- pack-output audit confirmed `pnpm exec vp pack` currently cleans the untracked
+  root `dist/` directory and emits 26 ESM/declaration files for the configured
+  ten-entry source map plus hashed shared chunks. The command still reports
+  dependency-bundling hints for packages such as `pathe`, `acorn`, and TSRX
+  parser support dependencies.
 - initial-render gap scan confirmed the runtime package currently exposes graph,
-  payload, and browser-resume modules, but no runtime initial-render entry or
-  initial-render package test.
+  payload, and resume-helper modules, but no runtime initial-render entry,
+  document-scanning browser bootstrap, or initial-render package test.
 - initial-render remaining-work audit clarified that the existing compiler
   `renderShell` is a payload-script artifact, not the initial-render runtime
   pipeline.
@@ -755,11 +762,17 @@ commands are listed in the implementation/build section above.
   runtime failure messages for compiler-only intrinsics, protocol version/type
   fixtures, opening payload script marker assertions, and selected protocol
   record-count summaries for cells, locators, events, bindings, and behaviors.
+  The current test-utils summary helper does not parse payload JSON, validate
+  closing script tags, or count computed entries, element handles, or async
+  boundary records.
 - shared-state audit confirmed current `shared()` support is limited to the
   `@async/resumable-core` compiler-intrinsic stub, the main package re-export,
   public-surface presence checks, and diagnostic suggestion text. The semantic
   graph collector currently records `state()`, `computed()`, and `element()`
-  calls, but not shared definitions or shared instance calls.
+  calls, but not shared definitions or shared instance calls. The current core
+  stub/test use a placeholder `shared(id, create, options)` call shape and do
+  not prove the authored `shared(() => ...)` definition/instance-call surface
+  from `03-state-graph.md`.
 - props/projection audit confirmed current component parameter support is limited
   to first-parameter `prop` graph bindings, object-pattern aliases, prop reads,
   and read-only prop-write diagnostics. No current package source emits children
@@ -786,6 +799,11 @@ commands are listed in the implementation/build section above.
   and exposes them through `takeJournal`; executable coverage currently
   exercises `setText` records and one `setAttr` resume path, with no `setProp`,
   range-operation, cleanup, real-DOM application, or browser-ordering coverage.
+- runtime sync-computed audit confirmed current runtime graph source lazily
+  recomputes dirty sync computed nodes on read and marks dependent computed and
+  async-computed nodes dirty when a computed node changes; focused tests
+  directly exercise one state-path dependency and its subscriber journal update,
+  not computed-on-computed chains or generated binding integration.
 - runtime collection-call audit confirmed the semantic expression collector and
   runtime share the current static mutating-method allow-list, while focused
   tests directly cover only selected representative methods and no-op cases:
@@ -801,6 +819,11 @@ commands are listed in the implementation/build section above.
   `async/view` script wrappers. Source has encode/decode branches for the
   current typed-array family, while focused tests directly exercise `Uint8Array`
   and `Int16Array`.
+- serializer-tier audit confirmed current package source implements pure
+  built-in value graph serialization and protocol-state wrapping only. It does
+  not yet implement framework graph reference records, async/shared snapshot
+  serialization, app-owned or third-party value class restoration, or compact
+  production arena encoding from the payload spec tiers.
 - diagnostic-inventory audit confirmed the implemented stable code list in this
   ledger matches package source for compiler, serializer, and generated resolver
   diagnostics; it also confirmed `sync-policy` is an implemented/tested
@@ -823,8 +846,12 @@ commands are listed in the implementation/build section above.
   dependency chunking.
 - The compiler has an early render-shell artifact path for payload scripts, but
   the runtime package does not yet contain a working initial-render entry. Treat
-  browser-resume payload decoding as a resumed-runtime slice, not proof of the
+  payload-resume decoding as a resumed-runtime slice, not proof of the
   initial-render -> payload -> browser-resume pipeline.
+- The current payload-driven resume helper takes explicit payload script strings
+  and a root object from the caller. It is not yet a document-scanning browser
+  bootstrap that locates `async/state` / `async/view` scripts or proves startup
+  in a real browser document.
 - Current payload/symbol tests prove simple DOM-order locators, protocol state
   cell/computed metadata planning, protocol view wiring, symbol ID wiring,
   resolver module string emission, fail-closed unknown-symbol metadata,
@@ -887,15 +914,20 @@ commands are listed in the implementation/build section above.
   component/browser execution, layout/locator behavior in an actual document, or
   no-component-execution-on-resume in a browser.
 - Current runtime graph tests prove in-memory graph invalidation, scheduling,
-  async versioning, selected collection calls and no-op invalidation behavior,
-  static deletes, and subscriber-produced `setText` journal collection. The
-  runtime and expression-collector source allow-lists also include `copyWithin`,
-  `fill`, `reverse`, `sort`, and `splice`, but focused tests do not directly
-  exercise those methods. Current resume-runtime tests add one `setAttr` journal
-  path. They do not prove `setProp`, `insertRange`, `removeRange`, `moveRange`,
-  or `runCleanup` records; that compiler-emitted binding symbols apply the DOM
-  journal to real browser nodes; or that journal ordering is correct under a
-  browser event loop.
+  one direct sync-computed lazy recompute path, async request versioning,
+  abort-signal wiring, stale fulfilled completion suppression, selected
+  collection calls and no-op invalidation behavior, static deletes, and
+  subscriber-produced `setText` journal collection. The runtime graph source
+  marks dependent computed and async-computed nodes dirty when a computed node
+  changes, but focused tests do not directly exercise computed-on-computed
+  dependency chains. The runtime and expression-collector source allow-lists
+  also include `copyWithin`, `fill`, `reverse`, `sort`, and `splice`, but
+  focused tests do not directly exercise those methods. Current resume-runtime
+  tests add one `setAttr` journal path. They do not prove `setProp`,
+  `insertRange`, `removeRange`, `moveRange`, or `runCleanup` records; that
+  compiler-emitted binding symbols apply the DOM journal to real browser nodes;
+  generated binding-symbol integration for computed dependencies; or that
+  journal ordering is correct under a browser event loop.
 - Current state-lowering tests prove artifact lowering and diagnostics for
   selected graph reads/writes, assignment/update metadata, static collection
   calls, static deletes, optional graph writes, rest-alias exclusions, read-only
@@ -923,11 +955,11 @@ commands are listed in the implementation/build section above.
   before generated async-boundary anchors.
 - Current `shared()` coverage proves only that the compiler-intrinsic stub throws
   when executed directly and that the main package re-exports the function. It
-  does not prove shared definition parsing, stable shared definition IDs,
-  graph-context resolution, request/container/page scoped instances, shared
-  dependency/cycle diagnostics, payload records, browser resume of shared
-  instances, cross-runtime patch events, or design-system widget graph instance
-  identity.
+  does not prove the final authored `shared()` call shape, shared definition
+  parsing, stable shared definition IDs, graph-context resolution,
+  request/container/page scoped instances, shared dependency/cycle diagnostics,
+  payload records, browser resume of shared instances, cross-runtime patch
+  events, or design-system widget graph instance identity.
 - Current serializer tests prove selected pure built-in value round-trips,
   identity/cycles, typed-array backing-buffer identity and offsets for
   `Uint8Array` / `Int16Array`, pathful unsupported-function diagnostics from
@@ -975,10 +1007,13 @@ commands are listed in the implementation/build section above.
   Rolldown/Vite build execution, emitted symbol chunks, manifest files,
   dev-server HTML injection, HMR updates, browser reloads, or witness receipts.
 - At this ledger update, the production package implementation under
-  `packages/`, this progress ledger, and the compiler split plan are untracked
-  in git. Status entries describe current worktree files, not committed branch
-  state; add or otherwise account for those files before treating a commit or PR
-  diff as evidence.
+  `packages/`, this progress ledger, and the compiler split plan are tracked on
+  the current `impl` branch. Status entries still describe current worktree
+  files and command receipts rather than permanent PR status; rerun the relevant
+  checks before treating a commit or PR diff as current evidence. The untracked
+  `dist/` directory is generated pack output and should not be treated as
+  source state unless a future task explicitly decides to commit generated
+  artifacts.
 - `pnpm-workspace.yaml` deliberately keeps `../native-tsrx` out of this
   workspace, but `packages/compiler/package.json` still declares `@tsrx/core` as
   `workspace:*` and the current lockfile resolves it through a sibling
