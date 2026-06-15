@@ -9,6 +9,7 @@ import {
 import type {
 	SemanticSyncPolicy,
 	SemanticSyncPolicyAction,
+	SemanticSyncPolicyBranch,
 	SemanticSyncPolicyCondition,
 } from '../../artifacts.ts';
 import type { WalkState } from './types.ts';
@@ -23,6 +24,8 @@ export function extractSyncPolicy(
 	node: AnyNode | undefined,
 	state: Pick<WalkState, 'graph' | 'source'>,
 ): SemanticSyncPolicy | undefined {
+	const branches: SemanticSyncPolicyBranch[] = [];
+
 	for (const handler of handlerExpressions(node)) {
 		const eventParam = getIdentifierName(asNodes(handler.params)[0]) ?? 'event';
 		const policy = extractSyncPolicyFromBody(
@@ -30,10 +33,13 @@ export function extractSyncPolicy(
 			eventParam,
 			state,
 		);
-		if (policy) return policy;
+		if (policy) branches.push(policy);
 	}
 
-	return undefined;
+	if (branches.length === 0) return undefined;
+	if (branches.length === 1) return branches[0];
+
+	return { branches };
 }
 
 export function hasSyncEventPolicyCandidate(node: AnyNode | undefined): boolean {
@@ -71,7 +77,7 @@ function extractSyncPolicyFromBody(
 	body: AnyNode | undefined,
 	eventParam: string,
 	state: Pick<WalkState, 'graph' | 'source'>,
-): SemanticSyncPolicy | undefined {
+): SemanticSyncPolicyBranch | undefined {
 	if (!body) return undefined;
 
 	const statements = body.type === 'BlockStatement' ? asNodes(body.body) : [body];
@@ -173,13 +179,63 @@ function extractSyncCondition(
 		graphBindingMap(state.graph),
 		semanticAliasMap(state.graph),
 	);
-	if (!resolved) return undefined;
+	if (!resolved) {
+		const constant = syncPolicyConstantValue(node, state.graph.syncPolicyConstants ?? []);
+		if (!constant.ok) return undefined;
+
+		return {
+			type: 'constant-truthy',
+			value: constant.value,
+		};
+	}
 
 	return {
 		type: 'graph-truthy',
 		bindingId: resolved.binding.id,
 		path: resolved.path,
 	};
+}
+
+function syncPolicyConstantValue(
+	node: AnyNode,
+	constants: ReadonlyArray<{ readonly name: string; readonly value: unknown }>,
+): { readonly ok: true; readonly value: unknown } | { readonly ok: false } {
+	const path = staticExpressionPath(node);
+	if (!path) return { ok: false };
+	const [name, ...segments] = path;
+
+	for (let index = constants.length - 1; index >= 0; index--) {
+		const constant = constants[index];
+		if (constant.name === name) {
+			return { ok: true, value: readStaticPath(constant.value, segments) };
+		}
+	}
+
+	return { ok: false };
+}
+
+function staticExpressionPath(node: AnyNode): ReadonlyArray<string> | null {
+	const name = getIdentifierName(node);
+	if (name) return [name];
+
+	if (node.type !== 'MemberExpression') return null;
+
+	const parent = staticExpressionPath(node.object as AnyNode | undefined);
+	const property = getStaticPropertyName(node.property as AnyNode | undefined);
+	if (!parent || !property) return null;
+
+	return [...parent, property];
+}
+
+function readStaticPath(value: unknown, path: ReadonlyArray<string>): unknown {
+	let current = value;
+
+	for (const segment of path) {
+		if (current == null) return undefined;
+		current = (current as Record<string, unknown>)[segment];
+	}
+
+	return current;
 }
 
 function flattenSyncConditions(

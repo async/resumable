@@ -18,6 +18,7 @@ function element(tagName: string, childNodes: FakeElement[] = []): FakeElement {
 test('resume runtime loads element behaviors and runs cleanup on host disposal', async () => {
 	const canvas = element('CANVAS');
 	const root = element('SECTION', [canvas]);
+	const loadedSymbols: string[] = [];
 	const installedOn: string[] = [];
 	const cleanups: string[] = [];
 	const resume = createResumeRuntime({
@@ -30,25 +31,34 @@ test('resume runtime loads element behaviors and runs cleanup on host disposal',
 			],
 			events: [],
 			bindings: [],
-			behaviors: [{ hostNodeId: 'h1', source: 'chart(config)', symbolId: 'symbol:chart' }],
+			behaviors: [
+				{ hostNodeId: 'h1', source: 'chart(config)', symbolId: 'symbol:chart' },
+				{ hostNodeId: 'h1', source: 'resizeCanvas', symbolId: 'symbol:resize' },
+			],
 			elementHandles: [],
 			asyncBoundaries: [],
 		},
 		loadSymbol(symbolId) {
-			expect(symbolId).toBe('symbol:chart');
+			loadedSymbols.push(symbolId);
 			return ({ element: host }) => {
-				installedOn.push(host.tagName);
-				return () => cleanups.push('chart');
+				const label = symbolId.replace('symbol:', '');
+				installedOn.push(`${label}:${host.tagName}`);
+				return () => cleanups.push(label);
 			};
 		},
 	});
 
 	await resume.start();
 
-	expect(installedOn).toEqual(['CANVAS']);
+	expect(loadedSymbols).toEqual(['symbol:chart', 'symbol:resize']);
+	expect(installedOn).toEqual(['chart:CANVAS', 'resize:CANVAS']);
 	expect(cleanups).toEqual([]);
 
 	resume.disposeHost('h1');
 
-	expect(cleanups).toEqual(['chart']);
+	expect(cleanups).toEqual(['resize', 'chart']);
+
+	resume.disposeHost('h1');
+
+	expect(cleanups).toEqual(['resize', 'chart']);
 });

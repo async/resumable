@@ -63,10 +63,27 @@ export type DomJournalRecord =
 			readonly value: unknown;
 	  }
 	| {
-			readonly type: 'insertRange' | 'removeRange' | 'moveRange' | 'runCleanup';
+			readonly type: 'insertRange';
 			readonly locator: string;
-			readonly before?: string;
+			readonly fragment: unknown;
+	  }
+	| {
+			readonly type: 'removeRange';
+			readonly locator: string;
+	  }
+	| {
+			readonly type: 'moveRange';
+			readonly locator: string;
+			readonly before: string;
+	  }
+	| {
+			readonly type: 'runCleanup';
+			readonly locator: string;
 	  };
+
+export type DomJournalResult = DomJournalRecord | ReadonlyArray<DomJournalRecord>;
+
+export type DomJournalListener = (records: ReadonlyArray<DomJournalRecord>) => void | Promise<void>;
 
 export type RuntimeGraphInput = {
 	readonly cells: ReadonlyArray<RuntimeGraphCell>;
@@ -103,7 +120,7 @@ export type RuntimeGraphSubscription = {
 	readonly id: string;
 	readonly bindingId: string;
 	readonly path?: ReadonlyArray<string>;
-	readonly run: (value: unknown) => DomJournalRecord | void | Promise<DomJournalRecord | void>;
+	readonly run: (value: unknown) => DomJournalResult | void | Promise<DomJournalResult | void>;
 };
 
 export type RuntimeGraph = {
@@ -113,6 +130,7 @@ export type RuntimeGraph = {
 	readonly call: (call: RuntimeGraphCall) => unknown;
 	readonly delete: (deletion: RuntimeGraphDelete) => boolean;
 	readonly subscribe: (subscription: RuntimeGraphSubscription) => void;
+	readonly subscribeJournal: (listener: DomJournalListener) => () => void;
 	readonly flush: () => Promise<void>;
 	readonly takeJournal: () => DomJournalRecord[];
 };
@@ -155,6 +173,7 @@ export function createRuntimeGraph(input: RuntimeGraphInput): RuntimeGraph {
 	const computedNodes = new Map<string, RuntimeComputedNode>();
 	const asyncComputedNodes = new Map<string, RuntimeAsyncComputedNode>();
 	const subscriptions: RuntimeGraphSubscription[] = [];
+	const journalListeners: DomJournalListener[] = [];
 	const dirtyPaths: DirtyPath[] = [];
 	const journal: DomJournalRecord[] = [];
 	let flushScheduled = false;
@@ -308,6 +327,7 @@ export function createRuntimeGraph(input: RuntimeGraphInput): RuntimeGraph {
 		}
 
 		markDirtyPath(node.bindingId, []);
+		scheduleFlush();
 	};
 
 	const flush = async (): Promise<void> => {
@@ -334,7 +354,7 @@ export function createRuntimeGraph(input: RuntimeGraphInput): RuntimeGraph {
 					const record = await subscription.run(
 						readGraph(subscription.bindingId, subscriptionPath),
 					);
-					if (record) journal.push(record);
+					appendJournalResult(journal, record);
 				}
 			}
 		} finally {
@@ -343,6 +363,17 @@ export function createRuntimeGraph(input: RuntimeGraphInput): RuntimeGraph {
 			if (dirtyPaths.length > 0) {
 				scheduleFlush();
 			}
+		}
+
+		await notifyJournalListeners();
+	};
+
+	const notifyJournalListeners = async (): Promise<void> => {
+		if (journalListeners.length === 0 || journal.length === 0) return;
+
+		const records = journal.splice(0);
+		for (const listener of journalListeners) {
+			await listener(records);
 		}
 	};
 
@@ -391,11 +422,28 @@ export function createRuntimeGraph(input: RuntimeGraphInput): RuntimeGraph {
 		subscribe(subscription) {
 			subscriptions.push(subscription);
 		},
+		subscribeJournal(listener) {
+			journalListeners.push(listener);
+			return () => {
+				const index = journalListeners.indexOf(listener);
+				if (index >= 0) journalListeners.splice(index, 1);
+			};
+		},
 		flush,
 		takeJournal() {
 			return journal.splice(0);
 		},
 	};
+}
+
+function appendJournalResult(journal: DomJournalRecord[], result: DomJournalResult | void): void {
+	if (!result) return;
+	if (Array.isArray(result)) {
+		journal.push(...result);
+		return;
+	}
+
+	journal.push(result);
 }
 
 function readPath(value: unknown, path: ReadonlyArray<string>): unknown {

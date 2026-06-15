@@ -5,6 +5,9 @@ export {
 	state,
 	type AsyncComputedValue,
 	type ElementHandle,
+	IntrinsicRuntimeError,
+	type IntrinsicRuntimeDiagnostic,
+	type IntrinsicName,
 	type SharedOptions,
 	type SharedScope,
 } from '@async/resumable-core';

@@ -62,6 +62,9 @@ export function collectTemplateExpression(node: AnyNode, state: WalkState): void
 		hostNodeId: state.currentHostNodeId,
 		source: expressionSource(expression, state.source),
 		sourceSpan: sourceSpan(expression, state.filename),
+		target: {
+			kind: 'text',
+		},
 		asyncBoundaryId: state.currentAsyncBoundaryId ?? undefined,
 	});
 }
@@ -172,10 +175,35 @@ function collectAttribute(
 			hostNodeId,
 			source: expressionSource(value, state.source),
 			sourceSpan: sourceSpan(value, state.filename),
+			target: bindingTargetForAttribute(attributeName),
 			asyncBoundaryId: state.currentAsyncBoundaryId ?? undefined,
 		});
 		walk(value, state);
 	}
+}
+
+function bindingTargetForAttribute(attributeName: string): {
+	readonly kind: 'attribute' | 'property' | 'class' | 'style';
+	readonly name?: string;
+} {
+	if (attributeName === 'class') return { kind: 'class' };
+	if (attributeName === 'style') return { kind: 'style' };
+
+	if (isDomPropertyBindingName(attributeName)) {
+		return {
+			kind: 'property',
+			name: attributeName,
+		};
+	}
+
+	return {
+		kind: 'attribute',
+		name: attributeName,
+	};
+}
+
+function isDomPropertyBindingName(attributeName: string): boolean {
+	return attributeName === 'value' || attributeName === 'checked' || attributeName === 'selected';
 }
 
 function unextractableSyncPolicyDiagnostic(

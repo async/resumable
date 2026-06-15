@@ -43,6 +43,7 @@ export function planPayloadArena(input: PayloadArenaInput): PayloadArenaArtifact
 				source: read.source,
 				bindingId: resolved.binding.id,
 				path: resolved.path,
+				target: read.target,
 			},
 		];
 	});
@@ -104,7 +105,8 @@ export function planPayloadArena(input: PayloadArenaInput): PayloadArenaArtifact
 			events: input.semanticGraph.events,
 			bindings: uniqueBy(
 				viewBindings,
-				(binding) => `${binding.hostNodeId}:${binding.bindingId}:${binding.path.join('.')}`,
+				(binding) =>
+					`${binding.hostNodeId}:${bindingTargetKey(binding.target)}:${binding.bindingId}:${binding.path.join('.')}`,
 			),
 			behaviors: input.semanticGraph.behaviors,
 			elementHandles,
@@ -112,4 +114,12 @@ export function planPayloadArena(input: PayloadArenaInput): PayloadArenaArtifact
 		},
 		diagnostics: input.stateLowering.diagnostics,
 	};
+}
+
+function bindingTargetKey(
+	target: PayloadArenaArtifact['view']['bindings'][number]['target'],
+): string {
+	if (target.kind === 'attribute') return `attribute:${target.name}`;
+	if (target.kind === 'property') return `property:${target.name}`;
+	return target.kind;
 }

@@ -1,6 +1,7 @@
 import { asNodes, getIdentifierName, type AnyNode } from '../../ast/nodes.ts';
 import { expressionSourceOrFallback } from '../../ast/source.ts';
 import { moduleScopeGraphCreationDiagnostic } from './diagnostics.ts';
+import { evaluateSyncPolicyConstant } from './collect-state.ts';
 import type { MutableSemanticGraphArtifact } from './types.ts';
 
 export function collectModuleScopeGraphCreation(
@@ -16,6 +17,18 @@ export function collectModuleScopeGraphCreation(
 		const id = declarator.id as AnyNode | undefined;
 		const init = declarator.init as AnyNode | undefined;
 		const callName = getCallName(init);
+		const name = getIdentifierName(id);
+
+		if (declaration.kind === 'const' && name) {
+			const constant = evaluateSyncPolicyConstant(init);
+			if (constant.ok) {
+				graph.syncPolicyConstants.push({
+					name,
+					value: constant.value,
+				});
+			}
+		}
+
 		if (callName !== 'state' && callName !== 'computed') continue;
 
 		graph.diagnostics.push(

@@ -19,15 +19,25 @@ export type ProtocolSyncPolicyCondition =
 			readonly path?: ReadonlyArray<string>;
 	  }
 	| {
+			readonly type: 'constant-truthy';
+			readonly value: unknown;
+	  }
+	| {
 			readonly type: 'event-equals';
 			readonly field: string;
 			readonly value: unknown;
 	  };
 
-export type ProtocolSyncPolicy = {
+export type ProtocolSyncPolicyBranch = {
 	readonly when: ProtocolSyncPolicyCondition;
 	readonly actions: ReadonlyArray<'preventDefault' | 'stopPropagation'>;
 };
+
+export type ProtocolSyncPolicy =
+	| ProtocolSyncPolicyBranch
+	| {
+			readonly branches: ReadonlyArray<ProtocolSyncPolicyBranch>;
+	  };
 
 export type ProtocolStatePayload = {
 	readonly version: typeof ASYNC_PROTOCOL_VERSION;
@@ -63,6 +73,24 @@ export type ProtocolViewPayload = {
 		readonly source: string;
 		readonly bindingId: string;
 		readonly path: ReadonlyArray<string>;
+		readonly target?:
+			| {
+					readonly kind: 'text';
+			  }
+			| {
+					readonly kind: 'attribute';
+					readonly name: string;
+			  }
+			| {
+					readonly kind: 'property';
+					readonly name: string;
+			  }
+			| {
+					readonly kind: 'class';
+			  }
+			| {
+					readonly kind: 'style';
+			  };
 		readonly symbolId?: string;
 	}>;
 	readonly behaviors: ReadonlyArray<{

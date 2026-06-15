@@ -6,6 +6,7 @@ import type {
 	SemanticGraphAlias,
 	SemanticGraphBinding,
 	SemanticGraphDiagnostic,
+	SemanticSyncPolicyConstant,
 	SemanticHostNode,
 	SemanticLocalBinding,
 	SemanticStateRead,
@@ -20,6 +21,7 @@ export type MutableSemanticGraphArtifact = {
 	graphBindings: SemanticGraphBinding[];
 	hostNodes: SemanticHostNode[];
 	events: SemanticEvent[];
+	syncPolicyConstants: SemanticSyncPolicyConstant[];
 	behaviors: Array<{ readonly hostNodeId: string; readonly source: string }>;
 	elementHandleBindings: SemanticElementHandleBinding[];
 	localBindings: SemanticLocalBinding[];
@@ -53,6 +55,7 @@ export function createMutableSemanticGraphArtifact(filename: string): MutableSem
 		graphBindings: [],
 		hostNodes: [],
 		events: [],
+		syncPolicyConstants: [],
 		behaviors: [],
 		elementHandleBindings: [],
 		localBindings: [],

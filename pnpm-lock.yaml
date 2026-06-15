@@ -17,6 +17,9 @@ importers:
       '@types/node':
         specifier: 24.12.2
         version: 24.12.2
+      rolldown:
+        specifier: 1.0.3
+        version: 1.0.3
       typescript:
         specifier: 5.9.3
         version: 5.9.3

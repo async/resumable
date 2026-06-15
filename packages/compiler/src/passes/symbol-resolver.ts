@@ -24,6 +24,7 @@ export function planSymbolResolver(input: SymbolResolverInput): SymbolResolverPl
 			hostNodeId: binding.hostNodeId,
 			source: binding.source,
 			bindingId: binding.bindingId,
+			target: binding.target,
 		});
 	}
 

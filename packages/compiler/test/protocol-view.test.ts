@@ -81,6 +81,9 @@ test('createProtocolViewPayload links payload arena records to lazy symbol IDs',
 			source: 'count',
 			bindingId: 'state:count',
 			path: [],
+			target: {
+				kind: 'text',
+			},
 			symbolId: 'symbol:3',
 		},
 	]);
@@ -120,6 +123,48 @@ test('createProtocolViewPayload links async boundary reads to runner symbols', a
 					runnerSymbolId: 'symbol:1',
 				},
 			],
+		},
+	]);
+});
+
+test('createProtocolViewPayload keeps binding symbols distinct by target', async () => {
+	const semanticGraph = await buildSemanticGraph({
+		filename: 'src/RepeatedTarget.tsrx',
+		source: `
+export function App() @{
+	const count = state(0);
+
+	<button title={count}>{count}</button>
+}
+`,
+	});
+	const stateLowering = lowerStateAccess({ semanticGraph });
+	const payloadArena = planPayloadArena({ semanticGraph, stateLowering });
+	const symbolResolver = planSymbolResolver({ semanticGraph, payloadArena });
+
+	const view = createProtocolViewPayload({ payloadArena, symbolResolver });
+
+	expect(view.bindings).toEqual([
+		{
+			hostNodeId: 'h0',
+			source: 'count',
+			bindingId: 'state:count',
+			path: [],
+			target: {
+				kind: 'attribute',
+				name: 'title',
+			},
+			symbolId: 'symbol:0',
+		},
+		{
+			hostNodeId: 'h0',
+			source: 'count',
+			bindingId: 'state:count',
+			path: [],
+			target: {
+				kind: 'text',
+			},
+			symbolId: 'symbol:1',
 		},
 	]);
 });

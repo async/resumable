@@ -257,8 +257,9 @@ For bundling behavior, structure the framework plugins similarly to:
 
 `/Users/jacksm5pro/dev/open-source/qwik-bundler`
 
-Use its `src` and `fixtures` as the reference shape for Rolldown and Vite plugin
-architecture:
+Before changing `packages/rolldown`, `packages/vite`, or their fixture tests,
+inspect the applicable `qwik-bundler` source/fixtures and use them as the
+reference shape for Rolldown and Vite plugin architecture:
 
 - `src/rolldown.ts` style entry for Rolldown-first plugin behavior.
 - `src/vite/*` style adapter layer for Vite-specific dev/HMR/HTML integration.

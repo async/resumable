@@ -2,7 +2,7 @@ export type * from './artifacts.ts';
 export type * from './diagnostics.ts';
 
 export { compileTsrxModule } from './compile-module.ts';
-export { validateCompilerPassGraph } from './pass-graph.ts';
+export { CompilerPassGraphError, validateCompilerPassGraph } from './pass-graph.ts';
 export { defaultCompilerPasses } from './pass-registry.ts';
 
 export { analyzeCaptures } from './passes/capture-analysis.ts';
@@ -12,6 +12,7 @@ export { createProtocolStatePayloadFromArena } from './passes/protocol-state.ts'
 export { createProtocolViewPayload } from './passes/protocol-view.ts';
 export { buildSemanticGraph } from './passes/semantic-graph/index.ts';
 export { lowerStateAccess } from './passes/state-lowering.ts';
+export { emitSymbolModules } from './passes/symbol-modules.ts';
 export {
 	createSymbolResolverModuleManifest,
 	emitSymbolResolverModule,

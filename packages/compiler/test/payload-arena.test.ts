@@ -103,18 +103,28 @@ test('planPayloadArena separates graph state from view wiring metadata', async (
 				source: 'menu.title',
 				bindingId: 'state:menu',
 				path: ['title'],
+				target: {
+					kind: 'property',
+					name: 'value',
+				},
 			},
 			{
 				hostNodeId: 'h2',
 				source: 'count',
 				bindingId: 'state:count',
 				path: [],
+				target: {
+					kind: 'text',
+				},
 			},
 			{
 				hostNodeId: 'h4',
 				source: 'details.title',
 				bindingId: 'computed:details',
 				path: ['title'],
+				target: {
+					kind: 'text',
+				},
 			},
 		]),
 	);
@@ -152,4 +162,95 @@ test('planPayloadArena separates graph state from view wiring metadata', async (
 		},
 	]);
 	expect(payload.diagnostics).toEqual([]);
+});
+
+test('planPayloadArena keeps distinct targets for repeated graph reads on one host', async () => {
+	const semanticGraph = await buildSemanticGraph({
+		filename: 'src/RepeatedTarget.tsrx',
+		source: `
+export function App() @{
+	const count = state(0);
+
+	<button title={count}>{count}</button>
+}
+`,
+	});
+	const stateLowering = lowerStateAccess({ semanticGraph });
+
+	const payload = planPayloadArena({
+		semanticGraph,
+		stateLowering,
+	});
+
+	expect(payload.view.bindings).toEqual([
+		{
+			hostNodeId: 'h0',
+			source: 'count',
+			bindingId: 'state:count',
+			path: [],
+			target: {
+				kind: 'attribute',
+				name: 'title',
+			},
+		},
+		{
+			hostNodeId: 'h0',
+			source: 'count',
+			bindingId: 'state:count',
+			path: [],
+			target: {
+				kind: 'text',
+			},
+		},
+	]);
+});
+
+test('planPayloadArena classifies class and style binding targets', async () => {
+	const semanticGraph = await buildSemanticGraph({
+		filename: 'src/ClassStyleTargets.tsrx',
+		source: `
+export function App() @{
+	const activeClass = state('is-active');
+	const color = state('red');
+
+	<div class={activeClass} style={color}>{activeClass}</div>
+}
+`,
+	});
+	const stateLowering = lowerStateAccess({ semanticGraph });
+
+	const payload = planPayloadArena({
+		semanticGraph,
+		stateLowering,
+	});
+
+	expect(payload.view.bindings).toEqual([
+		{
+			hostNodeId: 'h0',
+			source: 'activeClass',
+			bindingId: 'state:activeClass',
+			path: [],
+			target: {
+				kind: 'class',
+			},
+		},
+		{
+			hostNodeId: 'h0',
+			source: 'color',
+			bindingId: 'state:color',
+			path: [],
+			target: {
+				kind: 'style',
+			},
+		},
+		{
+			hostNodeId: 'h0',
+			source: 'activeClass',
+			bindingId: 'state:activeClass',
+			path: [],
+			target: {
+				kind: 'text',
+			},
+		},
+	]);
 });

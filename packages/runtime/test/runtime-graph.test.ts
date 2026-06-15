@@ -50,6 +50,54 @@ test('runtime graph invalidates path subscribers and flushes concrete journal re
 	expect(graph.takeJournal()).toEqual([]);
 });
 
+test('runtime graph appends multiple DOM journal records from one subscription in order', async () => {
+	const graph = createRuntimeGraph({
+		cells: [{ bindingId: 'state:count', value: 0 }],
+	});
+
+	graph.subscribe({
+		id: 'binding:count',
+		bindingId: 'state:count',
+		path: [],
+		run(value) {
+			return [
+				{ type: 'setText', locator: 'text:count', value },
+				{
+					type: 'setAttr',
+					locator: 'button:count',
+					name: 'data-count',
+					value: String(value),
+				},
+				{
+					type: 'setProp',
+					locator: 'button:count',
+					name: 'disabled',
+					value: Number(value) > 0,
+				},
+			];
+		},
+	});
+
+	graph.write({ bindingId: 'state:count', value: 1 });
+	await graph.flush();
+
+	expect(graph.takeJournal()).toEqual([
+		{ type: 'setText', locator: 'text:count', value: 1 },
+		{
+			type: 'setAttr',
+			locator: 'button:count',
+			name: 'data-count',
+			value: '1',
+		},
+		{
+			type: 'setProp',
+			locator: 'button:count',
+			name: 'disabled',
+			value: true,
+		},
+	]);
+});
+
 test('runtime graph applies collection method calls with path invalidation', async () => {
 	const cache = new Map<string, string>();
 	const selected = new Set<string>();
@@ -808,6 +856,43 @@ test('runtime graph lazily recomputes sync computed nodes after path-granular in
 	]);
 });
 
+test('runtime graph invalidates computed dependency chains', async () => {
+	const graph = createRuntimeGraph({
+		cells: [{ bindingId: 'state:user', value: { first: 'Ada', last: 'Lovelace' } }],
+		computed: [
+			{
+				bindingId: 'computed:displayName',
+				dependencies: [{ bindingId: 'state:user', path: ['first'] }],
+				compute: (read) => String(read('state:user', ['first'])).toUpperCase(),
+			},
+			{
+				bindingId: 'computed:greeting',
+				dependencies: [{ bindingId: 'computed:displayName', path: [] }],
+				compute: (read) => `Hello ${String(read('computed:displayName'))}`,
+			},
+		],
+	});
+
+	expect(graph.read('computed:greeting')).toBe('Hello ADA');
+
+	graph.subscribe({
+		id: 'binding:greeting',
+		bindingId: 'computed:greeting',
+		path: [],
+		run(value) {
+			return { type: 'setText', locator: 'text:greeting', value };
+		},
+	});
+
+	graph.write({ bindingId: 'state:user', path: ['first'], value: 'Grace' });
+	await graph.flush();
+
+	expect(graph.read('computed:greeting')).toBe('Hello GRACE');
+	expect(graph.takeJournal()).toEqual([
+		{ type: 'setText', locator: 'text:greeting', value: 'Hello GRACE' },
+	]);
+});
+
 test('runtime graph versions async computed requests and ignores stale completions', async () => {
 	const first = deferred<string>();
 	const second = deferred<string>();
@@ -885,6 +970,237 @@ test('runtime graph versions async computed requests and ignores stale completio
 		value: 'Bob',
 	});
 	expect(graph.takeJournal()).toEqual([{ type: 'setText', locator: 'text:user', value: 'Bob' }]);
+});
+
+test('runtime graph ignores stale rejected async computed completions', async () => {
+	const first = deferred<string>();
+	const second = deferred<string>();
+	const staleError = new Error('stale');
+	const runs: Array<{ readonly key: unknown; readonly signal: AbortSignal }> = [];
+
+	const graph = createRuntimeGraph({
+		cells: [{ bindingId: 'state:userId', value: 'a' }],
+		asyncComputed: [
+			{
+				bindingId: 'computed:user',
+				dependencies: [{ bindingId: 'state:userId', path: [] }],
+				key: (read) => read('state:userId'),
+				run({ key, signal }) {
+					runs.push({ key, signal });
+					return key === 'a' ? first.promise : second.promise;
+				},
+			},
+		],
+	});
+
+	graph.subscribe({
+		id: 'binding:user',
+		bindingId: 'computed:user',
+		path: [],
+		run(value) {
+			const snapshot = value as { readonly status: string; readonly value?: unknown };
+			return {
+				type: 'setText',
+				locator: 'text:user',
+				value: snapshot.status === 'fulfilled' ? snapshot.value : snapshot.status,
+			};
+		},
+	});
+
+	expect(graph.read('computed:user')).toEqual({
+		status: 'pending',
+		version: 1,
+		key: 'a',
+	});
+	await drainMicrotasks();
+	expect(graph.takeJournal()).toEqual([
+		{ type: 'setText', locator: 'text:user', value: 'pending' },
+	]);
+
+	graph.write({ bindingId: 'state:userId', value: 'b' });
+	await graph.flush();
+
+	expect(runs[0].signal.aborted).toBe(true);
+	expect(runs).toHaveLength(2);
+	expect(graph.takeJournal()).toEqual([
+		{ type: 'setText', locator: 'text:user', value: 'pending' },
+	]);
+
+	first.reject(staleError);
+	await drainMicrotasks();
+	await graph.flush();
+
+	expect(graph.read('computed:user')).toEqual({
+		status: 'pending',
+		version: 2,
+		key: 'b',
+	});
+	expect(graph.takeJournal()).toEqual([]);
+
+	second.resolve('Bob');
+	await drainMicrotasks();
+
+	expect(graph.read('computed:user')).toEqual({
+		status: 'fulfilled',
+		version: 2,
+		key: 'b',
+		value: 'Bob',
+	});
+	expect(graph.takeJournal()).toEqual([{ type: 'setText', locator: 'text:user', value: 'Bob' }]);
+});
+
+test('runtime graph skips async computed invalidation when the dependency key is unchanged', async () => {
+	const request = deferred<string>();
+	const runs: Array<{ readonly key: unknown; readonly signal: AbortSignal }> = [];
+	const graph = createRuntimeGraph({
+		cells: [{ bindingId: 'state:route', value: { id: 'a', tab: 'overview' } }],
+		asyncComputed: [
+			{
+				bindingId: 'computed:user',
+				dependencies: [{ bindingId: 'state:route', path: [] }],
+				key: (read) => read('state:route', ['id']),
+				run({ key, signal }) {
+					runs.push({ key, signal });
+					return request.promise;
+				},
+			},
+		],
+	});
+
+	graph.subscribe({
+		id: 'binding:user',
+		bindingId: 'computed:user',
+		path: [],
+		run(value) {
+			const snapshot = value as { readonly status: string };
+			return { type: 'setText', locator: 'text:user', value: snapshot.status };
+		},
+	});
+
+	expect(graph.read('computed:user')).toEqual({
+		status: 'pending',
+		version: 1,
+		key: 'a',
+	});
+	await drainMicrotasks();
+	expect(graph.takeJournal()).toEqual([
+		{ type: 'setText', locator: 'text:user', value: 'pending' },
+	]);
+
+	graph.write({ bindingId: 'state:route', path: ['tab'], value: 'details' });
+	await graph.flush();
+
+	expect(runs).toHaveLength(1);
+	expect(runs[0].signal.aborted).toBe(false);
+	expect(graph.read('computed:user')).toEqual({
+		status: 'pending',
+		version: 1,
+		key: 'a',
+	});
+	expect(graph.takeJournal()).toEqual([]);
+});
+
+test('runtime graph schedules pending flush after standalone async computed demand', async () => {
+	const request = deferred<string>();
+	const graph = createRuntimeGraph({
+		cells: [{ bindingId: 'state:userId', value: 'a' }],
+		asyncComputed: [
+			{
+				bindingId: 'computed:user',
+				dependencies: [{ bindingId: 'state:userId', path: [] }],
+				key: (read) => read('state:userId'),
+				run() {
+					return request.promise;
+				},
+			},
+		],
+	});
+
+	graph.subscribe({
+		id: 'binding:user',
+		bindingId: 'computed:user',
+		path: [],
+		run(value) {
+			const snapshot = value as { readonly status: string; readonly value?: unknown };
+			return {
+				type: 'setText',
+				locator: 'text:user',
+				value: snapshot.status === 'fulfilled' ? snapshot.value : snapshot.status,
+			};
+		},
+	});
+
+	expect(graph.read('computed:user')).toEqual({
+		status: 'pending',
+		version: 1,
+		key: 'a',
+	});
+
+	await drainMicrotasks();
+
+	expect(graph.takeJournal()).toEqual([
+		{ type: 'setText', locator: 'text:user', value: 'pending' },
+	]);
+
+	request.resolve('Alice');
+	await drainMicrotasks();
+
+	expect(graph.takeJournal()).toEqual([
+		{ type: 'setText', locator: 'text:user', value: 'Alice' },
+	]);
+});
+
+test('runtime graph commits rejected async computed snapshots by request version', async () => {
+	const request = deferred<string>();
+	const failure = new Error('No user');
+	const graph = createRuntimeGraph({
+		cells: [{ bindingId: 'state:userId', value: 'missing' }],
+		asyncComputed: [
+			{
+				bindingId: 'computed:user',
+				dependencies: [{ bindingId: 'state:userId', path: [] }],
+				key: (read) => read('state:userId'),
+				run() {
+					return request.promise;
+				},
+			},
+		],
+	});
+
+	graph.subscribe({
+		id: 'binding:user',
+		bindingId: 'computed:user',
+		path: [],
+		run(value) {
+			const snapshot = value as { readonly status: string };
+			return { type: 'setText', locator: 'text:user', value: snapshot.status };
+		},
+	});
+
+	expect(graph.read('computed:user')).toEqual({
+		status: 'pending',
+		version: 1,
+		key: 'missing',
+	});
+
+	await drainMicrotasks();
+
+	expect(graph.takeJournal()).toEqual([
+		{ type: 'setText', locator: 'text:user', value: 'pending' },
+	]);
+
+	request.reject(failure);
+	await drainMicrotasks();
+
+	expect(graph.read('computed:user')).toEqual({
+		status: 'rejected',
+		version: 1,
+		key: 'missing',
+		error: failure,
+	});
+	expect(graph.takeJournal()).toEqual([
+		{ type: 'setText', locator: 'text:user', value: 'rejected' },
+	]);
 });
 
 function deferred<T>(): {

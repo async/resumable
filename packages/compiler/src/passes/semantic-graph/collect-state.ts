@@ -68,6 +68,14 @@ export function collectVariableDeclaration(node: AnyNode, state: WalkState): voi
 			});
 		}
 
+		const syncPolicyConstant = evaluateSyncPolicyConstant(init);
+		if (declarationKind === 'const' && syncPolicyConstant.ok) {
+			state.graph.syncPolicyConstants.push({
+				name,
+				value: syncPolicyConstant.value,
+			});
+		}
+
 		if (callName === 'state') {
 			const initial = firstArgument(init);
 			state.graph.graphBindings.push({
@@ -440,6 +448,130 @@ function evaluateInitialStateValue(node: AnyNode | undefined): unknown {
 	}
 
 	return undefined;
+}
+
+export function evaluateSyncPolicyConstant(
+	node: AnyNode | undefined,
+): { readonly ok: true; readonly value: unknown } | { readonly ok: false } {
+	if (!node) return { ok: false };
+
+	if (node.type === 'Literal') return { ok: true, value: node.value };
+	if (node.type === 'ObjectExpression') return evaluateSyncPolicyConstantObjectExpression(node);
+	if (node.type === 'ArrayExpression') return evaluateSyncPolicyConstantArrayExpression(node);
+	if (node.type === 'UnaryExpression') {
+		const argument = evaluateSyncPolicyConstant(node.argument as AnyNode | undefined);
+		if (!argument.ok) return { ok: false };
+
+		if (node.operator === '-') return { ok: true, value: -Number(argument.value) };
+		if (node.operator === '+') return { ok: true, value: Number(argument.value) };
+		if (node.operator === '!') return { ok: true, value: !argument.value };
+	}
+	if (node.type === 'LogicalExpression') {
+		const left = evaluateSyncPolicyConstant(node.left as AnyNode | undefined);
+		if (!left.ok) return { ok: false };
+
+		if (node.operator === '&&') {
+			if (!left.value) return { ok: true, value: left.value };
+			return evaluateSyncPolicyConstant(node.right as AnyNode | undefined);
+		}
+		if (node.operator === '||') {
+			if (left.value) return { ok: true, value: left.value };
+			return evaluateSyncPolicyConstant(node.right as AnyNode | undefined);
+		}
+		if (node.operator === '??') {
+			if (left.value !== null && left.value !== undefined) {
+				return { ok: true, value: left.value };
+			}
+			return evaluateSyncPolicyConstant(node.right as AnyNode | undefined);
+		}
+	}
+	if (node.type === 'BinaryExpression') {
+		const left = evaluateSyncPolicyConstant(node.left as AnyNode | undefined);
+		const right = evaluateSyncPolicyConstant(node.right as AnyNode | undefined);
+		if (!left.ok || !right.ok) return { ok: false };
+
+		return evaluateSyncPolicyBinaryConstant(node.operator, left.value, right.value);
+	}
+	if (node.type === 'ConditionalExpression') {
+		const test = evaluateSyncPolicyConstant(node.test as AnyNode | undefined);
+		if (!test.ok) return { ok: false };
+
+		return evaluateSyncPolicyConstant(
+			(test.value ? node.consequent : node.alternate) as AnyNode | undefined,
+		);
+	}
+
+	return { ok: false };
+}
+
+function evaluateSyncPolicyConstantObjectExpression(
+	node: AnyNode,
+): { readonly ok: true; readonly value: Record<string, unknown> } | { readonly ok: false } {
+	const output: Record<string, unknown> = {};
+
+	for (const property of asNodes(node.properties)) {
+		if (property.type !== 'Property') return { ok: false };
+
+		const key = objectPropertyKey(property.key as AnyNode | undefined);
+		if (!key) return { ok: false };
+
+		const value = evaluateSyncPolicyConstant(property.value as AnyNode | undefined);
+		if (!value.ok) return { ok: false };
+
+		output[key] = value.value;
+	}
+
+	return { ok: true, value: output };
+}
+
+function evaluateSyncPolicyConstantArrayExpression(
+	node: AnyNode,
+): { readonly ok: true; readonly value: unknown[] } | { readonly ok: false } {
+	const output: unknown[] = [];
+
+	for (const element of asNodes(node.elements)) {
+		const value = evaluateSyncPolicyConstant(element);
+		if (!value.ok) return { ok: false };
+
+		output.push(value.value);
+	}
+
+	return { ok: true, value: output };
+}
+
+function evaluateSyncPolicyBinaryConstant(
+	operator: unknown,
+	left: unknown,
+	right: unknown,
+): { readonly ok: true; readonly value: unknown } | { readonly ok: false } {
+	if (typeof operator !== 'string') return { ok: false };
+
+	if (operator === '===') return { ok: true, value: left === right };
+	if (operator === '!==') return { ok: true, value: left !== right };
+	if (operator === '==') return { ok: true, value: left === right };
+	if (operator === '!=') return { ok: true, value: left !== right };
+	if (operator === '<') return { ok: true, value: Number(left) < Number(right) };
+	if (operator === '<=') return { ok: true, value: Number(left) <= Number(right) };
+	if (operator === '>') return { ok: true, value: Number(left) > Number(right) };
+	if (operator === '>=') return { ok: true, value: Number(left) >= Number(right) };
+	if (operator === '+') return evaluateSyncPolicyAddConstant(left, right);
+	if (operator === '-') return { ok: true, value: Number(left) - Number(right) };
+	if (operator === '*') return { ok: true, value: Number(left) * Number(right) };
+	if (operator === '/') return { ok: true, value: Number(left) / Number(right) };
+	if (operator === '%') return { ok: true, value: Number(left) % Number(right) };
+
+	return { ok: false };
+}
+
+function evaluateSyncPolicyAddConstant(
+	left: unknown,
+	right: unknown,
+): { readonly ok: true; readonly value: unknown } {
+	if (typeof left === 'string' || typeof right === 'string') {
+		return { ok: true, value: `${left}${right}` };
+	}
+
+	return { ok: true, value: Number(left) + Number(right) };
 }
 
 function evaluateObjectExpression(node: AnyNode): Record<string, unknown> {

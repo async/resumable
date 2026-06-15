@@ -56,6 +56,10 @@ export type SemanticSyncPolicyCondition =
 			readonly path: ReadonlyArray<string>;
 	  }
 	| {
+			readonly type: 'constant-truthy';
+			readonly value: unknown;
+	  }
+	| {
 			readonly type: 'event-equals';
 			readonly field: string;
 			readonly value: unknown;
@@ -63,10 +67,16 @@ export type SemanticSyncPolicyCondition =
 
 export type SemanticSyncPolicyAction = 'preventDefault' | 'stopPropagation';
 
-export type SemanticSyncPolicy = {
+export type SemanticSyncPolicyBranch = {
 	readonly when: SemanticSyncPolicyCondition;
 	readonly actions: ReadonlyArray<SemanticSyncPolicyAction>;
 };
+
+export type SemanticSyncPolicy =
+	| SemanticSyncPolicyBranch
+	| {
+			readonly branches: ReadonlyArray<SemanticSyncPolicyBranch>;
+	  };
 
 export type SemanticEvent = {
 	readonly id: string;
@@ -108,6 +118,25 @@ export type SemanticStateRead = {
 	readonly sourceSpan?: SourceSpan;
 };
 
+export type SemanticTemplateBindingTarget =
+	| {
+			readonly kind: 'text';
+	  }
+	| {
+			readonly kind: 'attribute';
+			readonly name: string;
+	  }
+	| {
+			readonly kind: 'property';
+			readonly name: string;
+	  }
+	| {
+			readonly kind: 'class';
+	  }
+	| {
+			readonly kind: 'style';
+	  };
+
 export type SemanticGraphAlias = {
 	readonly name: string;
 	readonly target: string;
@@ -120,6 +149,7 @@ export type SemanticTemplateRead = {
 	readonly source: string;
 	readonly sourceSpan?: SourceSpan;
 	readonly hostNodeId: string;
+	readonly target: SemanticTemplateBindingTarget;
 	readonly asyncBoundaryId?: string;
 };
 
@@ -136,6 +166,11 @@ export type SemanticLocalBinding = {
 	readonly sourceSpan?: SourceSpan;
 };
 
+export type SemanticSyncPolicyConstant = {
+	readonly name: string;
+	readonly value: unknown;
+};
+
 export type SemanticGraphArtifact = {
 	readonly passId: 'tsrx-semantic-graph';
 	readonly filename: string;
@@ -143,6 +178,7 @@ export type SemanticGraphArtifact = {
 	readonly graphBindings: ReadonlyArray<SemanticGraphBinding>;
 	readonly hostNodes: ReadonlyArray<SemanticHostNode>;
 	readonly events: ReadonlyArray<SemanticEvent>;
+	readonly syncPolicyConstants?: ReadonlyArray<SemanticSyncPolicyConstant>;
 	readonly behaviors: ReadonlyArray<{ readonly hostNodeId: string; readonly source: string }>;
 	readonly elementHandleBindings: ReadonlyArray<SemanticElementHandleBinding>;
 	readonly localBindings: ReadonlyArray<SemanticLocalBinding>;
@@ -248,6 +284,7 @@ export type PayloadArenaArtifact = {
 			readonly source: string;
 			readonly bindingId: string;
 			readonly path: ReadonlyArray<string>;
+			readonly target: SemanticTemplateBindingTarget;
 		}>;
 		readonly behaviors: SemanticGraphArtifact['behaviors'];
 		readonly elementHandles: ReadonlyArray<{
@@ -280,6 +317,7 @@ export type PlannedSymbol =
 			readonly hostNodeId: string;
 			readonly source: string;
 			readonly bindingId: string;
+			readonly target: PayloadArenaArtifact['view']['bindings'][number]['target'];
 	  }
 	| {
 			readonly id: string;
@@ -328,6 +366,24 @@ export type CaptureAnalysisArtifact = {
 		readonly kind: PlannedSymbol['kind'];
 		readonly source: string;
 	}>;
+	readonly diagnostics: ReadonlyArray<CaptureAnalysisDiagnostic>;
+};
+
+export type SymbolModulesInput = {
+	readonly symbolResolver: SymbolResolverPlan;
+	readonly captureAnalysis: CaptureAnalysisArtifact;
+};
+
+export type GeneratedSymbolModule = {
+	readonly symbolId: string;
+	readonly kind: PlannedSymbol['kind'];
+	readonly exportName: string;
+	readonly source: string;
+};
+
+export type SymbolModulesArtifact = {
+	readonly passId: 'symbol-modules';
+	readonly modules: ReadonlyArray<GeneratedSymbolModule>;
 	readonly diagnostics: ReadonlyArray<CaptureAnalysisDiagnostic>;
 };
 
@@ -393,6 +449,7 @@ export type CompileTsrxModuleResult = {
 	readonly protocolView: ProtocolViewPayload;
 	readonly payloadScripts: RenderedPayloadScripts;
 	readonly renderShell: string;
+	readonly symbolModules: SymbolModulesArtifact;
 	readonly symbolResolverModule: string;
 	readonly symbolResolverModuleManifest: SymbolResolverModuleManifest;
 };

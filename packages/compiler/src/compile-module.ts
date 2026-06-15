@@ -8,6 +8,7 @@ import { createProtocolStatePayloadFromArena } from './passes/protocol-state.ts'
 import { createProtocolViewPayload } from './passes/protocol-view.ts';
 import { buildSemanticGraph } from './passes/semantic-graph/index.ts';
 import { lowerStateAccess } from './passes/state-lowering.ts';
+import { emitSymbolModules } from './passes/symbol-modules.ts';
 import {
 	createSymbolResolverModuleManifest,
 	emitSymbolResolverModule,
@@ -29,6 +30,7 @@ export async function compileTsrxModule(
 		protocolState,
 		protocolView,
 	});
+	const symbolModules = emitSymbolModules({ symbolResolver, captureAnalysis });
 	const symbolResolverModule = emitSymbolResolverModule({
 		buildId: input.buildId,
 		resolverId: input.resolverId,
@@ -51,6 +53,7 @@ export async function compileTsrxModule(
 		protocolView,
 		payloadScripts,
 		renderShell,
+		symbolModules,
 		symbolResolverModule,
 		symbolResolverModuleManifest,
 	};

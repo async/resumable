@@ -17,7 +17,7 @@ export function createProtocolViewPayload(input: ProtocolViewPayloadInput): Prot
 
 		if (symbol.kind === 'dom-binding') {
 			bindingSymbols.set(
-				`${symbol.hostNodeId}:${symbol.bindingId}:${symbol.source}`,
+				`${symbol.hostNodeId}:${bindingTargetKey(symbol.target)}:${symbol.bindingId}:${symbol.source}`,
 				symbol.id,
 			);
 		}
@@ -45,7 +45,7 @@ export function createProtocolViewPayload(input: ProtocolViewPayloadInput): Prot
 		bindings: input.payloadArena.view.bindings.map((binding) => ({
 			...binding,
 			symbolId: bindingSymbols.get(
-				`${binding.hostNodeId}:${binding.bindingId}:${binding.source}`,
+				`${binding.hostNodeId}:${bindingTargetKey(binding.target)}:${binding.bindingId}:${binding.source}`,
 			),
 		})),
 		behaviors: input.payloadArena.view.behaviors.map((behavior, index) => ({
@@ -61,4 +61,12 @@ export function createProtocolViewPayload(input: ProtocolViewPayloadInput): Prot
 			})),
 		})),
 	};
+}
+
+function bindingTargetKey(
+	target: ProtocolViewPayloadInput['payloadArena']['view']['bindings'][number]['target'],
+): string {
+	if (target.kind === 'attribute') return `attribute:${target.name}`;
+	if (target.kind === 'property') return `property:${target.name}`;
+	return target.kind;
 }
