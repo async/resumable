@@ -357,6 +357,11 @@ in the split specs.
 - Payload arena planning records the async-capable computed reads protected by
   each async boundary, so `async/view` can connect boundary anchors to demanded
   graph data without re-walking TSRX source.
+- Payload arena and protocol view planning currently normalize template reads
+  into source-bearing graph binding records with `hostNodeId`, `source`,
+  `bindingId`, `path`, and an optional binding `symbolId`. They do not yet carry
+  text-node, attribute, property, class, style, or range target metadata for
+  generated DOM operations.
 - Payload arena and protocol view planning carry element handle locator records,
   host behavior records, and behavior symbol IDs into the current `async/view`
   payload shape.
@@ -458,6 +463,14 @@ in the split specs.
   `async/state` cell values, materializes the `async/view` resume runtime, and
   starts delegated event/boundary wiring against a caller-supplied DOM-like root.
   It does not query a real browser document for payload scripts.
+- The current compiler protocol-state pass serializes semantic graph `state()`
+  cell `initialValue` entries through the pure serializer. Those values come
+  from syntax-evaluated literals, object expressions, array expressions, and
+  simple unary expressions, not from executing component bodies or capturing a
+  runtime graph snapshot. When the semantic evaluator cannot reduce an
+  initializer or nested initializer expression, the current source passes
+  `undefined` into the serializer, which encodes it as an explicit undefined
+  slot.
 - The pure-value `serializeGraphValue` / `deserializeGraphValue` path preserves
   identity/cycles and supports primitives, plain objects/arrays, `Date`,
   `RegExp`, `URL`, `BigInt`, `Map`, `Set`, `ArrayBuffer`, and the current
@@ -485,7 +498,8 @@ in the split specs.
   current manual `compileTsrxModule` pass calls, and add focused coverage for
   duplicate pass-ID validation.
 - Finish template/view lowering and final emit beyond the early payload and
-  resolver artifacts.
+  resolver artifacts, including text, attribute, property, class, and style
+  binding target records and generated DOM operation code for those bindings.
 - Implement TSRX control-flow identity support beyond the current generic AST
   walk, including keyed loop scope records, positional/unkeyed loop diagnostics
   for stateful or interactive bodies, branch-local graph scope records, branch
@@ -633,6 +647,8 @@ as evidence for a new source change.
 - `pnpm exec vp test packages/runtime/test/runtime-graph.test.ts packages/runtime/test/resume.test.ts`
 - `pnpm exec vp test packages/compiler/test/compile-module.test.ts packages/compiler/test/pass-pipeline.test.ts packages/rolldown/test/transform.test.ts packages/vite/test/adapter.test.ts`
 - `pnpm exec vp test packages/compiler/test/symbol-resolver-emit.test.ts packages/compiler/test/semantic-diagnostic-constructors.test.ts`
+- `pnpm exec vp test packages/compiler/test/payload-arena.test.ts packages/compiler/test/protocol-view.test.ts packages/compiler/test/symbol-resolver.test.ts packages/compiler/test/compile-module.test.ts packages/runtime/test/bindings.test.ts packages/runtime/test/resume.test.ts`
+- `pnpm exec vp test packages/compiler/test/compile-module.test.ts packages/serializer/test/payload-scripts.test.ts packages/serializer/test/serializer.test.ts`
 - `pnpm exec vp test packages/runtime/test/runtime-graph.test.ts`
 - `pnpm exec vp test packages/runtime/test/*.test.ts`
 - `pnpm exec vp test packages/runtime/test/resume.test.ts packages/runtime/test/payload-scripts.test.ts packages/runtime/test/behaviors.test.ts packages/runtime/test/bindings.test.ts`
@@ -675,6 +691,10 @@ commands are listed in the implementation/build section above.
 - diagnostic-scope audit confirmed current diagnostics coverage is limited to
   package/artifact-level object shapes for compiler passes, serializer
   unsupported-value failures, and generated unknown-symbol resume errors.
+- diagnostic-docs audit confirmed current package source and tests use hard-coded
+  `https://async.await.dev/errors/...` URL shapes, while the repo currently has
+  no docs, site, route, or error-page artifact for those URLs. Current evidence
+  proves URL shape only, not published documentation.
 - semantic-collector audit confirmed current semantic graph coverage is
   concentrated in eight focused `semantic-*.test.ts` files plus pass-boundary
   tests for module split and pass graph validation.
@@ -723,6 +743,11 @@ commands are listed in the implementation/build section above.
   rejected/throwing handlers,
   error-boundary routing, committed-write no-rollback behavior, or ignored
   return values.
+- event-error-routing audit confirmed current `dispatch` awaits handler symbols
+  sequentially and only calls `graph.flush()` after the handler loop completes
+  successfully. There is no runtime error-boundary hook, app-level error hook,
+  `try`/`finally` flush path, rejected-handler test, or explicit no-rollback
+  test for writes committed before a thrown or rejected handler.
 - element-handle runtime audit confirmed compiler/payload/protocol tests carry
   `elementHandles` records with `hostNodeId`, `handleId`, and local `name`, and
   runtime payload-resume tests expose `getElement(hostNodeId)` for host-node
@@ -754,6 +779,10 @@ commands are listed in the implementation/build section above.
   and wraps the results in canonical `async/state` / `async/view` script tags.
   It does not implement compact typed tables, compression, streaming, or private
   production arena encoding.
+- payload-script wrapper audit confirmed serializer tests assert both opening
+  and closing `async/state` / `async/view` tags, and the runtime parser requires
+  the exact prefix and suffix before `JSON.parse`. The separate test-utils
+  marker helper still checks opening tags only and does not parse payload JSON.
 - runtime-payload audit confirmed `decodePayloadScripts` validates the canonical
   script wrapper and shared protocol version after `JSON.parse`, while
   `createRuntimeGraphFromStatePayload` deserializes protocol state cell values
@@ -823,6 +852,11 @@ commands are listed in the implementation/build section above.
   IDs; it does not emit executable component code, lowered state access code,
   generated DOM binding functions, extracted event/behavior/async modules, or
   initial-render/browser-resume entry code.
+- template-binding audit confirmed current semantic/payload/protocol records for
+  template reads stop at graph-path subscriptions plus optional binding symbol
+  IDs. No package source classifies a template read as text, attribute,
+  property, class, style, or range binding metadata, and no current compiler
+  artifact carries the concrete DOM mutation target needed by final emit.
 - bundler-adapter source/test audit confirmed current Rolldown coverage is
   limited to a unit-level plugin shell whose `transform` compiles `.tsrx`
   modules with caller-supplied symbol tables, stores resolver/payload virtual
@@ -889,6 +923,13 @@ commands are listed in the implementation/build section above.
   and exposes them through `takeJournal`; executable coverage currently
   exercises `setText` records and one `setAttr` resume path, with no `setProp`,
   range-operation, cleanup, real-DOM application, or browser-ordering coverage.
+- runtime-scheduler audit confirmed current graph source schedules microtask
+  flushes through `queueMicrotask` with a `Promise.resolve().then(...)`
+  fallback for ordinary writes, updates, mutated collection calls, object
+  deletes, and settled async computed completions. Focused automatic-flush
+  coverage currently proves an idle-turn write batch only; most collection,
+  delete, computed, async, and resume tests still force `graph.flush()`
+  directly.
 - runtime sync-computed audit confirmed current runtime graph source lazily
   recomputes dirty sync computed nodes on read and marks dependent computed and
   async-computed nodes dirty when a computed node changes; focused tests
@@ -907,8 +948,27 @@ commands are listed in the implementation/build section above.
   offsets, direct `serializeGraphValue` unsupported-function diagnostics,
   successful protocol state payload construction, and canonical `async/state` /
   `async/view` script wrappers. Source has encode/decode branches for the
-  current typed-array family, while focused tests directly exercise `Uint8Array`
-  and `Int16Array`.
+  current typed-array family, while focused tests directly exercise `Uint8Array`,
+  `Int16Array`, and `Uint16Array`.
+- protocol-state input audit confirmed the compiler protocol-state pass reads
+  each payload arena state cell's matching semantic graph binding and passes the
+  binding's syntax-evaluated `initialValue` into
+  `createProtocolStatePayload`. The serializer wrapper converts
+  `AA_SERIALIZE_UNSUPPORTED_VALUE` results into a plain thrown `Error`, so this
+  path does not preserve structured diagnostic metadata for protocol-state
+  construction failures.
+- dynamic-initializer payload audit confirmed `initialValueKind` classifies only
+  object expressions, array expressions, and literals, while
+  `evaluateInitialStateValue` reduces literals, object/array expressions, and
+  simple unary expressions. Other initializer forms currently become
+  `undefined` before protocol-state serialization; no focused test exercises a
+  dynamic initializer flowing into `async/state`.
+- typed-array table audit confirmed the serializer source recognizes
+  `Int8Array`, `Uint8Array`, `Uint8ClampedArray`, `Int16Array`, `Uint16Array`,
+  `Int32Array`, `Uint32Array`, `Float32Array`, `Float64Array`, and guarded
+  `BigInt64Array` / `BigUint64Array` branches. The current source does not have
+  a `DataView` branch, and focused tests cover representative typed-array
+  round-trips rather than every listed class.
 - serializer-tier audit confirmed current package source implements pure
   built-in value graph serialization and protocol-state wrapping only. It does
   not yet implement framework graph reference records, async/shared snapshot
@@ -950,13 +1010,14 @@ commands are listed in the implementation/build section above.
   data-script wrappers, and Node fake-DOM payload decoding/resume helpers. They
   do not prove async snapshot records, shared snapshot records, protocol schema
   validation beyond exact script-wrapper and version checks, protocol computed
-  entries becoming runtime computed/async nodes, compact production payload
-  encoding, browser `TreeWalker` materialization, skip runs for static nodes,
-  ignored/nested regions, branch/list/fragment locator materialization, locator
-  mismatch diagnostics, symbol source extraction into emitted chunks, resolver
-  tables generated by a real build manifest, generated symbol exports,
-  browser-loaded dynamic imports, or a real initial-render payload. Current
-  chunk/export tables are fixture inputs, not build-derived evidence.
+  entries becoming runtime computed/async nodes, text, attribute, property,
+  class, and style binding target metadata, compact production payload encoding,
+  browser `TreeWalker` materialization, skip runs for static nodes, ignored/nested
+  regions, branch/list/fragment locator materialization, locator mismatch
+  diagnostics, symbol source extraction into emitted chunks, resolver tables
+  generated by a real build manifest, generated symbol exports, browser-loaded
+  dynamic imports, or a real initial-render payload. Current chunk/export tables
+  are fixture inputs, not build-derived evidence.
 - Current TSRX control-flow coverage proves ordinary nested element traversal,
   source-level generic `childNodes()` descent for non-special nodes, and
   async-boundary records for `TryStatement` parser output. It does not prove
@@ -982,8 +1043,8 @@ commands are listed in the implementation/build section above.
   sequential iteration in the resume runtime. Runtime tests currently prove
   single-symbol event dispatch only. They do not prove runtime behavior for
   multiple handlers on one event, stop-at-first-error semantics, error-boundary
-  routing, no rollback after committed writes, or ignored ordinary-event return
-  values.
+  routing, no rollback after committed writes, success-or-error flush timing, or
+  ignored ordinary-event return values.
 - Current element/behavior tests prove invalid and duplicate `el` diagnostics,
   `use`-on-component diagnostics, element handle payload/protocol records,
   multiple behavior source records and symbol IDs in authored/view order,
@@ -1014,19 +1075,22 @@ commands are listed in the implementation/build section above.
   one direct sync-computed lazy recompute path, async request versioning,
   abort-signal wiring, stale fulfilled completion suppression, selected
   collection calls and no-op invalidation behavior, static deletes, and
-  subscriber-produced `setText` journal collection. The runtime graph source
-  marks dependent computed and async-computed nodes dirty when a computed node
-  changes, but focused tests do not directly exercise computed-on-computed
-  dependency chains. The runtime graph source has a rejected async snapshot path
-  and same-key async invalidation skip, but focused tests do not directly
-  exercise those paths. The runtime and expression-collector source allow-lists
-  also include `copyWithin`, `fill`, `reverse`, `sort`, and `splice`, but
-  focused tests do not directly exercise those methods. Current resume-runtime
-  tests add one `setAttr` journal path. They do not prove `setProp`,
-  `insertRange`, `removeRange`, `moveRange`, or `runCleanup` records; that
-  compiler-emitted binding symbols apply the DOM journal to real browser nodes;
-  generated binding-symbol integration for computed dependencies; or that
-  journal ordering is correct under a browser event loop.
+  subscriber-produced `setText` journal collection. Automatic microtask flush
+  coverage proves an idle-turn write batch; collection-call, delete, computed,
+  async-computed, and resume paths mostly rely on explicit `graph.flush()` calls
+  in focused tests. The runtime graph source marks dependent computed and
+  async-computed nodes dirty when a computed node changes, but focused tests do
+  not directly exercise computed-on-computed dependency chains. The runtime graph
+  source has a rejected async snapshot path and same-key async invalidation skip,
+  but focused tests do not directly exercise those paths. The runtime and
+  expression-collector source allow-lists also include `copyWithin`, `fill`,
+  `reverse`, `sort`, and `splice`, but focused tests do not directly exercise
+  those methods. Current resume-runtime tests add one `setAttr` journal path.
+  They do not prove `setProp`, `insertRange`, `removeRange`, `moveRange`, or
+  `runCleanup` records; that compiler-emitted binding symbols apply the DOM
+  journal to real browser nodes; generated binding-symbol integration for
+  computed dependencies; or that journal ordering is correct under a browser
+  event loop.
 - Current state-lowering tests prove artifact lowering and diagnostics for
   selected graph reads/writes, assignment/update metadata, static collection
   calls, static deletes, optional graph writes, rest-alias exclusions, read-only
@@ -1064,14 +1128,17 @@ commands are listed in the implementation/build section above.
   events, or design-system widget graph instance identity.
 - Current serializer tests prove selected pure built-in value round-trips,
   identity/cycles, typed-array backing-buffer identity and offsets for
-  `Uint8Array` / `Int16Array`, pathful unsupported-function diagnostics from
-  `serializeGraphValue`, successful protocol-state wrapping, and canonical
-  payload script tags. They do not prove exhaustive typed-array class coverage,
-  app-owned or third-party value class restoration, framework graph reference
-  serialization, shared or async snapshot integration, structured diagnostic
-  propagation through protocol-state or initial-render payload construction,
-  secret-leak/resource diagnostics, compact production wire encoding, or
-  integration with a real initial-render payload.
+  `Uint8Array`, `Int16Array`, and `Uint16Array`, pathful unsupported-function
+  diagnostics from `serializeGraphValue`, successful protocol-state wrapping,
+  and canonical payload script tags. Compiler coverage proves literal and object
+  `state()` initial values reaching `async/state` through `compileTsrxModule`.
+  They do not prove dynamic or opaque `state()` initializer values, exhaustive
+  typed-array class coverage, `DataView` handling, app-owned or third-party value
+  class restoration, framework graph reference serialization, shared or async
+  snapshot integration, structured diagnostic propagation through protocol-state
+  or initial-render payload construction, runtime graph snapshots after
+  component-body execution, secret-leak/resource diagnostics, compact production
+  wire encoding, or integration with a real initial-render payload.
 - Current core/protocol/test-utils tests prove the compiler-only intrinsic
   runtime failure path, protocol version sharing across empty state/view payloads,
   opening payload script marker checks based on `startsWith`, and selected
@@ -1082,14 +1149,15 @@ commands are listed in the implementation/build section above.
   computed entries, element handles, or async boundaries, browser helpers, or
   witness integration helpers.
 - Current diagnostics coverage proves selected compiler/serializer/resolver
-  diagnostic object shapes, stable codes, docs URL shape, and the implemented
-  `semantic-graph` / `sync-policy` / `state-lowering` / `capture-analysis` /
-  `serialization` / `resume` phase names in package tests. It does not prove
-  one unified diagnostic object for all thrown errors, end-user CLI output,
-  editor integration, dev-server overlays, source-map/source range rendering,
-  published error documentation, browser/runtime error routing, build-pipeline
-  diagnostic propagation, runtime protocol/hash mismatch diagnostics, async
-  result serialization diagnostics, or every required compile-time diagnostic in
+  diagnostic object shapes, stable codes, hard-coded docs URL shape, and the
+  implemented `semantic-graph` / `sync-policy` / `state-lowering` /
+  `capture-analysis` / `serialization` / `resume` phase names in package tests.
+  It does not prove one unified diagnostic object for all thrown errors,
+  end-user CLI output, editor integration, dev-server overlays,
+  source-map/source range rendering, repo-owned or published error
+  documentation, browser/runtime error routing, build-pipeline diagnostic
+  propagation, runtime protocol/hash mismatch diagnostics, async result
+  serialization diagnostics, or every required compile-time diagnostic in
   `specs/framework/07-diagnostics.md`.
 - Current capture-analysis tests prove selected unsupported local binding
   categories against planned symbol source strings. They do not prove a complete
