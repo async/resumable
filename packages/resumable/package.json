@@ -1,0 +1,15 @@
+{
+	"name": "@async/resumable",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"exports": {
+		".": "./src/index.ts",
+		"./vite": "./src/vite.ts"
+	},
+	"dependencies": {
+		"@async/resumable-core": "workspace:*",
+		"@async/resumable-rolldown": "workspace:*",
+		"@async/resumable-vite": "workspace:*"
+	}
+}

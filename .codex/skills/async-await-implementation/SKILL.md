@@ -29,7 +29,11 @@ description: "Use when implementing the @async/resumable TSRX framework: compile
 
 - Build the first compiler in JS/TS on `@tsrx/core`.
 - Do not start with OXC, Rust, or a native compiler backend. Keep artifact contracts backend-neutral so OXC can replace internals later.
+- Do not use the sibling `../native-tsrx` repository: do not inspect it, edit it, run commands in it, or make async-await work depend on changes there. Treat `@tsrx/core` as an external dependency boundary; if its current parser artifacts are insufficient for a compiler behavior, keep coverage at the async-await compiler artifact boundary, record the caveat, or ask the user before any dependency work.
 - Structure compiler work as cooperating mini-compilers with typed artifacts: TSRX semantic graph, state lowering, async dependency extraction, sync event policy, capture analysis, template/view lowering, payload arena planning, symbol resolver planning, and final emit.
+- Treat compiler maintainability as product behavior. A contributor should be able to find the owning pass, read its artifact types, run its focused tests, and change it without understanding the whole compiler.
+- Before adding compiler semantics, inspect the production compiler module layout. If behavior is still concentrated in a large `index.ts`, broad AST visitor, or other orchestrator/barrel file, first extract the owning pass into a pass module or add the missing pass boundary. The package entry may re-export and the orchestrator may run the pass graph; neither should absorb pass implementation details.
+- Every compiler change should name the pass ID it touches, the artifacts it consumes/produces, the pass-owned module where the behavior lives, and the focused artifact fixture/test that proves that pass boundary. End-to-end output snapshots are secondary evidence, not a substitute for pass-level artifacts.
 - Prefer pass-level fixture tests over only final bundle snapshots.
 - Keep intermediate artifacts human-readable and easy for agents to inspect.
 - Treat diagnostics as product behavior. Include source span, short reason, allowed alternatives, and the suggested fix.

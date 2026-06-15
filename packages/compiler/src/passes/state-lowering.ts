@@ -1,0 +1,464 @@
+import type {
+	LoweredStateRead,
+	LoweredStateWrite,
+	SemanticGraphAlias,
+	SemanticGraphBinding,
+	SemanticStateWrite,
+	SourceSpan,
+	StateLoweringArtifact,
+	StateLoweringDiagnostic,
+	StateLoweringInput,
+} from '../artifacts.ts';
+import {
+	resolveGraphPath,
+	semanticAliasMap,
+	splitStaticGraphPath,
+	uniqueBy,
+} from '../artifact-helpers/graph-paths.ts';
+
+export function lowerStateAccess(input: StateLoweringInput): StateLoweringArtifact {
+	const bindings = new Map<string, SemanticGraphBinding>();
+	const aliases = semanticAliasMap(input.semanticGraph);
+	const reads: LoweredStateRead[] = [];
+	const writes: LoweredStateWrite[] = [];
+	const diagnostics: StateLoweringDiagnostic[] = [];
+
+	for (const binding of input.semanticGraph.graphBindings) {
+		bindings.set(binding.name, binding);
+	}
+
+	for (const read of input.semanticGraph.templateReads) {
+		const resolved = resolveGraphPath(read.source, bindings, aliases);
+		if (!resolved) {
+			if (isDynamicGraphPathSource(read.source, bindings, aliases)) {
+				diagnostics.push(
+					dynamicGraphPathReadDiagnostic(
+						read.source,
+						read.sourceSpan,
+						input.semanticGraph.filename,
+					),
+				);
+			}
+			continue;
+		}
+
+		reads.push({
+			source: read.source,
+			bindingId: resolved.binding.id,
+			path: resolved.path,
+		});
+	}
+
+	for (const read of input.semanticGraph.stateReads) {
+		const resolved = resolveGraphPath(read.source, bindings, aliases);
+		if (!resolved) {
+			if (isDynamicGraphPathSource(read.source, bindings, aliases)) {
+				diagnostics.push(
+					dynamicGraphPathReadDiagnostic(
+						read.source,
+						read.sourceSpan,
+						input.semanticGraph.filename,
+					),
+				);
+			}
+			continue;
+		}
+
+		reads.push({
+			source: read.source,
+			bindingId: resolved.binding.id,
+			path: resolved.path,
+		});
+	}
+
+	for (const write of input.semanticGraph.stateWrites) {
+		if (write.optional === true) {
+			diagnostics.push(optionalChainWriteDiagnostic(write, input.semanticGraph.filename));
+			continue;
+		}
+
+		const resolved = resolveGraphPath(write.target, bindings, aliases);
+		if (!resolved) {
+			const excludedAliasPath = findRestAliasExcludedPath(write.target, aliases);
+			if (excludedAliasPath) {
+				diagnostics.push(
+					restAliasExcludedPathDiagnostic({
+						source: write.target,
+						sourceSpan: write.targetSpan,
+						filename: input.semanticGraph.filename,
+						excludedAliasPath,
+					}),
+				);
+				continue;
+			}
+
+			if (isDynamicGraphPathSource(write.target, bindings, aliases)) {
+				diagnostics.push(
+					dynamicGraphPathWriteDiagnostic(write, input.semanticGraph.filename),
+				);
+				continue;
+			}
+
+			diagnostics.push(unresolvedWriteDiagnostic(write, input.semanticGraph.filename));
+			continue;
+		}
+
+		if (!resolved.binding.writable) {
+			diagnostics.push(readOnlyWriteDiagnostic(write, resolved.binding));
+			continue;
+		}
+
+		if (isConstAliasReassignment(write, aliases)) {
+			diagnostics.push(constBindingReassignmentDiagnostic(write));
+			continue;
+		}
+
+		if (isConstBindingReassignment(write, resolved.binding, resolved.path)) {
+			diagnostics.push(constBindingReassignmentDiagnostic(write));
+			continue;
+		}
+
+		writes.push({
+			source: write.target,
+			bindingId: resolved.binding.id,
+			path: resolved.path,
+			operation: write.operation,
+			assignmentOperator: write.assignmentOperator,
+			prefix: write.prefix,
+			updateOperator: write.updateOperator,
+			method: write.method,
+			argumentSources: write.argumentSources,
+		});
+	}
+
+	return {
+		passId: 'state-lowering',
+		reads: uniqueBy(reads, (read) => `${read.bindingId}:${read.path.join('.')}:${read.source}`),
+		writes,
+		diagnostics,
+	};
+}
+
+function unresolvedWriteDiagnostic(
+	write: SemanticStateWrite,
+	filename: string,
+): StateLoweringDiagnostic {
+	return {
+		code: 'AA_STATE_UNRESOLVED_WRITE',
+		severity: 'error',
+		phase: 'state-lowering',
+		title: 'Cannot resolve graph write target',
+		message: `Cannot write to "${write.target}" because it does not resolve to graph state.`,
+		why: 'Only state() bindings and supported graph paths can be mutated across a resume boundary.',
+		primarySpan: write.targetSpan ?? fallbackSpan(filename),
+		passId: 'state-lowering',
+		artifactKeys: ['semanticGraph', 'stateLowering'],
+		statePath: write.target,
+		source: write.target,
+		suggestions: [
+			{
+				message:
+					'Write to a state() binding, a path inside object state, or move non-graph mutation into normal local code.',
+			},
+		],
+		docsUrl: 'https://async.await.dev/errors/AA_STATE_UNRESOLVED_WRITE',
+	};
+}
+
+function dynamicGraphPathReadDiagnostic(
+	source: string,
+	sourceSpan: SourceSpan | undefined,
+	filename: string,
+): StateLoweringDiagnostic {
+	return {
+		code: 'AA_STATE_DYNAMIC_PATH_READ',
+		severity: 'error',
+		phase: 'state-lowering',
+		title: 'Cannot read from a dynamic graph path',
+		message: `Cannot read "${source}" because graph read paths must be statically resolvable.`,
+		why: 'The resumable state graph records path-level subscriptions in the payload. A dynamic property expression cannot be represented as a stable graph subscription by the current compiler pass.',
+		primarySpan: sourceSpan ?? fallbackSpan(filename),
+		passId: 'state-lowering',
+		artifactKeys: ['semanticGraph', 'stateLowering'],
+		statePath: source,
+		source,
+		suggestions: [
+			{
+				message:
+					'Use a statically named property path, a literal array index, or model the dynamic lookup as a computed() with explicit compiler support.',
+			},
+		],
+		docsUrl: 'https://async.await.dev/errors/AA_STATE_DYNAMIC_PATH_READ',
+	};
+}
+
+function dynamicGraphPathWriteDiagnostic(
+	write: SemanticStateWrite,
+	filename: string,
+): StateLoweringDiagnostic {
+	return {
+		code: 'AA_STATE_DYNAMIC_PATH_WRITE',
+		severity: 'error',
+		phase: 'state-lowering',
+		title: 'Cannot write to a dynamic graph path',
+		message: `Cannot write to "${write.target}" because graph write paths must be statically resolvable.`,
+		why: 'The resumable state graph records path-level writes in the payload and runtime journal. A dynamic property expression cannot be represented as a stable graph path by the current compiler pass.',
+		primarySpan: write.targetSpan ?? fallbackSpan(filename),
+		passId: 'state-lowering',
+		artifactKeys: ['semanticGraph', 'stateLowering'],
+		statePath: write.target,
+		source: write.target,
+		suggestions: [
+			{
+				message:
+					'Use a statically named property path, a literal array index, or a collection method with compiler coverage for this state update.',
+			},
+		],
+		docsUrl: 'https://async.await.dev/errors/AA_STATE_DYNAMIC_PATH_WRITE',
+	};
+}
+
+function optionalChainWriteDiagnostic(
+	write: SemanticStateWrite,
+	filename: string,
+): StateLoweringDiagnostic {
+	return {
+		code: 'AA_STATE_OPTIONAL_CHAIN_WRITE',
+		severity: 'error',
+		phase: 'state-lowering',
+		title: 'Cannot write graph state through optional chaining',
+		message: `Cannot write to "${write.target}" through optional chaining because graph writes must have definite targets.`,
+		why: 'Optional chaining can skip the method call and its arguments at runtime. The current graph write artifact cannot preserve that short-circuit behavior safely across resume.',
+		primarySpan: write.targetSpan ?? fallbackSpan(filename),
+		passId: 'state-lowering',
+		artifactKeys: ['semanticGraph', 'stateLowering'],
+		statePath: write.target,
+		source: write.target,
+		suggestions: [
+			{
+				message:
+					'Guard explicitly before mutating graph state, or initialize the state path so the collection method call always has a definite target.',
+			},
+		],
+		docsUrl: 'https://async.await.dev/errors/AA_STATE_OPTIONAL_CHAIN_WRITE',
+	};
+}
+
+type ExcludedAliasPath = {
+	readonly aliasName: string;
+	readonly excludedPath: ReadonlyArray<string>;
+};
+
+function restAliasExcludedPathDiagnostic({
+	source,
+	sourceSpan,
+	filename,
+	excludedAliasPath,
+}: {
+	readonly source: string;
+	readonly sourceSpan?: SourceSpan;
+	readonly filename: string;
+	readonly excludedAliasPath: ExcludedAliasPath;
+}): StateLoweringDiagnostic {
+	const excludedPathSource = excludedAliasPath.excludedPath.join('.');
+
+	return {
+		code: 'AA_STATE_REST_ALIAS_EXCLUDED_PATH',
+		severity: 'error',
+		phase: 'state-lowering',
+		title: 'Cannot write through an object-rest excluded path',
+		message: `Cannot write to "${source}" because "${excludedPathSource}" was excluded when "${excludedAliasPath.aliasName}" was created.`,
+		why: 'Object rest destructuring creates an alias for the remaining graph paths only. Paths explicitly destructured out of the source object are not owned by the rest alias.',
+		primarySpan: sourceSpan ?? fallbackSpan(filename),
+		passId: 'state-lowering',
+		artifactKeys: ['semanticGraph', 'stateLowering'],
+		statePath: source,
+		source,
+		suggestions: [
+			{
+				message:
+					'Write through the original graph path, or use the explicit destructured alias for the excluded property.',
+			},
+		],
+		docsUrl: 'https://async.await.dev/errors/AA_STATE_REST_ALIAS_EXCLUDED_PATH',
+	};
+}
+
+function readOnlyWriteDiagnostic(
+	write: SemanticStateWrite,
+	binding: SemanticGraphBinding,
+): StateLoweringDiagnostic {
+	const details = readOnlyWriteDetails(binding);
+
+	return {
+		code: 'AA_STATE_READ_ONLY_WRITE',
+		severity: 'error',
+		phase: 'state-lowering',
+		title: 'Cannot write to a read-only graph binding',
+		message: `Cannot write to "${write.target}" because ${details.bindingLabel} are read-only.`,
+		why: details.why,
+		primarySpan: write.targetSpan,
+		passId: 'state-lowering',
+		artifactKeys: ['semanticGraph', 'stateLowering'],
+		statePath: write.target,
+		source: write.target,
+		suggestions: [{ message: details.suggestion }],
+		docsUrl: 'https://async.await.dev/errors/AA_STATE_READ_ONLY_WRITE',
+	};
+}
+
+function readOnlyWriteDetails(binding: SemanticGraphBinding): {
+	readonly bindingLabel: string;
+	readonly why: string;
+	readonly suggestion: string;
+} {
+	if (binding.kind === 'computed') {
+		return {
+			bindingLabel: 'computed() values',
+			why: 'computed() creates derived graph state. Mutating it would make the serialized graph ambiguous after resume.',
+			suggestion:
+				'Write to the source state that the computed value derives from, or make a separate state() value for mutable data.',
+		};
+	}
+
+	if (binding.kind === 'prop') {
+		return {
+			bindingLabel: 'prop bindings',
+			why: 'Props are owned by the parent graph projection. Mutating a child prop binding would create resume state that has no stable owner.',
+			suggestion:
+				'Write to state owned by the parent graph, or pass an event handler/shared graph method that performs the update at the owner.',
+		};
+	}
+
+	return {
+		bindingLabel: `${binding.kind} bindings`,
+		why: 'This graph binding is read-only in the current compiler pass, so mutating it would create resume state the runtime cannot own safely.',
+		suggestion: 'Write to a state() binding or a writable path inside object state instead.',
+	};
+}
+
+function isConstBindingReassignment(
+	write: SemanticStateWrite,
+	binding: SemanticGraphBinding,
+	path: ReadonlyArray<string>,
+): boolean {
+	if (binding.kind !== 'state' || binding.declarationKind !== 'const') return false;
+	if (path.length > 0) return false;
+
+	return write.operation === 'assign' || write.operation === 'update';
+}
+
+function isConstAliasReassignment(
+	write: SemanticStateWrite,
+	aliases: ReadonlyMap<string, SemanticGraphAlias>,
+): boolean {
+	if (write.operation !== 'assign' && write.operation !== 'update') return false;
+
+	const segments = splitStaticGraphPath(write.target);
+	if (segments.length !== 1) return false;
+
+	return aliases.get(segments[0])?.declarationKind === 'const';
+}
+
+function isDynamicGraphPathSource(
+	source: string,
+	bindings: ReadonlyMap<string, SemanticGraphBinding>,
+	aliases: ReadonlyMap<string, SemanticGraphAlias>,
+): boolean {
+	if (!hasDynamicBracketSegment(source)) return false;
+
+	const root = graphPathRoot(source);
+	if (!root) return false;
+
+	return resolveGraphPath(root, bindings, aliases) !== null;
+}
+
+function findRestAliasExcludedPath(
+	source: string,
+	aliases: ReadonlyMap<string, SemanticGraphAlias>,
+): ExcludedAliasPath | null {
+	const segments = splitStaticGraphPath(source);
+	if (segments.length < 2) return null;
+
+	const aliasName = segments[0];
+	const alias = aliases.get(aliasName);
+	if (!alias?.excludedPaths) return null;
+
+	const requestedPath = segments.slice(1);
+	const excludedPath = alias.excludedPaths.find((path) => pathStartsWith(requestedPath, path));
+	if (!excludedPath) return null;
+
+	return {
+		aliasName,
+		excludedPath,
+	};
+}
+
+function pathStartsWith(path: ReadonlyArray<string>, prefix: ReadonlyArray<string>): boolean {
+	if (prefix.length > path.length) return false;
+
+	return prefix.every((segment, index) => segment === path[index]);
+}
+
+function graphPathRoot(source: string): string | null {
+	const match = /^\s*([$A-Z_a-z][$\w]*)/.exec(source);
+	return match?.[1] ?? null;
+}
+
+function hasDynamicBracketSegment(source: string): boolean {
+	let index = 0;
+
+	while (index < source.length) {
+		const open = source.indexOf('[', index);
+		if (open === -1) return false;
+
+		const close = source.indexOf(']', open + 1);
+		if (close === -1) return true;
+
+		const segment = source.slice(open + 1, close).trim();
+		if (!isStaticBracketSegment(segment)) return true;
+
+		index = close + 1;
+	}
+
+	return false;
+}
+
+function isStaticBracketSegment(segment: string): boolean {
+	if (/^\d+$/.test(segment)) return true;
+	if (segment.length < 2) return false;
+
+	const quote = segment[0];
+	return (quote === '"' || quote === "'") && segment[segment.length - 1] === quote;
+}
+
+function constBindingReassignmentDiagnostic(write: SemanticStateWrite): StateLoweringDiagnostic {
+	return {
+		code: 'AA_STATE_CONST_REASSIGNMENT',
+		severity: 'error',
+		phase: 'state-lowering',
+		title: 'Cannot reassign a const graph binding',
+		message: `Cannot update "${write.target}" because it was declared with const. JavaScript const binding semantics are preserved for state().`,
+		why: 'state() removes marker syntax, but it does not change JavaScript binding rules. A const binding cannot be reassigned during resume or initial render.',
+		primarySpan: write.targetSpan,
+		passId: 'state-lowering',
+		artifactKeys: ['semanticGraph', 'stateLowering'],
+		statePath: write.target,
+		source: write.target,
+		suggestions: [
+			{
+				message:
+					'Use let for scalar state you reassign, or mutate a property path on object state such as menu.open.',
+			},
+		],
+		docsUrl: 'https://async.await.dev/errors/AA_STATE_CONST_REASSIGNMENT',
+	};
+}
+
+function fallbackSpan(filename: string): SourceSpan {
+	return {
+		filename,
+		start: 0,
+		end: 0,
+	};
+}

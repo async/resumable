@@ -59,7 +59,7 @@ serializable state.
 The initial render phase emits, alongside the HTML:
 
 1. **State values** — object state serializes with the tiered serializer above.
-   Sync `computed()` values are *not* serialized; they re-derive lazily from
+   Sync `computed()` values are _not_ serialized; they re-derive lazily from
    their dependencies on first read.
 2. **Async snapshots** — demanded async computed IDs, dependency keys, request
    versions, status (`pending`, `resolved`, `rejected`), and settled value/error
@@ -100,8 +100,12 @@ scripts, rather than relying on verbose JSON objects or scattered per-node
 attributes. By default, the core renderer emits two inert data scripts:
 
 ```html
-<script type="async/state">...</script>
-<script type="async/view">...</script>
+<script type="async/state">
+	...
+</script>
+<script type="async/view">
+	...
+</script>
 ```
 
 `async/state` carries the state arena. `async/view` carries the view/wiring
