@@ -299,9 +299,11 @@ in the split specs.
   destructuring aliases represented in semantic graph artifacts,
   computed-write diagnostics, prop-write diagnostics, and const graph binding
   reassignment diagnostics.
-- Current prop handling proves artifact-level getter-style read semantics only:
-  prop aliases lower to `prop:props` reads, and writes to props report
-  `AA_STATE_READ_ONLY_WRITE`.
+- Current prop handling proves compiler-artifact read semantics only: the first
+  component parameter becomes a synthetic read-only prop binding
+  (`prop:<name>` for identifier parameters or `prop:props` plus aliases for
+  object patterns), prop aliases lower to that binding, and writes to props
+  report `AA_STATE_READ_ONLY_WRITE`.
 - State lowering read-only diagnostics use binding-kind-specific explanations,
   so prop writes point at parent graph ownership instead of reusing
   computed-specific guidance.
@@ -348,9 +350,11 @@ in the split specs.
 - Resume runtime tests can recover a DOM element by host node ID through the
   current `getElement(hostNodeId)` API, but lazy symbol context does not yet
   expose authored `element()` handle lookup by handle ID or local handle name.
-- Symbol resolver planning assigns lazy symbols from current event, binding,
-  behavior, and async-computed-runner records while the generated resolver owns
-  import boundaries.
+- Symbol resolver planning assigns source-bearing lazy symbol records from
+  current event, binding, behavior, and async-computed-runner artifacts. Resolver
+  module emission owns dynamic import dispatch for the supplied chunk/export
+  table, but source-to-module extraction and build-derived chunk/export mapping
+  are not implemented yet.
 - Symbol resolver module emission fails closed for unknown symbol IDs with
   `AA_SYMBOL_UNKNOWN`, `resume` phase, the missing `symbolId`, and a stable docs
   URL on the thrown error object.
@@ -413,11 +417,11 @@ in the split specs.
   arrays, and the resume source iterates matched event symbol IDs in protocol
   order. Focused runtime tests do not yet execute multiple handler symbols for
   one event.
-- For element behaviors, compiler/protocol tests preserve behavior records and
-  symbol IDs in authored/view order. The resume source loads behavior symbols in
-  view-record order and stores returned cleanups by host, while focused runtime
-  tests currently exercise one behavior install/cleanup path on explicit host
-  disposal.
+- For element behaviors, compiler/protocol tests preserve behavior source records
+  and symbol IDs in authored/view order. The resume source loads behavior symbols
+  in view-record order with `{ graph, element }` only and stores returned
+  cleanups by host, while focused runtime tests currently exercise one behavior
+  install/cleanup path on explicit host disposal.
 - The resume runtime materializes `async/view` async boundary records against
   DOM-order comment anchors and exposes the boundary-side table for later async
   demand/revalidation work.
@@ -594,6 +598,13 @@ as evidence for a new source change.
 - `pnpm exec vp test packages/compiler/test/semantic-sync-policy-collector.test.ts packages/compiler/test/sync-policy.test.ts packages/compiler/test/semantic-diagnostics.test.ts packages/runtime/test/resume.test.ts packages/runtime/test/payload-scripts.test.ts`
 - `pnpm exec vp test packages/compiler/test/semantic-diagnostics.test.ts packages/compiler/test/payload-arena.test.ts packages/compiler/test/protocol-view.test.ts packages/compiler/test/symbol-resolver.test.ts packages/runtime/test/behaviors.test.ts packages/runtime/test/resume.test.ts`
 - `pnpm exec vp test packages/compiler/test/semantic-diagnostics.test.ts packages/compiler/test/semantic-graph.test.ts packages/compiler/test/semantic-collector-boundaries.test.ts packages/compiler/test/payload-arena.test.ts packages/compiler/test/protocol-view.test.ts packages/compiler/test/symbol-resolver.test.ts packages/runtime/test/runtime-graph.test.ts packages/runtime/test/resume.test.ts`
+- `pnpm exec vp test packages/compiler/test/semantic-graph.test.ts packages/compiler/test/semantic-alias-collector.test.ts packages/compiler/test/state-lowering.test.ts`
+- `pnpm exec vp test packages/compiler/test/semantic-graph.test.ts packages/compiler/test/semantic-collector-boundaries.test.ts packages/compiler/test/payload-arena.test.ts packages/compiler/test/protocol-view.test.ts`
+- `pnpm exec vp test packages/compiler/test/semantic-graph.test.ts packages/compiler/test/semantic-diagnostics.test.ts packages/compiler/test/payload-arena.test.ts`
+- `pnpm exec vp test packages/compiler/test/protocol-view.test.ts packages/runtime/test/resume.test.ts`
+- `pnpm exec vp test packages/compiler/test/symbol-resolver.test.ts packages/compiler/test/symbol-resolver-emit.test.ts packages/compiler/test/compile-module.test.ts packages/rolldown/test/transform.test.ts packages/vite/test/adapter.test.ts`
+- `pnpm exec vp test packages/compiler/test/protocol-view.test.ts packages/compiler/test/symbol-resolver.test.ts packages/runtime/test/resume.test.ts`
+- `pnpm exec vp test packages/compiler/test/semantic-diagnostics.test.ts packages/compiler/test/payload-arena.test.ts packages/compiler/test/protocol-view.test.ts packages/runtime/test/behaviors.test.ts packages/runtime/test/payload-scripts.test.ts`
 - `pnpm exec vp test packages/compiler/test/symbol-resolver-emit.test.ts packages/compiler/test/semantic-diagnostic-constructors.test.ts`
 - `pnpm exec vp test packages/runtime/test/runtime-graph.test.ts`
 - `pnpm exec vp test packages/runtime/test/*.test.ts`
@@ -612,7 +623,7 @@ commands are listed in the implementation/build section above.
 
 - `git diff --check`
 - `pnpm exec vp fmt --check specs/framework-design.md specs/state.md specs/framework/*.md`
-- `pnpm exec vp check package.json pnpm-lock.yaml pnpm-workspace.yaml vite.config.ts packages specs/framework-design.md specs/state.md`
+- `pnpm exec vp check package.json pnpm-lock.yaml pnpm-workspace.yaml vite.config.ts packages specs/framework-design.md specs/state.md specs/framework/*.md`
 - code-fence scan over current implementation-facing specs confirmed no `tsx`
   or `jsx` fence labels remain outside the historical archive.
 - terminology scan over current split specs confirmed generic current-contract
@@ -666,26 +677,32 @@ commands are listed in the implementation/build section above.
   runtime condition IR has graph-truthy and event-equals variants only, with
   literals used as event comparison values; no package source or focused test
   covers prop reads or serializable constant reads in synchronous policy guards.
-- onVisible audit confirmed current package source has no `onVisible` or
-  `IntersectionObserver` implementation paths; resume tests cover delegated
-  DOM-event dispatch only, not visibility-triggered lazy symbol loading,
-  fires-once behavior, current-value reads, or returned cleanup handling.
+- onVisible audit confirmed current package source has no `onVisible`
+  special-case, visibility event record kind, or `IntersectionObserver`
+  implementation path. Event collection uses the generic `on*` attribute path
+  from `@tsrx/core`, and resume tests cover delegated DOM-event dispatch only,
+  not visibility-triggered lazy symbol loading, fires-once behavior,
+  current-value reads, or returned cleanup handling.
 - event-handler-array audit confirmed protocol/compiler tests preserve ordered
-  event `symbolIds` for handler arrays and the resume source iterates those IDs
-  sequentially, but runtime tests cover only single-symbol event dispatch and do
-  not cover multiple handlers on one event, rejected/throwing handlers,
+  handler sources and event `symbolIds` for handler arrays, and the resume source
+  iterates those IDs sequentially, but runtime tests cover only single-symbol
+  event dispatch and do not cover multiple handlers on one event,
+  rejected/throwing handlers,
   error-boundary routing, committed-write no-rollback behavior, or ignored
   return values.
 - element-handle runtime audit confirmed compiler/payload/protocol tests carry
-  `elementHandles` records and runtime payload-resume tests expose
-  `getElement(hostNodeId)` for host-node lookup, but no package source exposes
-  authored handle IDs or local handle names to lazy symbols.
+  `elementHandles` records with `hostNodeId`, `handleId`, and local `name`, and
+  runtime payload-resume tests expose `getElement(hostNodeId)` for host-node
+  lookup. Runtime symbol context still exposes only the owner element, not an
+  authored handle lookup table, so no package source materializes
+  `element()` handles for lazy symbols by handle ID or local handle name.
 - behavior-lifecycle audit confirmed compiler/protocol tests preserve two
-  behavior records and symbol IDs in authored/view order, and the resume source
-  installs behavior records in view order and reverses recorded cleanup
-  callbacks on `disposeHost`. Current focused runtime coverage exercises one
-  behavior only, and no package source emits serialized behavior input records
-  or input-change rerun wiring.
+  behavior source records and symbol IDs in authored/view order, and the resume
+  source installs behavior records in view order with `{ graph, element }` only
+  and reverses recorded cleanup callbacks on `disposeHost`. Current focused
+  runtime coverage exercises one behavior only, and no package source emits
+  serialized behavior input records, materializes behavior inputs, or wires
+  input-change reruns.
 - element/behavior audit confirmed current coverage is focused on compiler
   diagnostics and payload records for `el` / `use`, behavior symbol planning, and
   one Node fake-DOM runtime behavior install/cleanup path.
@@ -774,26 +791,39 @@ commands are listed in the implementation/build section above.
   not prove the authored `shared(() => ...)` definition/instance-call surface
   from `03-state-graph.md`.
 - props/projection audit confirmed current component parameter support is limited
-  to first-parameter `prop` graph bindings, object-pattern aliases, prop reads,
-  and read-only prop-write diagnostics. No current package source emits children
-  projection artifacts, projection payload metadata, or React-style child
-  manipulation diagnostics.
-- control-flow identity audit confirmed the compiler currently walks unowned AST
-  children for non-async control-flow bodies, but no package source emits keyed
-  loop identity records, branch-local graph scope records, unkeyed stateful-loop
+  to first-parameter synthetic `prop` graph bindings, object-pattern aliases,
+  prop reads, and read-only prop-write diagnostics. This is a compiler-artifact
+  path only; no current package source emits runtime getter-backed prop wiring,
+  component-boundary prop propagation, children projection artifacts, projection
+  payload metadata, or React-style child manipulation diagnostics.
+- control-flow identity audit confirmed the semantic walker descends generic
+  `childNodes()` for non-special AST nodes and gives only `TryStatement` a
+  dedicated async-boundary context. No current focused fixture exercises authored
+  TSRX `@if`, `@for`, or `@switch`, and no package source emits keyed loop
+  identity records, branch-local graph scope records, unkeyed stateful-loop
   diagnostics, branch/list locator streams, or control-flow disposal metadata.
-- dynamic-tag/style audit confirmed current element collection handles static
-  host tag names and static component-vs-host `use` diagnostics only; no package
-  source emits dynamic tag/component artifacts or scoped style metadata.
+- dynamic-tag/style audit confirmed current element collection derives static
+  host/component classification from identifier tag names and lowercase host
+  names, and tests static component-vs-host `use` diagnostics. The current split
+  specs only list dynamic tags/components and scoped styles as TSRX baseline
+  syntax; no package source emits dynamic tag/component artifacts, dynamic
+  ownership diagnostics, style-scope records, style-composition records, or
+  scoped-style payload metadata.
 - authored-comment/scope audit confirmed current generic AST traversal ignores
-  `leadingComments` / `trailingComments`, payload async-boundary tests assume the
-  generated start/end anchors are the first two DOM-order comments, and no
-  package source emits authored template-comment records or comment-aware locator
-  offsets.
-- symbol-extraction audit confirmed `compileTsrxModule` and the Rolldown adapter
-  currently accept caller-supplied symbol chunk/export tables; symbol planning
-  uses source strings, but no package source extracts those strings into emitted
-  handler, binding, behavior, or async-runner modules.
+  `leadingComments` / `trailingComments`, payload planning assigns generated
+  async-boundary anchors to raw `dom-order-comment` indexes, and runtime resume
+  materializes those indexes by walking every comment node under the root. No
+  package source emits authored template-comment records, authored-comment skip
+  metadata, comment-aware async-anchor offsets, or statement-container lexical
+  scope artifacts.
+- symbol-extraction audit confirmed `planSymbolResolver` creates source-bearing
+  planned symbols for event handlers, DOM bindings, behaviors, and
+  async-computed runners, while `compileTsrxModule`, `transformTsrxModule`, the
+  Rolldown adapter, and the Vite wrapper still accept caller-supplied
+  `id`/`chunk`/`exportName` tables for resolver emission. No package source
+  extracts planned symbol source strings into emitted handler, binding,
+  behavior, or async-runner modules, and no build adapter derives resolver tables
+  from real chunk output.
 - runtime-graph journal audit confirmed current graph source accepts the full
   `DomJournalRecord` union, records subscription-produced DOM journal entries,
   and exposes them through `takeJournal`; executable coverage currently
@@ -853,24 +883,26 @@ commands are listed in the implementation/build section above.
   bootstrap that locates `async/state` / `async/view` scripts or proves startup
   in a real browser document.
 - Current payload/symbol tests prove simple DOM-order locators, protocol state
-  cell/computed metadata planning, protocol view wiring, symbol ID wiring,
-  resolver module string emission, fail-closed unknown-symbol metadata,
-  canonical JSON data-script wrappers, and Node fake-DOM payload decoding/resume
-  helpers. They do not prove async snapshot records, shared snapshot records,
-  protocol schema validation beyond wrapper/version checks, protocol computed
-  entries becoming runtime computed/async nodes, compact production payload
-  encoding, branch/list/fragment locator materialization, symbol source
-  extraction into emitted chunks, resolver tables generated by a real build
-  manifest, generated symbol exports, browser-loaded dynamic imports, or a real
-  initial-render payload. Current chunk/export tables are fixture inputs, not
-  build-derived evidence.
-- Current TSRX control-flow coverage proves only generic traversal of nested
-  non-async AST children plus async-boundary records for `@try`-like parser
-  output. It does not prove keyed `@for` identity, positional/unkeyed loop
-  diagnostics, branch-local graph scope ownership, `@if`/`@switch` branch
-  disposal, branch/list payload locators, or runtime cleanup of graph state,
-  events, bindings, async work, and behaviors owned by removed control-flow
-  ranges.
+  cell/computed metadata planning, protocol view wiring, source-bearing planned
+  symbol records, symbol ID wiring, resolver module string emission from supplied
+  chunk/export tables, fail-closed unknown-symbol metadata, canonical JSON
+  data-script wrappers, and Node fake-DOM payload decoding/resume helpers. They
+  do not prove async snapshot records, shared snapshot records, protocol schema
+  validation beyond wrapper/version checks, protocol computed entries becoming
+  runtime computed/async nodes, compact production payload encoding,
+  branch/list/fragment locator materialization, symbol source extraction into
+  emitted chunks, resolver tables generated by a real build manifest, generated
+  symbol exports, browser-loaded dynamic imports, or a real initial-render
+  payload. Current chunk/export tables are fixture inputs, not build-derived
+  evidence.
+- Current TSRX control-flow coverage proves ordinary nested element traversal,
+  source-level generic `childNodes()` descent for non-special nodes, and
+  async-boundary records for `TryStatement` parser output. It does not prove
+  authored `@if`, `@for`, or `@switch` parsing fixtures; keyed `@for` identity;
+  positional/unkeyed loop diagnostics; branch-local graph scope ownership;
+  `@if`/`@switch` branch disposal; branch/list payload locators; or runtime
+  cleanup of graph state, events, bindings, async work, and behaviors owned by
+  removed control-flow ranges.
 - Current sync-event-policy tests prove selected compiler IR extraction,
   `AA_SYNC_POLICY_UNEXTRACTABLE` object shape for one unsupported guard, and
   runtime execution before lazy symbol dispatch against fake DOM events. They do
@@ -879,25 +911,27 @@ commands are listed in the implementation/build section above.
   handler array edge cases, real browser default-action timing, navigation/form
   cancellation timing, or generated-build integration.
 - Current event-runtime coverage proves delegated DOM events against Node
-  DOM-like test doubles. It does not prove `onVisible` visibility events, shared
-  `IntersectionObserver` wiring, one-shot visibility triggering, current-value
-  read semantics, returned cleanup storage, cleanup on element removal, or
-  browser observer timing.
-- Current event-handler array coverage proves ordered symbol IDs in compiler and
-  protocol artifacts, plus source-level sequential iteration in the resume
-  runtime. Runtime tests currently prove single-symbol event dispatch only. They
-  do not prove runtime behavior for multiple handlers on one event,
-  stop-at-first-error semantics, error-boundary routing, no rollback after
-  committed writes, or ignored ordinary-event return values.
+  DOM-like test doubles. It does not prove `onVisible` as a visibility-triggered
+  event distinct from normal event names, shared `IntersectionObserver` wiring,
+  one-shot visibility triggering, current-value read semantics, returned cleanup
+  storage, cleanup on element removal, or browser observer timing.
+- Current event-handler array coverage proves ordered handler source extraction,
+  ordered `symbolIds` in compiler/protocol artifacts, and source-level
+  sequential iteration in the resume runtime. Runtime tests currently prove
+  single-symbol event dispatch only. They do not prove runtime behavior for
+  multiple handlers on one event, stop-at-first-error semantics, error-boundary
+  routing, no rollback after committed writes, or ignored ordinary-event return
+  values.
 - Current element/behavior tests prove invalid and duplicate `el` diagnostics,
-  `use`-on-component diagnostics, element handle records, multiple behavior
-  payload records and symbol IDs in authored/view order, host-node lookup through
-  `getElement(hostNodeId)`, and one fake-DOM behavior install/cleanup path. The
-  resume source stores returned behavior cleanups and reverses them on explicit
-  host disposal, but focused runtime tests do not prove multiple-behavior
-  install/cleanup ordering. They also do not prove lazy-symbol `element()` handle
-  materialization by handle ID/name, initial-render absence, removed-locator
-  `undefined` semantics, behavior input serialization, behavior reruns on input
+  `use`-on-component diagnostics, element handle payload/protocol records,
+  multiple behavior source records and symbol IDs in authored/view order,
+  host-node lookup through `getElement(hostNodeId)`, and one fake-DOM behavior
+  install/cleanup path. The resume source stores returned behavior cleanups and
+  reverses them on explicit host disposal, but focused runtime tests do not prove
+  multiple-behavior install/cleanup ordering. They also do not prove lazy-symbol
+  `element()` handle materialization by handle ID/name, initial-render absence,
+  removed-locator `undefined` semantics, behavior input serialization,
+  materialized behavior inputs in symbol context, behavior reruns on input
   changes, real DOM removal cleanup, or browser-loaded behavior chunks.
 - Current async computed/boundary tests prove selected compiler diagnostics,
   async-capable propagation, payload runner IDs, runtime request versioning,
@@ -936,23 +970,26 @@ commands are listed in the implementation/build section above.
   collection-call wiring into runtime `graph.call`, coverage for all nested alias
   or array mutation forms, or browser/runtime integration beyond focused runtime
   graph tests.
-- Current props/projection coverage proves first-parameter prop collection,
-  object-pattern prop aliases, `prop:props` read lowering, and read-only prop
-  write diagnostics. It does not prove runtime getter-backed props, parent graph
-  re-read behavior, prop update propagation through component boundaries,
-  `children` projection artifacts, projection payload records, projection
-  disposal, pass-through projection behavior, or diagnostics for React-style child
-  inspection/manipulation.
-- Current dynamic tag/component/style coverage proves static host/component tag
-  classification for host node collection and `use` diagnostics only. It does
-  not prove dynamic `<{expr}>` lowering, dynamic host/component ownership
-  diagnostics, style scoping/composition, style payload metadata, or runtime
-  behavior for dynamically selected hosts/components.
+- Current props/projection coverage proves first-parameter synthetic prop
+  binding collection, object-pattern prop aliases, `prop:props` read lowering,
+  and read-only prop write diagnostics. It does not prove default/rest/nested
+  parameter handling beyond the current object-pattern alias collector, runtime
+  getter-backed props, parent graph re-read behavior, prop update propagation
+  through component boundaries, `children` projection artifacts, projection
+  payload records, projection disposal, pass-through projection behavior, or
+  diagnostics for React-style child inspection/manipulation.
+- Current dynamic tag/component/style coverage proves static identifier tag
+  handling only: lowercase names become host node records, uppercase names stay
+  component-like for `use` diagnostics, and protocol locators preserve the static
+  `tagName`. It does not prove dynamic `<{expr}>` lowering, dynamic
+  host/component ownership diagnostics, style scoping/composition, style payload
+  metadata, or runtime behavior for dynamically selected hosts/components.
 - Current authored-comment and statement-scope coverage proves generated
-  async-boundary comment locator records only. It does not prove authored TSRX
-  comment preservation, comment-skipping or offset logic, statement-container
-  lexical-scope artifacts, or locator behavior when authored comments appear
-  before generated async-boundary anchors.
+  async-boundary `dom-order-comment` records and runtime materialization by raw
+  comment index only. It does not prove authored TSRX comment preservation,
+  comment-skipping or offset logic, statement-container lexical-scope artifacts,
+  or locator behavior when authored comments appear before generated
+  async-boundary anchors.
 - Current `shared()` coverage proves only that the compiler-intrinsic stub throws
   when executed directly and that the main package re-exports the function. It
   does not prove the final authored `shared()` call shape, shared definition
