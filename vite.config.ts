@@ -18,6 +18,7 @@ export default defineConfig({
 			'runtime/event-resume': './packages/runtime/src/event-resume.ts',
 			'runtime/index': './packages/runtime/src/index.ts',
 			'runtime/render': './packages/runtime/src/render.ts',
+			'runtime/render-to-string': './packages/runtime/src/render-to-string.ts',
 			'runtime/resume': './packages/runtime/src/payload.ts',
 			'bundler/rolldown': './packages/bundler/src/rolldown.ts',
 			'bundler/vite': './packages/bundler/src/vite/index.ts',
@@ -29,6 +30,8 @@ export default defineConfig({
 				'./packages/resumable/src/runtime/event-only-resume.ts',
 			'resumable/runtime/event-resume': './packages/resumable/src/runtime/event-resume.ts',
 			'resumable/runtime/render': './packages/resumable/src/runtime/render.ts',
+			'resumable/runtime/render-to-string':
+				'./packages/resumable/src/runtime/render-to-string.ts',
 			'resumable/runtime/resume': './packages/resumable/src/runtime/resume.ts',
 			'resumable/vite': './packages/resumable/src/vite.ts',
 			'test-utils/index': './packages/test-utils/src/index.ts',

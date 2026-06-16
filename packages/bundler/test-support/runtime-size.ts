@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { gzipSync } from 'node:zlib';
 
 type ManifestBundle = {
+	readonly imports?: readonly string[];
 	readonly origins?: readonly string[];
 };
 
@@ -14,6 +15,7 @@ export type RuntimeSizeReportInput = {
 	readonly dist: string;
 	readonly manifest: string;
 	readonly scripts?: readonly string[];
+	readonly includeStaticImports?: boolean;
 };
 
 export type RuntimeScriptSize = {
@@ -45,8 +47,11 @@ const RUNTIME_ORIGIN_MARKERS = [
 export async function runtimeSizeReport(input: RuntimeSizeReportInput): Promise<RuntimeSizeReport> {
 	const manifest = JSON.parse(await readFile(input.manifest, 'utf8')) as Manifest;
 	const bundles = manifest.bundles ?? {};
-	const fileNames = input.scripts
-		? input.scripts.map(normalizeScriptFileName).filter(isJavaScriptFile)
+	const roots = input.scripts?.map(normalizeScriptFileName).filter(isJavaScriptFile);
+	const fileNames = roots
+		? input.includeStaticImports
+			? collectStaticScriptClosure(roots, bundles)
+			: roots
 		: Object.keys(bundles).filter(isJavaScriptFile);
 	const scripts = await Promise.all(
 		fileNames.map(async (fileName) => {
@@ -86,10 +91,32 @@ export async function runtimeSizeReport(input: RuntimeSizeReportInput): Promise<
 		asyncScripts,
 		summary: formatRuntimeSizeSummary({
 			asyncScripts,
+			reportLabel: roots
+				? input.includeStaticImports
+					? 'entry static script closure'
+					: 'entry script roots'
+				: 'generated async scripts',
 			largestRuntimeChunk,
 			runtimeChunks,
 		}),
 	};
+}
+
+function collectStaticScriptClosure(
+	roots: readonly string[],
+	bundles: Record<string, ManifestBundle>,
+): string[] {
+	const visited = new Set<string>();
+	const visit = (fileName: string): void => {
+		if (visited.has(fileName)) return;
+		visited.add(fileName);
+		for (const imported of bundles[fileName]?.imports ?? []) {
+			if (isJavaScriptFile(imported)) visit(imported);
+		}
+	};
+
+	for (const root of roots) visit(root);
+	return [...visited];
 }
 
 async function readEmittedScript(dist: string, fileName: string): Promise<Uint8Array> {
@@ -125,6 +152,7 @@ function isRuntimeOrigin(origin: string): boolean {
 
 function formatRuntimeSizeSummary(input: {
 	readonly asyncScripts: RuntimeSizeReport['asyncScripts'];
+	readonly reportLabel: string;
 	readonly largestRuntimeChunk: RuntimeScriptSize | undefined;
 	readonly runtimeChunks: readonly RuntimeScriptSize[];
 }) {
@@ -140,7 +168,7 @@ function formatRuntimeSizeSummary(input: {
 	return [
 		`largest runtime-heavy chunk: ${largest}`,
 		`runtime-heavy chunks: ${runtimeChunks}`,
-		`async scripts: count=${input.asyncScripts.count} raw=${input.asyncScripts.rawBytes} gzip=${input.asyncScripts.gzipBytes}`,
+		`${input.reportLabel}: count=${input.asyncScripts.count} raw=${input.asyncScripts.rawBytes} gzip=${input.asyncScripts.gzipBytes}`,
 		'spec target: event-only resumer 300-500 B gzip target, 700 B gzip hard budget',
 	].join('\n');
 }

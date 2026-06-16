@@ -15,10 +15,16 @@ const fixtures = [
 		manifest: 'packages/bundler/fixtures/vite-csr/dist/async-resumable-manifest.json',
 		runtimeBudget: {
 			dist: 'packages/bundler/fixtures/vite-csr/dist',
-			maxRuntimeChunkGzipBytes: 8_050,
-			maxAsyncScriptsGzipBytes: 8_500,
+			entryHtml: 'packages/bundler/fixtures/vite-csr/dist/index.html',
+			maxRuntimeChunkGzipBytes: 3_900,
+			maxAsyncScriptsGzipBytes: 4_000,
 			maxAsyncScriptCount: 3,
 			forbidVitePreloadHelper: true,
+			forbiddenRuntimeOrigins: [
+				'/runtime/src/payload.ts',
+				'/runtime/src/resume.ts',
+				'/serializer/src/',
+			],
 		},
 	},
 	{
@@ -43,8 +49,9 @@ const fixtures = [
 		manifest: 'packages/bundler/fixtures/vite-plus/dist/async-resumable-manifest.json',
 		runtimeBudget: {
 			dist: 'packages/bundler/fixtures/vite-plus/dist',
-			maxRuntimeChunkGzipBytes: 8_000,
-			maxAsyncScriptsGzipBytes: 8_350,
+			entryHtml: 'packages/bundler/fixtures/vite-plus/dist/index.html',
+			maxRuntimeChunkGzipBytes: 3_850,
+			maxAsyncScriptsGzipBytes: 3_950,
 			maxAsyncScriptCount: 3,
 			forbidVitePreloadHelper: true,
 		},
@@ -85,9 +92,15 @@ describe('fixture builds', () => {
 			}
 
 			if ('runtimeBudget' in fixture) {
+				const scripts =
+					'entryHtml' in fixture.runtimeBudget
+						? await readModuleScripts(resolve(root, fixture.runtimeBudget.entryHtml))
+						: undefined;
 				const report = await runtimeSizeReport({
 					dist: resolve(root, fixture.runtimeBudget.dist),
 					manifest: resolve(root, fixture.manifest),
+					scripts,
+					includeStaticImports: !!scripts,
 				});
 				expect(report.runtimeChunks.length, report.summary).toBeGreaterThan(0);
 				expect(report.largestRuntimeChunk?.gzipBytes, report.summary).toBeLessThanOrEqual(
@@ -105,10 +118,27 @@ describe('fixture builds', () => {
 						.map((chunk) => chunk.fileName);
 					expect(chunksWithVitePreloadHelper, report.summary).toEqual([]);
 				}
+				if ('forbiddenRuntimeOrigins' in fixture.runtimeBudget) {
+					const forbiddenOrigins = report.runtimeChunks.flatMap((chunk) =>
+						chunk.origins.filter((origin) =>
+							fixture.runtimeBudget.forbiddenRuntimeOrigins.some((forbidden) =>
+								`/${origin}`.includes(forbidden),
+							),
+						),
+					);
+					expect(forbiddenOrigins, report.summary).toEqual([]);
+				}
 			}
 		}, 120_000);
 	}
 });
+
+async function readModuleScripts(fileName: string): Promise<string[]> {
+	const html = await readFile(fileName, 'utf8');
+	return [
+		...html.matchAll(/<script\b[^>]*\btype=["']module["'][^>]*\bsrc=["']([^"']+)["']/g),
+	].map((match) => match[1]!);
+}
 
 async function execPnpm(args: string[]) {
 	try {

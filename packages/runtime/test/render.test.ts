@@ -64,6 +64,22 @@ function viewWithClick(): ProtocolViewPayload {
 	};
 }
 
+function viewWithClickDomUpdate(): ProtocolViewPayload {
+	return {
+		...viewWithClick(),
+		domUpdates: [
+			{
+				hostNodeId: 'h0',
+				source: 'count',
+				graphNodeId: 'state:count',
+				path: [],
+				target: { kind: 'text' },
+				symbolId: 'symbol:text',
+			},
+		],
+	};
+}
+
 function viewWithSyncPolicy(): ProtocolViewPayload {
 	return {
 		version: ASYNC_PROTOCOL_VERSION,
@@ -142,6 +158,56 @@ test('render creates a CSR container without payload scripts or the inline resum
 
 	expect(loadedSymbols).toEqual(['symbol:click']);
 	expect(container.graph.read('state:count')).toBe(1);
+});
+
+test('render uses the narrow CSR event path to apply DOM update symbols', async () => {
+	const target = {
+		children: [] as FakeElement[],
+		replaceChildren(...children: FakeElement[]) {
+			this.children = children;
+		},
+	};
+	const state = createProtocolStatePayload({
+		cells: [{ graphNodeId: 'state:count', name: 'count', valueKind: 'scalar', value: 0 }],
+	});
+	const loadedSymbols: string[] = [];
+	const button = element('BUTTON');
+	button.textContent = '0';
+
+	const container = await render(
+		() => ({
+			root: button,
+			state,
+			view: viewWithClickDomUpdate(),
+			loadSymbol(symbolId: string) {
+				loadedSymbols.push(symbolId);
+				if (symbolId === 'symbol:click') {
+					return ({ graph }) => {
+						graph.update({
+							graphNodeId: 'state:count',
+							path: [],
+							returnValue: 'next',
+							update(value) {
+								return Number(value) + 1;
+							},
+						});
+					};
+				}
+				return (context) => ({
+					type: 'setText',
+					locator: context.domUpdate?.hostNodeId ?? 'h0',
+					value: context.value,
+				});
+			},
+		}),
+		{ target },
+	);
+
+	await container.root.listeners[0].listener(event('click', container.root));
+
+	expect(loadedSymbols).toEqual(['symbol:click', 'symbol:text']);
+	expect(container.graph.read('state:count')).toBe(1);
+	expect(button.textContent).toBe('1');
 });
 
 test('renderToString emits an SSR container and omits the resumer for static output', () => {

@@ -68,6 +68,8 @@ describe('fixture framework boundaries', () => {
 		expect(renderShell).not.toContain('data-async-host');
 		expect(renderShell).not.toContain('hostId');
 		expect(renderShell).toContain('renderToString');
+		expect(renderShell).toContain('@async/resumable/runtime/render-to-string');
+		expect(renderShell).not.toContain("from '@async/resumable/runtime/render'");
 		expect(renderShell).toContain('resumeModuleUrl');
 		expect(renderShell).toContain('<span>hello</span>');
 	});

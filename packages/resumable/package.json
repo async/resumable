@@ -11,6 +11,7 @@
 		"./runtime/event-only-resume": "./src/runtime/event-only-resume.ts",
 		"./runtime/event-resume": "./src/runtime/event-resume.ts",
 		"./runtime/render": "./src/runtime/render.ts",
+		"./runtime/render-to-string": "./src/runtime/render-to-string.ts",
 		"./runtime/resume": "./src/runtime/resume.ts",
 		"./vite": "./src/vite.ts"
 	},

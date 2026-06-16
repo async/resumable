@@ -97,6 +97,13 @@ export type EventResumeContainer = {
 	) => Promise<void>;
 };
 
+export type CreateEventResumeContainerInput = {
+	readonly state: ProtocolStatePayload;
+	readonly view: ProtocolViewPayload;
+	readonly root: EventResumeDomElement;
+	readonly loadSymbol: ResumeEventFromPayloadDocumentInput['loadSymbol'];
+};
+
 type DirtyPath = {
 	readonly graphNodeId: string;
 	readonly path: ReadonlyArray<string>;
@@ -113,7 +120,14 @@ export async function resumeEventFromPayloadDocument(
 ): Promise<EventResumeContainer> {
 	let container = containers.get(input.root);
 	if (!container) {
-		container = createEventResumeContainer(input);
+		const state = readPayloadJson<ProtocolStatePayload>(input.document, 'async/state');
+		const view = readPayloadJson<ProtocolViewPayload>(input.document, 'async/view');
+		container = createEventResumeContainerState({
+			state,
+			view,
+			root: input.root,
+			loadSymbol: input.loadSymbol,
+		});
 		containers.set(input.root, container);
 	}
 
@@ -125,16 +139,20 @@ export async function resumeEventFromPayloadDocument(
 	return resumed;
 }
 
-async function createEventResumeContainer(
-	input: ResumeEventFromPayloadDocumentInput,
+export async function createEventResumeContainerFromPayloads(
+	input: CreateEventResumeContainerInput,
+): Promise<EventResumeContainer> {
+	return createEventResumeContainerState(input);
+}
+
+async function createEventResumeContainerState(
+	input: CreateEventResumeContainerInput,
 ): Promise<EventResumeContainerState> {
-	const state = readPayloadJson<ProtocolStatePayload>(input.document, 'async/state');
-	const view = readPayloadJson<ProtocolViewPayload>(input.document, 'async/view');
-	const elementsByHostId = materializeDomLocators(input.root, view.locators);
-	const elementHandles = materializeElementHandles(input.root, elementsByHostId, view);
+	const elementsByHostId = materializeDomLocators(input.root, input.view.locators);
+	const elementHandles = materializeElementHandles(input.root, elementsByHostId, input.view);
 	const graph = createEventResumeGraph({
-		state,
-		view,
+		state: input.state,
+		view: input.view,
 		loadSymbol: input.loadSymbol,
 		elementsByHostId,
 		getElementHandle: elementHandles.get,
@@ -142,12 +160,12 @@ async function createEventResumeContainer(
 
 	return {
 		graph,
-		view,
+		view: input.view,
 		elementsByHostId,
 		dispatch(event, options = {}) {
 			return dispatchEvent({
 				event,
-				view,
+				view: input.view,
 				graph,
 				loadSymbol: input.loadSymbol,
 				elementsByHostId,

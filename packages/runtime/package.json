@@ -9,6 +9,7 @@
 		"./event-only-resume": "./src/event-only-resume.ts",
 		"./event-resume": "./src/event-resume.ts",
 		"./render": "./src/render.ts",
+		"./render-to-string": "./src/render-to-string.ts",
 		"./resume": "./src/payload.ts"
 	},
 	"dependencies": {

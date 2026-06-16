@@ -2208,13 +2208,18 @@ commands are listed in the implementation/build section above.
   runtime-heavy chunk, 2.65 KB gzip for all post-click async scripts, or three
   post-click script requests. Focused
   fixture-build tests also rebuild the CSR, SSR, and vite-plus fixtures and
-  enforce current-regression gzip ceilings for each fixture's runtime-heavy
-  chunk, total generated async scripts, and generated async script count: CSR
-  8.05 KB / 8.5 KB / 3 scripts, SSR 2.175 KB / 2.7 KB / 4 scripts, and vite-plus
-  8.0 KB / 8.35 KB / 3 scripts. Those tests also fail if generated runtime
+  enforce current-regression gzip ceilings for the eager entry runtime closure
+  in CSR/vite-plus and all generated async scripts in SSR. The current ceilings
+  are CSR 3.9 KB for the largest runtime-heavy chunk / 4.0 KB for the entry
+  static script closure / 3 scripts, SSR 2.175 KB / 2.7 KB / 4 scripts, and
+  vite-plus 3.85 KB for the largest runtime-heavy chunk / 3.95 KB for the entry
+  static script closure / 3 scripts. Those tests also fail if generated runtime
   chunks retain Vite's empty dynamic-import preload helper and still report the
   event-only 300-500 B gzip target / 700 B gzip hard budget as the remaining
-  spec target.
+  spec target. CSR and vite-plus fixture size checks now read the built
+  `index.html` module scripts and follow only manifest static imports, so lazy
+  fallback chunks remain visible in the build output without being counted as
+  eager runtime bytes.
   Grep MCP research against Vite/Rolldown usage showed `@vite-ignore` is used
   for runtime/non-static imports and a Rolldown fixture documents static
   dynamic imports with `@vite-ignore` as having no import record, so generated
@@ -2225,9 +2230,14 @@ commands are listed in the implementation/build section above.
   helper-only `@async/resumable/runtime/dom-update` subpath. Generated
   event-handler modules also omit their previous `authoredSource` export;
   behavior and async-runner symbols keep their source metadata because current
-  focused tests still use it for those symbol kinds. The Vite CSR/vite-plus fixtures use the phase-specific
-  `runtime/render` subpath so the broad runtime entry does not own those browser
-  paths. The SSR fixture browser entry now imports the narrower
+  focused tests still use it for those symbol kinds. The Vite CSR/vite-plus
+  fixtures use the phase-specific `runtime/render` subpath so the broad runtime
+  entry does not own those browser paths; that CSR entry now statically uses the
+  narrow event-resume container for the current event/DOM-update shape and
+  dynamic-imports the full graph/resume/payload paths only for fallback cases.
+  The SSR fixture render shell imports `runtime/render-to-string`, keeping the
+  SSR payload rendering and inline resumer source out of the eager CSR render
+  entry. The SSR fixture browser entry now imports the narrower
   `@async/resumable/runtime/event-only-resume` subpath for event-only payload
   dispatch instead of the full `runtime/resume` or broader `runtime/event-resume`
   path. The event-only resume helper reads the existing payload scripts,
@@ -2239,24 +2249,35 @@ commands are listed in the implementation/build section above.
   shared-patch runtime, event-resume element handles, graph collection calls, or
   delete/subscription helpers. Current
   client bundle output also strips empty Vite dynamic-import preload wrappers
-  from generated async-resumable runtime chunks after bundling, preserving plain
-  `import(...)` records during Vite/Rolldown resolution while removing the
-  unused preload helper from emitted JS. Generated symbol-resolver imports now
+  from generated async-resumable runtime chunks after bundling, including empty
+  wrappers around async fallback loaders. This preserves plain `import(...)`
+  records during Vite/Rolldown resolution while removing the unused preload
+  helper from emitted JS. Generated symbol-resolver imports now
   also bypass Vite/Rolldown's tiny virtual-symbol facade chunks when those
   facades only import the shared symbol chunk, call generated init exports, and
   re-export the symbol. The post-build cleanup rewrites the resolver to import
   the shared symbol chunk directly, preserves the init calls in the resolver
   `.then(...)` expression, removes the generated facade chunks from emitted JS,
   and filters them out of the async-resumable manifest/bundle graph. Current
-  rebuilt fixture totals are still above the final event-only target for CSR
-  and vite-plus but are bounded by regression tests: 8,401 gzip bytes for all
-  CSR async scripts, 2,640 gzip bytes for all SSR async scripts, and 8,259 gzip
-  bytes for all vite-plus async scripts. The latest Witness SSR post-click path
-  is smaller than the full SSR build artifact set: no startup scripts, three
+  rebuilt fixture eager closures are still above the final event-only target for
+  CSR and vite-plus but are bounded by regression tests: CSR's entry static
+  closure is 10,028 raw bytes / 3,771 gzip bytes with a largest runtime-heavy
+  chunk of 3,595 gzip bytes, vite-plus' entry static closure is 9,693 raw bytes
+  / 3,703 gzip bytes with a largest runtime-heavy chunk of 3,527 gzip bytes,
+  and SSR all generated async scripts remain 2,640 gzip bytes. The full emitted
+  CSR async script set is currently 11,919 gzip bytes and the full emitted
+  vite-plus async script set is 11,775 gzip bytes because full graph/resume/payload
+  fallback chunks are emitted but lazy. The latest Witness SSR post-click path is
+  smaller than the full SSR build artifact set: no startup scripts, three
   requested post-click async scripts, 6,628 raw bytes / 2,559 gzip bytes total,
   and the largest runtime-heavy interaction chunk is 5,661 raw bytes / 2,118
   gzip bytes. The fresh receipt is
   `packages/bundler/.witness/receipts/2026-06-16T17-27-41.293Z/receipt.json`.
+  A fresh CSR preview receipt proves the rebuilt CSR fixture renders the
+  client-created counter, updates it from `0` to `1`, and has no console errors
+  or failed requests after the preload cleanup stopped leaving orphan Vite helper
+  init calls in the emitted entry:
+  `packages/bundler/.witness/receipts/2026-06-16T17-49-41.117Z/receipt.json`.
   A vite-plus fixture now has a real app entry and a package-local preview box
   that proves a vite-plus config emits the async-resumable manifest, bundle
   graph, and browser output through Vite preview.

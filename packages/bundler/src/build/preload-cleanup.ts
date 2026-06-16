@@ -1,4 +1,10 @@
 export function stripEmptyVitePreloadWrappers(code: string): string {
+	const withoutDirectImports = stripDirectEmptyPreloadWrappers(code);
+	const withoutAsyncLoaders = stripAsyncEmptyPreloadWrappers(withoutDirectImports);
+	return stripUnusedVitePreloadHelper(withoutAsyncLoaders);
+}
+
+function stripDirectEmptyPreloadWrappers(code: string): string {
 	let next = '';
 	let cursor = 0;
 	let changed = false;
@@ -20,7 +26,36 @@ export function stripEmptyVitePreloadWrappers(code: string): string {
 	}
 
 	if (!changed) return code;
-	return stripUnusedVitePreloadHelper(next + code.slice(cursor));
+	return next + code.slice(cursor);
+}
+
+function stripAsyncEmptyPreloadWrappers(code: string): string {
+	let next = '';
+	let cursor = 0;
+	let changed = false;
+	const wrapperRE = /\b[$A-Z_a-z][$\w]*\(\s*async\s*\(\)\s*=>\s*\{/g;
+
+	for (let match = wrapperRE.exec(code); match; match = wrapperRE.exec(code)) {
+		const callStart = match.index;
+		const callOpen = code.indexOf('(', callStart);
+		if (callOpen < 0) continue;
+
+		const firstArgumentEnd = findTopLevelComma(code, callOpen + 1);
+		if (firstArgumentEnd < 0) continue;
+
+		const wrapper = findEmptyPreloadWrapper(code, callStart, callOpen + 1);
+		if (!wrapper) continue;
+
+		const loader = code.slice(callOpen + 1, firstArgumentEnd);
+		next += code.slice(cursor, callStart);
+		next += `(${loader})()`;
+		cursor = wrapper.callEnd + 1;
+		wrapperRE.lastIndex = cursor;
+		changed = true;
+	}
+
+	if (!changed) return code;
+	return next + code.slice(cursor);
 }
 
 function findEmptyPreloadWrapper(
@@ -111,14 +146,16 @@ function stripUnusedVitePreloadHelper(code: string): string {
 		return code;
 	}
 
-	const withoutHelper = outsideHelper;
+	let withoutHelper = outsideHelper;
 	const chain = findVitePreloadHelperInitChain(withoutHelper, helper.moduleVariable);
-	if (!chain) return withoutHelper;
+	if (chain) {
+		withoutHelper = removeInitCall(
+			withoutHelper.slice(0, chain.removeStart) + withoutHelper.slice(chain.removeEnd),
+			chain.entryVariable,
+		);
+	}
 
-	return removeInitCall(
-		withoutHelper.slice(0, chain.removeStart) + withoutHelper.slice(chain.removeEnd),
-		chain.entryVariable,
-	);
+	return removeInitCall(withoutHelper, helper.moduleVariable);
 }
 
 function findVitePreloadHelperModule(
@@ -190,7 +227,8 @@ function findVitePreloadHelperInitChain(
 function removeInitCall(code: string, entryVariable: string): string {
 	return code
 		.replace(new RegExp(`,${escapeRegExp(entryVariable)}\\(\\)`), '')
-		.replace(new RegExp(`${escapeRegExp(entryVariable)}\\(\\),`), '');
+		.replace(new RegExp(`${escapeRegExp(entryVariable)}\\(\\),`), '')
+		.replace(new RegExp(`\\{${escapeRegExp(entryVariable)}\\(\\)\\}`), '{}');
 }
 
 function readIdentifierBefore(code: string, index: number): string | undefined {

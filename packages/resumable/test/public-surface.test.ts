@@ -13,10 +13,8 @@ import {
 import { createDomUpdateEntry as createNarrowDomUpdateEntry } from '../src/runtime/dom-update.ts';
 import { resumeEventOnlyFromPayloadDocument as narrowResumeEventOnlyFromPayloadDocument } from '../src/runtime/event-only-resume.ts';
 import { resumeEventFromPayloadDocument as narrowResumeEventFromPayloadDocument } from '../src/runtime/event-resume.ts';
-import {
-	render as narrowRender,
-	renderToString as narrowRenderToString,
-} from '../src/runtime/render.ts';
+import { render as narrowRender } from '../src/runtime/render.ts';
+import { renderToString as narrowRenderToString } from '../src/runtime/render-to-string.ts';
 import { resumeFromPayloadDocument as narrowResumeFromPayloadDocument } from '../src/runtime/resume.ts';
 import { resumable as viteResumable } from '../src/vite.ts';
 
