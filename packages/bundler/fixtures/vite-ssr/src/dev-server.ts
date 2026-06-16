@@ -31,6 +31,7 @@ type DevResponse = {
 };
 
 const CLIENT_RESUME_MODULE = '/src/entry-client.ts';
+const REQUEST_LOG_PATH = '/__async-resumable-fixture-requests';
 
 // Fixture-only SSR host. Real apps should provide this from a runtime adapter
 // or meta-framework; the async-resumable bundler only needs SSR artifacts.
@@ -65,8 +66,12 @@ export function fixtureSsrHost(): Plugin {
 			};
 		},
 		configureServer(server) {
+			const scriptRequests = createScriptRequestLog();
 			server.middlewares.use(async (incomingRequest, outgoingResponse, next) => {
 				const request = incomingRequest as DevRequest;
+				if (scriptRequests.handle(request, outgoingResponse as DevResponse)) {
+					return;
+				}
 				if (!shouldRenderHtml(request)) {
 					next();
 					return;
@@ -83,8 +88,12 @@ export function fixtureSsrHost(): Plugin {
 			});
 		},
 		configurePreviewServer(server) {
+			const scriptRequests = createScriptRequestLog();
 			server.middlewares.use(async (incomingRequest, outgoingResponse, next) => {
 				const request = incomingRequest as DevRequest;
+				if (scriptRequests.handle(request, outgoingResponse as DevResponse)) {
+					return;
+				}
 				if (!shouldRenderHtml(request)) {
 					next();
 					return;
@@ -100,6 +109,26 @@ export function fixtureSsrHost(): Plugin {
 					next(error);
 				}
 			});
+		},
+	};
+}
+
+function createScriptRequestLog() {
+	const scripts: string[] = [];
+
+	return {
+		handle(request: DevRequest, response: DevResponse): boolean {
+			if (!request.url || request.method !== 'GET') return false;
+
+			const pathname = new URL(request.url, requestOrigin(request)).pathname;
+			if (pathname === REQUEST_LOG_PATH) {
+				sendJsonResponse(response, { scripts });
+				return true;
+			}
+			if (isScriptRequest(request, pathname)) {
+				scripts.push(pathname);
+			}
+			return false;
 		},
 	};
 }
@@ -141,6 +170,17 @@ async function readClientResumeModuleUrl(dist: string) {
 	throw new Error('Expected built client resume module exporting resumeContainerEvent.');
 }
 
+function isScriptRequest(request: DevRequest, pathname: string): boolean {
+	const destination = request.headers['sec-fetch-dest'];
+	return (
+		destination === 'script' ||
+		pathname.endsWith('.js') ||
+		pathname.endsWith('.mjs') ||
+		pathname.endsWith('.ts') ||
+		pathname.endsWith('.tsrx')
+	);
+}
+
 function shouldRenderHtml(request: DevRequest) {
 	if (!request.url || request.method !== 'GET') {
 		return false;
@@ -177,6 +217,13 @@ function toFetchHeaders(headers: DevRequest['headers']) {
 function requestOrigin(request: DevRequest) {
 	const host = typeof request.headers.host === 'string' ? request.headers.host : 'localhost';
 	return `http://${host}`;
+}
+
+function sendJsonResponse(response: DevResponse, value: unknown) {
+	response.statusCode = 200;
+	response.statusMessage = 'OK';
+	response.setHeader('Content-Type', 'application/json;charset=utf-8');
+	response.end(new TextEncoder().encode(JSON.stringify(value)));
 }
 
 async function sendResponse(response: DevResponse, rendered: Response) {
