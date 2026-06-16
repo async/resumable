@@ -8,6 +8,7 @@
 		"./rolldown": "./src/rolldown.ts",
 		"./runtime": "./src/runtime.ts",
 		"./runtime/dom-update": "./src/runtime/dom-update.ts",
+		"./runtime/event-resume": "./src/runtime/event-resume.ts",
 		"./runtime/render": "./src/runtime/render.ts",
 		"./runtime/resume": "./src/runtime/resume.ts",
 		"./vite": "./src/vite.ts"

@@ -1271,6 +1271,14 @@ as evidence for a new source change.
   records startup script requests `(none)`, post-click requested async chunks,
   largest runtime-heavy chunk `async-CAT12afM.js` at 43,623 raw / 12,500 gzip
   bytes, and all post-click async scripts at 45,658 raw / 13,486 gzip bytes)
+- `pnpm exec vp test packages/runtime/test/event-resume.test.ts packages/runtime/test/module-split.test.ts packages/resumable/test/public-surface.test.ts packages/bundler/test/fixture-boundaries.test.ts`
+- `pnpm exec vp test packages/bundler/test/fixture-builds.test.ts`
+- `(from repo root) pnpm --filter @async/resumable-bundler exec witness run ssr-preview --mode preview`
+  (receipt:
+  `packages/bundler/.witness/receipts/2026-06-16T16-31-44.234Z/receipt.json`;
+  records startup script requests `(none)`, post-click requested async chunks,
+  largest runtime-heavy chunk `async-YGRzjz_f.js` at 8,258 raw / 3,154 gzip
+  bytes, and all post-click async scripts at 10,293 raw / 4,140 gzip bytes)
 
 Current spec/ledger-maintenance receipts:
 
@@ -2166,9 +2174,11 @@ commands are listed in the implementation/build section above.
   `configureServer` / `handleHotUpdate` test proves the adapter emits a custom
   `async-resumable:update` payload with the changed module ID and generated
   virtual module IDs, and a custom-environment test proves server-originated
-  hot updates use the configured client environment name. A focused Vite config
-  test proves normal app builds default `build.modulePreload` to `false` while
-  library and SSR builds are left alone. A focused `transformIndexHtml` /
+  hot updates use the configured client environment name. Focused Vite config
+  tests prove normal app builds and SSR-mode client app builds default root
+  `build.modulePreload` to `false`, client build environments also receive
+  `modulePreload: false`, and library builds plus true `build.ssr` server builds
+  are left alone. A focused `transformIndexHtml` /
   virtual module test proves dev-only inert marker tag injection plus a virtual
   client module that listens for the custom Vite event and redispatches it as a
   browser `CustomEvent`;
@@ -2192,20 +2202,37 @@ commands are listed in the implementation/build section above.
   proving the browser entry resumes that existing DOM for the same click update.
   The same SSR preview box now records the post-interaction script request list,
   computes gzip sizes for those requested build artifacts, and fails if the
-  current-regression interaction budget is exceeded: 12.5 KB gzip for the
-  runtime-heavy chunk and 14.5 KB gzip for all post-click async scripts. Focused
+  current-regression interaction budget is exceeded: 3.4 KB gzip for the
+  runtime-heavy chunk and 4.8 KB gzip for all post-click async scripts. Focused
   fixture-build tests also rebuild the CSR, SSR, and vite-plus fixtures and
   enforce current-regression gzip ceilings for each fixture's runtime-heavy
   chunk and total generated async scripts while reporting the event-only
   300-500 B gzip target / 700 B gzip hard budget as the remaining spec target.
-  Generated DOM update symbols now import the helper-only
+  Grep MCP research against Vite/Rolldown usage showed `@vite-ignore` is used
+  for runtime/non-static imports and a Rolldown fixture documents static
+  dynamic imports with `@vite-ignore` as having no import record, so generated
+  symbol resolver imports deliberately keep plain `import(...)` to preserve
+  virtual-module resolution and emitted chunk records. Generated DOM update
+  symbols now import the helper-only
   `@async/resumable/runtime/dom-update` subpath instead of the broad runtime
-  entry, and the Vite CSR/vite-plus/SSR fixtures use phase-specific
-  `runtime/render` and `runtime/resume` subpaths so the broad runtime entry does
-  not own those browser paths. Current rebuilt fixture totals are still far
-  above the final target: 9,373 gzip bytes for all CSR async scripts, 13,670
-  gzip bytes for all SSR async scripts, and 8,994 gzip bytes for all vite-plus
-  async scripts.
+  entry, the SSR fixture browser entry imports
+  `@async/resumable/runtime/event-resume` for event-only payload dispatch
+  instead of the full `runtime/resume` payload/runtime path, and the Vite
+  CSR/vite-plus fixtures use the phase-specific `runtime/render` subpath so the
+  broad runtime entry does not own those browser paths. The event-resume helper
+  reads the existing payload scripts, materializes DOM-order locators, dispatches
+  the current event through the generated resolver, and applies setText/setAttr/
+  setProp DOM journal entries without importing the full payload validator,
+  serializer built-ins, `createResumeRuntime`, behavior/visibility/removal
+  observers, async-boundary range journal support, or shared-patch runtime. Current
+  rebuilt fixture totals are still above the final target for CSR and vite-plus:
+  9,373 gzip bytes for all CSR async scripts, 4,358 gzip bytes for all SSR async
+  scripts, and 8,994 gzip bytes for all vite-plus async scripts. The latest
+  Witness SSR post-click path is smaller than the full SSR build artifact set:
+  no startup scripts, five requested post-click async scripts, 10,161 raw bytes
+  / 4,088 gzip bytes total, and the largest runtime-heavy interaction chunk is
+  8,126 raw bytes / 3,102 gzip bytes. The fresh receipt is
+  `packages/bundler/.witness/receipts/2026-06-16T16-42-32.397Z/receipt.json`.
   A vite-plus fixture now has a real app entry and a package-local preview box
   that proves a vite-plus config emits the async-resumable manifest, bundle
   graph, and browser output through Vite preview.

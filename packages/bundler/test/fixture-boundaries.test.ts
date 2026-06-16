@@ -52,12 +52,14 @@ describe('fixture framework boundaries', () => {
 		);
 		expect(vitePlusEntry).not.toContain('resumeFromPayloadScripts');
 		expect(ssrEntry).toContain(
-			"import { resumeFromPayloadDocument } from '@async/resumable/runtime/resume';",
+			"import { resumeEventFromPayloadDocument } from '@async/resumable/runtime/event-resume';",
 		);
 		expect(ssrEntry).toContain('export async function resumeContainerEvent');
-		expect(ssrEntry).toContain('__asyncResumeRuntimeStarted');
-		expect(ssrEntry).toContain('syncPolicyAlreadyApplied: true');
+		expect(ssrEntry).toContain('eventRecord');
+		expect(ssrEntry).not.toContain('__asyncResumeRuntimeStarted');
+		expect(ssrEntry).not.toContain('syncPolicyAlreadyApplied: true');
 		expect(ssrEntry).not.toContain('await resumeFromPayloadDocument');
+		expect(ssrEntry).not.toContain('@async/resumable/runtime/resume');
 	});
 
 	test('server shell does not emit public per-node async host markers', async () => {

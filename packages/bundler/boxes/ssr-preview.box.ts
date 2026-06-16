@@ -12,8 +12,8 @@ const MANIFEST = `${FIXTURE}/dist/async-resumable-manifest.json`;
 const COUNTER = '[data-counter]';
 const REQUESTS = '/__async-resumable-fixture-requests';
 const WAIT = { timeoutMs: 10_000 };
-const MAX_INTERACTION_RUNTIME_CHUNK_GZIP_BYTES = 12_500;
-const MAX_INTERACTION_SCRIPTS_GZIP_BYTES = 14_500;
+const MAX_INTERACTION_RUNTIME_CHUNK_GZIP_BYTES = 3_400;
+const MAX_INTERACTION_SCRIPTS_GZIP_BYTES = 4_800;
 
 export default box(
 	{

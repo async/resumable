@@ -11,6 +11,7 @@ import {
 	state,
 } from '../src/index.ts';
 import { createDomUpdateEntry as createNarrowDomUpdateEntry } from '../src/runtime/dom-update.ts';
+import { resumeEventFromPayloadDocument as narrowResumeEventFromPayloadDocument } from '../src/runtime/event-resume.ts';
 import {
 	render as narrowRender,
 	renderToString as narrowRenderToString,
@@ -28,6 +29,7 @@ test('main package exposes the curated author and build surface', () => {
 	expect(typeof resumeFromPayloadDocument).toBe('function');
 	expect(typeof resumeFromPayloadScripts).toBe('function');
 	expect(typeof createNarrowDomUpdateEntry).toBe('function');
+	expect(typeof narrowResumeEventFromPayloadDocument).toBe('function');
 	expect(typeof narrowRender).toBe('function');
 	expect(typeof narrowRenderToString).toBe('function');
 	expect(typeof narrowResumeFromPayloadDocument).toBe('function');

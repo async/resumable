@@ -1,6 +1,5 @@
 import type {
 	BuildEnvironment,
-	ConfigEnv,
 	Environment,
 	EnvironmentOptions,
 	Plugin,
@@ -50,9 +49,7 @@ type ResumableOutputOptions = OutputOptions | OutputOptions[] | undefined;
 type InternalResumableRolldownOptions = ResumableRolldownOptions & {
 	publicPath?: (fileName: string) => string;
 };
-const ASYNC_RESUMABLE_SKIP_DUPLICATE_BUILDS = Symbol(
-	'async-resumable-skip-duplicate-builds',
-);
+const ASYNC_RESUMABLE_SKIP_DUPLICATE_BUILDS = Symbol('async-resumable-skip-duplicate-builds');
 
 export function resumable(options: ResumableViteOptions = {}): Plugin[] {
 	let manifest: ResumableManifest | null = null;
@@ -93,8 +90,8 @@ export function resumable(options: ResumableViteOptions = {}): Plugin[] {
 			registerPreloadGraphEntries: (adder: PreloadGraphEntriesAdder) =>
 				bundleGraphAdders.add(createPreloadGraphAdder(adder)),
 		},
-		config(config, env) {
-			configDefaults(config, env);
+		config(config) {
+			configDefaults(config);
 		},
 		configResolved(resolvedConfig) {
 			const serve = resolvedConfig.command === 'serve';
@@ -119,6 +116,9 @@ export function resumable(options: ResumableViteOptions = {}): Plugin[] {
 			return {
 				build: {
 					...build,
+					...(environment === 'client'
+						? { modulePreload: build.modulePreload ?? false }
+						: {}),
 					...(build.outDir || !outDir ? {} : { outDir }),
 					rolldownOptions: {
 						...rolldownOptions,
@@ -168,10 +168,7 @@ export function resumable(options: ResumableViteOptions = {}): Plugin[] {
 	return [resumablePlugin];
 }
 
-async function buildResumableEnvironments(
-	builder: ViteBuilder,
-	options: ResumableViteOptions,
-) {
+async function buildResumableEnvironments(builder: ViteBuilder, options: ResumableViteOptions) {
 	const environments = buildEnvironments(builder, options);
 	const names = environments.map((environment) => environment.name);
 	skipDuplicateBuilds(builder, names);
@@ -209,8 +206,7 @@ function skipDuplicateBuilds(builder: ViteBuilder, names: readonly string[]) {
 		[ASYNC_RESUMABLE_SKIP_DUPLICATE_BUILDS]?: Set<string>;
 	};
 
-	const guardedNames =
-		guarded[ASYNC_RESUMABLE_SKIP_DUPLICATE_BUILDS] ?? new Set<string>();
+	const guardedNames = guarded[ASYNC_RESUMABLE_SKIP_DUPLICATE_BUILDS] ?? new Set<string>();
 	for (const name of names) {
 		guardedNames.add(name);
 	}
@@ -227,8 +223,8 @@ function skipDuplicateBuilds(builder: ViteBuilder, names: readonly string[]) {
 	};
 }
 
-function configDefaults(config: UserConfig, env: ConfigEnv) {
-	if (config.build?.lib || config.build?.ssr || env.mode === 'ssr') {
+function configDefaults(config: UserConfig) {
+	if (config.build?.lib || config.build?.ssr) {
 		return;
 	}
 

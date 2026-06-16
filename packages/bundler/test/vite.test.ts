@@ -29,6 +29,7 @@ describe('Vite adapter structure', () => {
 	test('lets the framework manifest own app preloading instead of Vite modulepreload', () => {
 		const plugin = getAsyncPlugin();
 		const appConfig = {};
+		const ssrModeAppConfig = {};
 		const libraryConfig = { build: { lib: { entry: 'src/index.ts' } } };
 		const ssrConfig = { build: { ssr: 'src/entry.ts' } };
 
@@ -37,9 +38,11 @@ describe('Vite adapter structure', () => {
 		).toBeUndefined();
 		expect(appConfig).toMatchObject({ build: { modulePreload: false } });
 
+		callConfig(plugin, ssrModeAppConfig, { command: 'build', mode: 'ssr' });
 		callConfig(plugin, libraryConfig, { command: 'build', mode: 'production' });
 		callConfig(plugin, ssrConfig, { command: 'build', mode: 'ssr' });
 
+		expect(ssrModeAppConfig).toMatchObject({ build: { modulePreload: false } });
 		expect(libraryConfig.build).not.toHaveProperty('modulePreload');
 		expect(ssrConfig.build).not.toHaveProperty('modulePreload');
 	});
