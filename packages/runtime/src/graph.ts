@@ -1,17 +1,17 @@
 export type RuntimeGraphCell = {
-	readonly bindingId: string;
+	readonly graphNodeId: string;
 	readonly value: unknown;
 };
 
-export type RuntimeGraphRead = (bindingId: string, path?: ReadonlyArray<string>) => unknown;
+export type RuntimeGraphRead = (graphNodeId: string, path?: ReadonlyArray<string>) => unknown;
 
 export type RuntimeGraphComputedDependency = {
-	readonly bindingId: string;
+	readonly graphNodeId: string;
 	readonly path?: ReadonlyArray<string>;
 };
 
 export type RuntimeGraphComputed = {
-	readonly bindingId: string;
+	readonly graphNodeId: string;
 	readonly dependencies: ReadonlyArray<RuntimeGraphComputedDependency>;
 	readonly compute: (read: RuntimeGraphRead) => unknown;
 };
@@ -40,7 +40,7 @@ export type RuntimeGraphAsyncSnapshot =
 	  };
 
 export type RuntimeGraphAsyncComputed = {
-	readonly bindingId: string;
+	readonly graphNodeId: string;
 	readonly dependencies: ReadonlyArray<RuntimeGraphComputedDependency>;
 	readonly key: (read: RuntimeGraphRead) => unknown;
 	readonly run: (input: {
@@ -50,7 +50,7 @@ export type RuntimeGraphAsyncComputed = {
 	}) => unknown | Promise<unknown>;
 };
 
-export type DomJournalRecord =
+export type DomJournalEntry =
 	| {
 			readonly type: 'setText';
 			readonly locator: string;
@@ -63,10 +63,27 @@ export type DomJournalRecord =
 			readonly value: unknown;
 	  }
 	| {
-			readonly type: 'insertRange' | 'removeRange' | 'moveRange' | 'runCleanup';
+			readonly type: 'insertRange';
 			readonly locator: string;
-			readonly before?: string;
+			readonly fragment: unknown;
+	  }
+	| {
+			readonly type: 'removeRange';
+			readonly locator: string;
+	  }
+	| {
+			readonly type: 'moveRange';
+			readonly locator: string;
+			readonly before: string;
+	  }
+	| {
+			readonly type: 'runCleanup';
+			readonly locator: string;
 	  };
+
+export type DomJournalResult = DomJournalEntry | ReadonlyArray<DomJournalEntry>;
+
+export type DomJournalListener = (entries: ReadonlyArray<DomJournalEntry>) => void | Promise<void>;
 
 export type RuntimeGraphInput = {
 	readonly cells: ReadonlyArray<RuntimeGraphCell>;
@@ -75,50 +92,51 @@ export type RuntimeGraphInput = {
 };
 
 export type RuntimeGraphWrite = {
-	readonly bindingId: string;
+	readonly graphNodeId: string;
 	readonly path?: ReadonlyArray<string>;
 	readonly value: unknown;
 };
 
 export type RuntimeGraphUpdate = {
-	readonly bindingId: string;
+	readonly graphNodeId: string;
 	readonly path?: ReadonlyArray<string>;
 	readonly update: (value: unknown) => unknown;
 	readonly returnValue?: 'previous' | 'next';
 };
 
 export type RuntimeGraphCall = {
-	readonly bindingId: string;
+	readonly graphNodeId: string;
 	readonly path?: ReadonlyArray<string>;
 	readonly method: string;
 	readonly args?: ReadonlyArray<unknown>;
 };
 
 export type RuntimeGraphDelete = {
-	readonly bindingId: string;
+	readonly graphNodeId: string;
 	readonly path: ReadonlyArray<string>;
 };
 
 export type RuntimeGraphSubscription = {
 	readonly id: string;
-	readonly bindingId: string;
+	readonly graphNodeId: string;
 	readonly path?: ReadonlyArray<string>;
-	readonly run: (value: unknown) => DomJournalRecord | void | Promise<DomJournalRecord | void>;
+	readonly run: (value: unknown) => DomJournalResult | void | Promise<DomJournalResult | void>;
 };
 
 export type RuntimeGraph = {
-	readonly read: (bindingId: string, path?: ReadonlyArray<string>) => unknown;
+	readonly read: (graphNodeId: string, path?: ReadonlyArray<string>) => unknown;
 	readonly write: (write: RuntimeGraphWrite) => void;
 	readonly update: (update: RuntimeGraphUpdate) => unknown;
 	readonly call: (call: RuntimeGraphCall) => unknown;
 	readonly delete: (deletion: RuntimeGraphDelete) => boolean;
 	readonly subscribe: (subscription: RuntimeGraphSubscription) => void;
+	readonly subscribeJournal: (listener: DomJournalListener) => () => void;
 	readonly flush: () => Promise<void>;
-	readonly takeJournal: () => DomJournalRecord[];
+	readonly takeJournal: () => DomJournalEntry[];
 };
 
 type DirtyPath = {
-	readonly bindingId: string;
+	readonly graphNodeId: string;
 	readonly path: ReadonlyArray<string>;
 };
 
@@ -155,17 +173,18 @@ export function createRuntimeGraph(input: RuntimeGraphInput): RuntimeGraph {
 	const computedNodes = new Map<string, RuntimeComputedNode>();
 	const asyncComputedNodes = new Map<string, RuntimeAsyncComputedNode>();
 	const subscriptions: RuntimeGraphSubscription[] = [];
+	const journalListeners: DomJournalListener[] = [];
 	const dirtyPaths: DirtyPath[] = [];
-	const journal: DomJournalRecord[] = [];
+	const journal: DomJournalEntry[] = [];
 	let flushScheduled = false;
 	let flushing = false;
 
 	for (const cell of input.cells) {
-		cells.set(cell.bindingId, cell.value);
+		cells.set(cell.graphNodeId, cell.value);
 	}
 
 	for (const computed of input.computed ?? []) {
-		computedNodes.set(computed.bindingId, {
+		computedNodes.set(computed.graphNodeId, {
 			...computed,
 			dirty: true,
 			value: undefined,
@@ -173,7 +192,7 @@ export function createRuntimeGraph(input: RuntimeGraphInput): RuntimeGraph {
 	}
 
 	for (const asyncComputed of input.asyncComputed ?? []) {
-		asyncComputedNodes.set(asyncComputed.bindingId, {
+		asyncComputedNodes.set(asyncComputed.graphNodeId, {
 			...asyncComputed,
 			demanded: false,
 			keyValue: undefined,
@@ -182,8 +201,8 @@ export function createRuntimeGraph(input: RuntimeGraphInput): RuntimeGraph {
 		});
 	}
 
-	const readGraph: RuntimeGraphRead = (bindingId, path = []) => {
-		const computed = computedNodes.get(bindingId);
+	const readGraph: RuntimeGraphRead = (graphNodeId, path = []) => {
+		const computed = computedNodes.get(graphNodeId);
 		if (computed) {
 			if (computed.dirty) {
 				computed.value = computed.compute(readGraph);
@@ -193,55 +212,55 @@ export function createRuntimeGraph(input: RuntimeGraphInput): RuntimeGraph {
 			return readPath(computed.value, path);
 		}
 
-		const asyncComputed = asyncComputedNodes.get(bindingId);
+		const asyncComputed = asyncComputedNodes.get(graphNodeId);
 		if (asyncComputed) {
 			demandAsyncComputed(asyncComputed);
 			return readPath(asyncComputed.snapshot, path);
 		}
 
-		return readPath(cells.get(bindingId), path);
+		return readPath(cells.get(graphNodeId), path);
 	};
 
-	const markComputedDirty = (bindingId: string, visited: Set<string>): void => {
-		if (visited.has(bindingId)) return;
-		visited.add(bindingId);
+	const markComputedDirty = (graphNodeId: string, visited: Set<string>): void => {
+		if (visited.has(graphNodeId)) return;
+		visited.add(graphNodeId);
 
-		const computed = computedNodes.get(bindingId);
+		const computed = computedNodes.get(graphNodeId);
 		if (computed) computed.dirty = true;
 
-		dirtyPaths.push({ bindingId, path: [] });
+		dirtyPaths.push({ graphNodeId, path: [] });
 
 		for (const dependent of computedNodes.values()) {
 			const dirty = dependent.dependencies.some(
-				(dependency) => dependency.bindingId === bindingId,
+				(dependency) => dependency.graphNodeId === graphNodeId,
 			);
-			if (dirty) markComputedDirty(dependent.bindingId, visited);
+			if (dirty) markComputedDirty(dependent.graphNodeId, visited);
 		}
 
 		for (const dependent of asyncComputedNodes.values()) {
 			const dirty = dependent.dependencies.some(
-				(dependency) => dependency.bindingId === bindingId,
+				(dependency) => dependency.graphNodeId === graphNodeId,
 			);
 			if (dirty) invalidateAsyncComputed(dependent);
 		}
 	};
 
-	const markDirtyPath = (bindingId: string, path: ReadonlyArray<string>): void => {
-		dirtyPaths.push({ bindingId, path });
+	const markDirtyPath = (graphNodeId: string, path: ReadonlyArray<string>): void => {
+		dirtyPaths.push({ graphNodeId, path });
 
 		for (const computed of computedNodes.values()) {
 			const dirty = computed.dependencies.some(
 				(dependency) =>
-					dependency.bindingId === bindingId &&
+					dependency.graphNodeId === graphNodeId &&
 					pathsIntersect(path, dependency.path ?? []),
 			);
-			if (dirty) markComputedDirty(computed.bindingId, new Set());
+			if (dirty) markComputedDirty(computed.graphNodeId, new Set());
 		}
 
 		for (const asyncComputed of asyncComputedNodes.values()) {
 			const dirty = asyncComputed.dependencies.some(
 				(dependency) =>
-					dependency.bindingId === bindingId &&
+					dependency.graphNodeId === graphNodeId &&
 					pathsIntersect(path, dependency.path ?? []),
 			);
 			if (dirty) invalidateAsyncComputed(asyncComputed);
@@ -287,14 +306,14 @@ export function createRuntimeGraph(input: RuntimeGraphInput): RuntimeGraph {
 			if (node.version !== version || controller.signal.aborted) return;
 
 			node.snapshot = { status: 'fulfilled', version, key, value };
-			markDirtyPath(node.bindingId, []);
+			markDirtyPath(node.graphNodeId, []);
 			scheduleFlush();
 		};
 		const commitRejected = (error: unknown): void => {
 			if (node.version !== version || controller.signal.aborted) return;
 
 			node.snapshot = { status: 'rejected', version, key, error };
-			markDirtyPath(node.bindingId, []);
+			markDirtyPath(node.graphNodeId, []);
 			scheduleFlush();
 		};
 
@@ -307,7 +326,8 @@ export function createRuntimeGraph(input: RuntimeGraphInput): RuntimeGraph {
 			commitRejected(error);
 		}
 
-		markDirtyPath(node.bindingId, []);
+		markDirtyPath(node.graphNodeId, []);
+		scheduleFlush();
 	};
 
 	const flush = async (): Promise<void> => {
@@ -325,16 +345,16 @@ export function createRuntimeGraph(input: RuntimeGraphInput): RuntimeGraph {
 					const subscriptionPath = subscription.path ?? [];
 					const dirty = pending.some(
 						(path) =>
-							path.bindingId === subscription.bindingId &&
+							path.graphNodeId === subscription.graphNodeId &&
 							pathsIntersect(path.path, subscriptionPath),
 					);
 					if (!dirty || ranSubscriptions.has(subscription.id)) continue;
 
 					ranSubscriptions.add(subscription.id);
-					const record = await subscription.run(
-						readGraph(subscription.bindingId, subscriptionPath),
+					const entries = await subscription.run(
+						readGraph(subscription.graphNodeId, subscriptionPath),
 					);
-					if (record) journal.push(record);
+					appendJournalResult(journal, entries);
 				}
 			}
 		} finally {
@@ -344,45 +364,56 @@ export function createRuntimeGraph(input: RuntimeGraphInput): RuntimeGraph {
 				scheduleFlush();
 			}
 		}
+
+		await notifyJournalListeners();
+	};
+
+	const notifyJournalListeners = async (): Promise<void> => {
+		if (journalListeners.length === 0 || journal.length === 0) return;
+
+		const entries = journal.splice(0);
+		for (const listener of journalListeners) {
+			await listener(entries);
+		}
 	};
 
 	return {
 		read: readGraph,
 		write(write) {
 			const path = write.path ?? [];
-			const current = cells.get(write.bindingId);
-			cells.set(write.bindingId, writePath(current, path, write.value));
-			markDirtyPath(write.bindingId, path);
+			const current = cells.get(write.graphNodeId);
+			cells.set(write.graphNodeId, writePath(current, path, write.value));
+			markDirtyPath(write.graphNodeId, path);
 			scheduleFlush();
 		},
 		update(update) {
 			const path = update.path ?? [];
-			const currentValue = readPath(cells.get(update.bindingId), path);
+			const currentValue = readPath(cells.get(update.graphNodeId), path);
 			const nextValue = update.update(currentValue);
-			const current = cells.get(update.bindingId);
-			cells.set(update.bindingId, writePath(current, path, nextValue));
-			markDirtyPath(update.bindingId, path);
+			const current = cells.get(update.graphNodeId);
+			cells.set(update.graphNodeId, writePath(current, path, nextValue));
+			markDirtyPath(update.graphNodeId, path);
 			scheduleFlush();
 			if (update.returnValue === 'previous') return currentValue;
 			if (update.returnValue === 'next') return nextValue;
 		},
 		call(call) {
 			const path = call.path ?? [];
-			const target = readPath(cells.get(call.bindingId), path);
+			const target = readPath(cells.get(call.graphNodeId), path);
 			const beforeMutation = collectionMutationSnapshot(target, call.method, call.args ?? []);
 			const result = applyCollectionCall(target, call.method, call.args ?? []);
 
 			if (collectionCallMutated(call.method, result, beforeMutation)) {
-				markDirtyPath(call.bindingId, path);
+				markDirtyPath(call.graphNodeId, path);
 				scheduleFlush();
 			}
 
 			return result;
 		},
 		delete(deletion) {
-			const outcome = deletePath(cells.get(deletion.bindingId), deletion.path);
+			const outcome = deletePath(cells.get(deletion.graphNodeId), deletion.path);
 			if (outcome.mutated) {
-				markDirtyPath(deletion.bindingId, deletion.path);
+				markDirtyPath(deletion.graphNodeId, deletion.path);
 				scheduleFlush();
 			}
 
@@ -391,11 +422,28 @@ export function createRuntimeGraph(input: RuntimeGraphInput): RuntimeGraph {
 		subscribe(subscription) {
 			subscriptions.push(subscription);
 		},
+		subscribeJournal(listener) {
+			journalListeners.push(listener);
+			return () => {
+				const index = journalListeners.indexOf(listener);
+				if (index >= 0) journalListeners.splice(index, 1);
+			};
+		},
 		flush,
 		takeJournal() {
 			return journal.splice(0);
 		},
 	};
+}
+
+function appendJournalResult(journal: DomJournalEntry[], result: DomJournalResult | void): void {
+	if (!result) return;
+	if (Array.isArray(result)) {
+		journal.push(...result);
+		return;
+	}
+
+	journal.push(result);
 }
 
 function readPath(value: unknown, path: ReadonlyArray<string>): unknown {
@@ -435,7 +483,7 @@ function deletePath(
 	readonly mutated: boolean;
 } {
 	if (path.length === 0) {
-		throw new TypeError('Cannot delete a graph binding root. Delete a property path instead.');
+		throw new TypeError('Cannot delete a graph node root. Delete a property path instead.');
 	}
 
 	let current = value;

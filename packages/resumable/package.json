@@ -5,11 +5,13 @@
 	"type": "module",
 	"exports": {
 		".": "./src/index.ts",
+		"./rolldown": "./src/rolldown.ts",
+		"./runtime": "./src/runtime.ts",
 		"./vite": "./src/vite.ts"
 	},
 	"dependencies": {
+		"@async/resumable-bundler": "workspace:*",
 		"@async/resumable-core": "workspace:*",
-		"@async/resumable-rolldown": "workspace:*",
-		"@async/resumable-vite": "workspace:*"
+		"@async/resumable-runtime": "workspace:*"
 	}
 }

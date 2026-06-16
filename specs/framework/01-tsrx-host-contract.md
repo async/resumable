@@ -42,7 +42,7 @@ TSRX already gives `@for` optional `index` and `key` clauses:
 
 This framework uses the `key` clause as the stable identity root for repeated
 local graph scopes. A keyed loop item keeps its component instances, local
-`state()`, `computed()` nodes, async nodes, DOM bindings, and event wiring
+`state()`, `computed()` nodes, async nodes, DOM updates, and event wiring
 attached to the same logical item across reorder, insert, and delete operations.
 
 Unkeyed `@for` is positional. That is acceptable for static/stateless output,
@@ -65,7 +65,7 @@ identity within the keyed loop item.
 
 `@if` branches create branch-local graph scopes. When a branch is removed from
 the DOM, graph state created exclusively inside that branch is disposed with it:
-local `state()`, `computed()` nodes, async nodes, DOM bindings, event wiring,
+local `state()`, `computed()` nodes, async nodes, DOM updates, event wiring,
 and pending async work.
 
 When the branch becomes active again, it creates fresh branch-local graph state

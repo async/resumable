@@ -16,14 +16,14 @@ export function planPayloadArena(input: PayloadArenaInput): PayloadArenaArtifact
 	const cells = input.semanticGraph.graphBindings
 		.filter((binding) => binding.kind === 'state')
 		.map((binding) => ({
-			bindingId: binding.id,
+			graphNodeId: binding.id,
 			name: binding.name,
 			valueKind: binding.valueKind ?? 'unknown',
 		}));
 	const computed = input.semanticGraph.graphBindings
 		.filter((binding) => binding.kind === 'computed' && binding.async === true)
 		.map((binding) => ({
-			bindingId: binding.id,
+			graphNodeId: binding.id,
 			name: binding.name,
 			async: binding.async === true,
 		}));
@@ -33,7 +33,7 @@ export function planPayloadArena(input: PayloadArenaInput): PayloadArenaArtifact
 		index,
 		tagName: hostNode.tagName,
 	}));
-	const viewBindings = input.semanticGraph.templateReads.flatMap((read) => {
+	const viewDomUpdates = input.semanticGraph.templateReads.flatMap((read) => {
 		const resolved = resolveGraphPath(read.source, bindings, aliases);
 		if (!resolved) return [];
 
@@ -41,8 +41,9 @@ export function planPayloadArena(input: PayloadArenaInput): PayloadArenaArtifact
 			{
 				hostNodeId: read.hostNodeId,
 				source: read.source,
-				bindingId: resolved.binding.id,
+				graphNodeId: resolved.binding.id,
 				path: resolved.path,
+				target: read.target,
 			},
 		];
 	});
@@ -84,12 +85,12 @@ export function planPayloadArena(input: PayloadArenaInput): PayloadArenaArtifact
 				return [
 					{
 						source: read.source,
-						bindingId: resolved.binding.id,
+						graphNodeId: resolved.binding.id,
 						path: resolved.path,
 					},
 				];
 			}),
-			(read) => `${read.bindingId}:${read.path.join('.')}:${read.source}`,
+			(read) => `${read.graphNodeId}:${read.path.join('.')}:${read.source}`,
 		),
 	}));
 
@@ -102,9 +103,10 @@ export function planPayloadArena(input: PayloadArenaInput): PayloadArenaArtifact
 		view: {
 			locators,
 			events: input.semanticGraph.events,
-			bindings: uniqueBy(
-				viewBindings,
-				(binding) => `${binding.hostNodeId}:${binding.bindingId}:${binding.path.join('.')}`,
+			domUpdates: uniqueBy(
+				viewDomUpdates,
+				(domUpdate) =>
+					`${domUpdate.hostNodeId}:${domUpdateTargetKey(domUpdate.target)}:${domUpdate.graphNodeId}:${domUpdate.path.join('.')}`,
 			),
 			behaviors: input.semanticGraph.behaviors,
 			elementHandles,
@@ -112,4 +114,12 @@ export function planPayloadArena(input: PayloadArenaInput): PayloadArenaArtifact
 		},
 		diagnostics: input.stateLowering.diagnostics,
 	};
+}
+
+function domUpdateTargetKey(
+	target: PayloadArenaArtifact['view']['domUpdates'][number]['target'],
+): string {
+	if (target.kind === 'attribute') return `attribute:${target.name}`;
+	if (target.kind === 'property') return `property:${target.name}`;
+	return target.kind;
 }

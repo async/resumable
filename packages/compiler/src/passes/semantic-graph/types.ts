@@ -6,12 +6,14 @@ import type {
 	SemanticGraphAlias,
 	SemanticGraphBinding,
 	SemanticGraphDiagnostic,
+	SemanticSyncPolicyConstant,
 	SemanticHostNode,
 	SemanticLocalBinding,
 	SemanticStateRead,
 	SemanticStateWrite,
 	SemanticTemplateRead,
 } from '../../artifacts.ts';
+import type { FrameworkApiName } from './imports.ts';
 
 export type MutableSemanticGraphArtifact = {
 	passId: 'tsrx-semantic-graph';
@@ -20,6 +22,7 @@ export type MutableSemanticGraphArtifact = {
 	graphBindings: SemanticGraphBinding[];
 	hostNodes: SemanticHostNode[];
 	events: SemanticEvent[];
+	syncPolicyConstants: SemanticSyncPolicyConstant[];
 	behaviors: Array<{ readonly hostNodeId: string; readonly source: string }>;
 	elementHandleBindings: SemanticElementHandleBinding[];
 	localBindings: SemanticLocalBinding[];
@@ -35,6 +38,7 @@ export type WalkState = {
 	readonly filename: string;
 	readonly source: string;
 	readonly graph: MutableSemanticGraphArtifact;
+	readonly frameworkApiImports: ReadonlyMap<string, FrameworkApiName>;
 	readonly hostIds: WeakMap<object, string>;
 	currentHostNodeId: string | null;
 	currentAsyncBoundaryId: string | null;
@@ -53,6 +57,7 @@ export function createMutableSemanticGraphArtifact(filename: string): MutableSem
 		graphBindings: [],
 		hostNodes: [],
 		events: [],
+		syncPolicyConstants: [],
 		behaviors: [],
 		elementHandleBindings: [],
 		localBindings: [],
@@ -69,11 +74,13 @@ export function createWalkState(input: {
 	readonly filename: string;
 	readonly source: string;
 	readonly graph: MutableSemanticGraphArtifact;
+	readonly frameworkApiImports: ReadonlyMap<string, FrameworkApiName>;
 }): WalkState {
 	return {
 		filename: input.filename,
 		source: input.source,
 		graph: input.graph,
+		frameworkApiImports: input.frameworkApiImports,
 		hostIds: new WeakMap<object, string>(),
 		currentHostNodeId: null,
 		currentAsyncBoundaryId: null,

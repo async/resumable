@@ -1,0 +1,15 @@
+{
+	"name": "@fixtures/rolldown-basic",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"build": "rolldown -c"
+	},
+	"dependencies": {
+		"@async/resumable": "workspace:*"
+	},
+	"devDependencies": {
+		"rolldown": "1.0.3",
+		"typescript": "catalog:"
+	}
+}

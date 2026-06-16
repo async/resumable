@@ -1,11 +1,11 @@
 import { expect, test } from 'vitest';
 import { createRuntimeGraph } from '../src/index.ts';
 
-test('runtime graph invalidates path subscribers and flushes concrete journal records', async () => {
+test('runtime graph invalidates path subscribers and flushes concrete journal entries', async () => {
 	const graph = createRuntimeGraph({
 		cells: [
-			{ bindingId: 'state:count', value: 0 },
-			{ bindingId: 'state:menu', value: { open: true, title: 'Menu' } },
+			{ graphNodeId: 'state:count', value: 0 },
+			{ graphNodeId: 'state:menu', value: { open: true, title: 'Menu' } },
 		],
 	});
 
@@ -13,8 +13,8 @@ test('runtime graph invalidates path subscribers and flushes concrete journal re
 	expect(graph.read('state:menu', ['title'])).toBe('Menu');
 
 	graph.subscribe({
-		id: 'binding:title',
-		bindingId: 'state:menu',
+		id: 'dom-update:title',
+		graphNodeId: 'state:menu',
 		path: ['title'],
 		run(value) {
 			return { type: 'setText', locator: 'text:title', value };
@@ -22,7 +22,7 @@ test('runtime graph invalidates path subscribers and flushes concrete journal re
 	});
 
 	graph.write({
-		bindingId: 'state:menu',
+		graphNodeId: 'state:menu',
 		path: ['open'],
 		value: false,
 	});
@@ -30,7 +30,7 @@ test('runtime graph invalidates path subscribers and flushes concrete journal re
 	expect(graph.takeJournal()).toEqual([]);
 
 	graph.write({
-		bindingId: 'state:menu',
+		graphNodeId: 'state:menu',
 		path: ['title'],
 		value: 'File',
 	});
@@ -41,7 +41,7 @@ test('runtime graph invalidates path subscribers and flushes concrete journal re
 	]);
 
 	graph.update({
-		bindingId: 'state:count',
+		graphNodeId: 'state:count',
 		path: [],
 		update: (value) => Number(value) + 1,
 	});
@@ -50,13 +50,61 @@ test('runtime graph invalidates path subscribers and flushes concrete journal re
 	expect(graph.takeJournal()).toEqual([]);
 });
 
+test('runtime graph appends multiple DOM journal entries from one subscription in order', async () => {
+	const graph = createRuntimeGraph({
+		cells: [{ graphNodeId: 'state:count', value: 0 }],
+	});
+
+	graph.subscribe({
+		id: 'dom-update:count',
+		graphNodeId: 'state:count',
+		path: [],
+		run(value) {
+			return [
+				{ type: 'setText', locator: 'text:count', value },
+				{
+					type: 'setAttr',
+					locator: 'button:count',
+					name: 'data-count',
+					value: String(value),
+				},
+				{
+					type: 'setProp',
+					locator: 'button:count',
+					name: 'disabled',
+					value: Number(value) > 0,
+				},
+			];
+		},
+	});
+
+	graph.write({ graphNodeId: 'state:count', value: 1 });
+	await graph.flush();
+
+	expect(graph.takeJournal()).toEqual([
+		{ type: 'setText', locator: 'text:count', value: 1 },
+		{
+			type: 'setAttr',
+			locator: 'button:count',
+			name: 'data-count',
+			value: '1',
+		},
+		{
+			type: 'setProp',
+			locator: 'button:count',
+			name: 'disabled',
+			value: true,
+		},
+	]);
+});
+
 test('runtime graph applies collection method calls with path invalidation', async () => {
 	const cache = new Map<string, string>();
 	const selected = new Set<string>();
 	const graph = createRuntimeGraph({
 		cells: [
 			{
-				bindingId: 'state:collections',
+				graphNodeId: 'state:collections',
 				value: {
 					items: ['first'],
 					cache,
@@ -67,8 +115,8 @@ test('runtime graph applies collection method calls with path invalidation', asy
 	});
 
 	graph.subscribe({
-		id: 'binding:items',
-		bindingId: 'state:collections',
+		id: 'dom-update:items',
+		graphNodeId: 'state:collections',
 		path: ['items'],
 		run(value) {
 			return {
@@ -79,8 +127,8 @@ test('runtime graph applies collection method calls with path invalidation', asy
 		},
 	});
 	graph.subscribe({
-		id: 'binding:cache',
-		bindingId: 'state:collections',
+		id: 'dom-update:cache',
+		graphNodeId: 'state:collections',
 		path: ['cache'],
 		run(value) {
 			return {
@@ -91,8 +139,8 @@ test('runtime graph applies collection method calls with path invalidation', asy
 		},
 	});
 	graph.subscribe({
-		id: 'binding:selected',
-		bindingId: 'state:collections',
+		id: 'dom-update:selected',
+		graphNodeId: 'state:collections',
 		path: ['selected'],
 		run(value) {
 			return {
@@ -105,7 +153,7 @@ test('runtime graph applies collection method calls with path invalidation', asy
 
 	expect(
 		graph.call({
-			bindingId: 'state:collections',
+			graphNodeId: 'state:collections',
 			path: ['items'],
 			method: 'push',
 			args: ['second'],
@@ -113,7 +161,7 @@ test('runtime graph applies collection method calls with path invalidation', asy
 	).toBe(2);
 	expect(
 		graph.call({
-			bindingId: 'state:collections',
+			graphNodeId: 'state:collections',
 			path: ['cache'],
 			method: 'set',
 			args: ['next', 'value'],
@@ -121,7 +169,7 @@ test('runtime graph applies collection method calls with path invalidation', asy
 	).toBe(cache);
 	expect(
 		graph.call({
-			bindingId: 'state:collections',
+			graphNodeId: 'state:collections',
 			path: ['selected'],
 			method: 'add',
 			args: ['item'],
@@ -148,7 +196,7 @@ test('runtime graph preserves collection delete return values and skips no-op in
 	const graph = createRuntimeGraph({
 		cells: [
 			{
-				bindingId: 'state:collections',
+				graphNodeId: 'state:collections',
 				value: {
 					cache,
 					selected,
@@ -158,8 +206,8 @@ test('runtime graph preserves collection delete return values and skips no-op in
 	});
 
 	graph.subscribe({
-		id: 'binding:cache',
-		bindingId: 'state:collections',
+		id: 'dom-update:cache',
+		graphNodeId: 'state:collections',
 		path: ['cache'],
 		run(value) {
 			return {
@@ -170,8 +218,8 @@ test('runtime graph preserves collection delete return values and skips no-op in
 		},
 	});
 	graph.subscribe({
-		id: 'binding:selected',
-		bindingId: 'state:collections',
+		id: 'dom-update:selected',
+		graphNodeId: 'state:collections',
 		path: ['selected'],
 		run(value) {
 			return {
@@ -184,7 +232,7 @@ test('runtime graph preserves collection delete return values and skips no-op in
 
 	expect(
 		graph.call({
-			bindingId: 'state:collections',
+			graphNodeId: 'state:collections',
 			path: ['cache'],
 			method: 'delete',
 			args: ['next'],
@@ -192,7 +240,7 @@ test('runtime graph preserves collection delete return values and skips no-op in
 	).toBe(true);
 	expect(
 		graph.call({
-			bindingId: 'state:collections',
+			graphNodeId: 'state:collections',
 			path: ['selected'],
 			method: 'delete',
 			args: ['missing'],
@@ -212,7 +260,7 @@ test('runtime graph skips collection clear invalidation when the collection is a
 	const graph = createRuntimeGraph({
 		cells: [
 			{
-				bindingId: 'state:collections',
+				graphNodeId: 'state:collections',
 				value: {
 					emptyCache,
 					selected,
@@ -222,8 +270,8 @@ test('runtime graph skips collection clear invalidation when the collection is a
 	});
 
 	graph.subscribe({
-		id: 'binding:empty-cache',
-		bindingId: 'state:collections',
+		id: 'dom-update:empty-cache',
+		graphNodeId: 'state:collections',
 		path: ['emptyCache'],
 		run(value) {
 			return {
@@ -234,8 +282,8 @@ test('runtime graph skips collection clear invalidation when the collection is a
 		},
 	});
 	graph.subscribe({
-		id: 'binding:selected',
-		bindingId: 'state:collections',
+		id: 'dom-update:selected',
+		graphNodeId: 'state:collections',
 		path: ['selected'],
 		run(value) {
 			return {
@@ -248,14 +296,14 @@ test('runtime graph skips collection clear invalidation when the collection is a
 
 	expect(
 		graph.call({
-			bindingId: 'state:collections',
+			graphNodeId: 'state:collections',
 			path: ['emptyCache'],
 			method: 'clear',
 		}),
 	).toBeUndefined();
 	expect(
 		graph.call({
-			bindingId: 'state:collections',
+			graphNodeId: 'state:collections',
 			path: ['selected'],
 			method: 'clear',
 		}),
@@ -274,7 +322,7 @@ test('runtime graph skips Set.add invalidation when the value already exists', a
 	const graph = createRuntimeGraph({
 		cells: [
 			{
-				bindingId: 'state:collections',
+				graphNodeId: 'state:collections',
 				value: {
 					selected,
 					pending,
@@ -284,8 +332,8 @@ test('runtime graph skips Set.add invalidation when the value already exists', a
 	});
 
 	graph.subscribe({
-		id: 'binding:selected',
-		bindingId: 'state:collections',
+		id: 'dom-update:selected',
+		graphNodeId: 'state:collections',
 		path: ['selected'],
 		run(value) {
 			return {
@@ -296,8 +344,8 @@ test('runtime graph skips Set.add invalidation when the value already exists', a
 		},
 	});
 	graph.subscribe({
-		id: 'binding:pending',
-		bindingId: 'state:collections',
+		id: 'dom-update:pending',
+		graphNodeId: 'state:collections',
 		path: ['pending'],
 		run(value) {
 			return {
@@ -310,7 +358,7 @@ test('runtime graph skips Set.add invalidation when the value already exists', a
 
 	expect(
 		graph.call({
-			bindingId: 'state:collections',
+			graphNodeId: 'state:collections',
 			path: ['selected'],
 			method: 'add',
 			args: ['item'],
@@ -318,7 +366,7 @@ test('runtime graph skips Set.add invalidation when the value already exists', a
 	).toBe(selected);
 	expect(
 		graph.call({
-			bindingId: 'state:collections',
+			graphNodeId: 'state:collections',
 			path: ['pending'],
 			method: 'add',
 			args: ['item'],
@@ -338,7 +386,7 @@ test('runtime graph skips Map.set invalidation when the key already has the same
 	const graph = createRuntimeGraph({
 		cells: [
 			{
-				bindingId: 'state:collections',
+				graphNodeId: 'state:collections',
 				value: {
 					cache,
 					pending,
@@ -348,8 +396,8 @@ test('runtime graph skips Map.set invalidation when the key already has the same
 	});
 
 	graph.subscribe({
-		id: 'binding:cache',
-		bindingId: 'state:collections',
+		id: 'dom-update:cache',
+		graphNodeId: 'state:collections',
 		path: ['cache'],
 		run(value) {
 			return {
@@ -360,8 +408,8 @@ test('runtime graph skips Map.set invalidation when the key already has the same
 		},
 	});
 	graph.subscribe({
-		id: 'binding:pending',
-		bindingId: 'state:collections',
+		id: 'dom-update:pending',
+		graphNodeId: 'state:collections',
 		path: ['pending'],
 		run(value) {
 			return {
@@ -374,7 +422,7 @@ test('runtime graph skips Map.set invalidation when the key already has the same
 
 	expect(
 		graph.call({
-			bindingId: 'state:collections',
+			graphNodeId: 'state:collections',
 			path: ['cache'],
 			method: 'set',
 			args: ['next', 'value'],
@@ -382,7 +430,7 @@ test('runtime graph skips Map.set invalidation when the key already has the same
 	).toBe(cache);
 	expect(
 		graph.call({
-			bindingId: 'state:collections',
+			graphNodeId: 'state:collections',
 			path: ['pending'],
 			method: 'set',
 			args: ['next', 'value'],
@@ -404,7 +452,7 @@ test('runtime graph skips Array.pop invalidation when the array is already empty
 	const graph = createRuntimeGraph({
 		cells: [
 			{
-				bindingId: 'state:collections',
+				graphNodeId: 'state:collections',
 				value: {
 					emptyItems,
 					pending,
@@ -414,8 +462,8 @@ test('runtime graph skips Array.pop invalidation when the array is already empty
 	});
 
 	graph.subscribe({
-		id: 'binding:empty-items',
-		bindingId: 'state:collections',
+		id: 'dom-update:empty-items',
+		graphNodeId: 'state:collections',
 		path: ['emptyItems'],
 		run(value) {
 			return {
@@ -426,8 +474,8 @@ test('runtime graph skips Array.pop invalidation when the array is already empty
 		},
 	});
 	graph.subscribe({
-		id: 'binding:pending',
-		bindingId: 'state:collections',
+		id: 'dom-update:pending',
+		graphNodeId: 'state:collections',
 		path: ['pending'],
 		run(value) {
 			return {
@@ -440,14 +488,14 @@ test('runtime graph skips Array.pop invalidation when the array is already empty
 
 	expect(
 		graph.call({
-			bindingId: 'state:collections',
+			graphNodeId: 'state:collections',
 			path: ['emptyItems'],
 			method: 'pop',
 		}),
 	).toBeUndefined();
 	expect(
 		graph.call({
-			bindingId: 'state:collections',
+			graphNodeId: 'state:collections',
 			path: ['pending'],
 			method: 'pop',
 		}),
@@ -466,7 +514,7 @@ test('runtime graph skips Array.shift invalidation when the array is already emp
 	const graph = createRuntimeGraph({
 		cells: [
 			{
-				bindingId: 'state:collections',
+				graphNodeId: 'state:collections',
 				value: {
 					emptyItems,
 					pending,
@@ -476,8 +524,8 @@ test('runtime graph skips Array.shift invalidation when the array is already emp
 	});
 
 	graph.subscribe({
-		id: 'binding:empty-items',
-		bindingId: 'state:collections',
+		id: 'dom-update:empty-items',
+		graphNodeId: 'state:collections',
 		path: ['emptyItems'],
 		run(value) {
 			return {
@@ -488,8 +536,8 @@ test('runtime graph skips Array.shift invalidation when the array is already emp
 		},
 	});
 	graph.subscribe({
-		id: 'binding:pending',
-		bindingId: 'state:collections',
+		id: 'dom-update:pending',
+		graphNodeId: 'state:collections',
 		path: ['pending'],
 		run(value) {
 			return {
@@ -502,14 +550,14 @@ test('runtime graph skips Array.shift invalidation when the array is already emp
 
 	expect(
 		graph.call({
-			bindingId: 'state:collections',
+			graphNodeId: 'state:collections',
 			path: ['emptyItems'],
 			method: 'shift',
 		}),
 	).toBeUndefined();
 	expect(
 		graph.call({
-			bindingId: 'state:collections',
+			graphNodeId: 'state:collections',
 			path: ['pending'],
 			method: 'shift',
 		}),
@@ -529,7 +577,7 @@ test('runtime graph skips Array.push and Array.unshift invalidation when no valu
 	const graph = createRuntimeGraph({
 		cells: [
 			{
-				bindingId: 'state:collections',
+				graphNodeId: 'state:collections',
 				value: {
 					appendItems,
 					prependItems,
@@ -540,8 +588,8 @@ test('runtime graph skips Array.push and Array.unshift invalidation when no valu
 	});
 
 	graph.subscribe({
-		id: 'binding:append-items',
-		bindingId: 'state:collections',
+		id: 'dom-update:append-items',
+		graphNodeId: 'state:collections',
 		path: ['appendItems'],
 		run(value) {
 			return {
@@ -552,8 +600,8 @@ test('runtime graph skips Array.push and Array.unshift invalidation when no valu
 		},
 	});
 	graph.subscribe({
-		id: 'binding:prepend-items',
-		bindingId: 'state:collections',
+		id: 'dom-update:prepend-items',
+		graphNodeId: 'state:collections',
 		path: ['prependItems'],
 		run(value) {
 			return {
@@ -564,8 +612,8 @@ test('runtime graph skips Array.push and Array.unshift invalidation when no valu
 		},
 	});
 	graph.subscribe({
-		id: 'binding:pending',
-		bindingId: 'state:collections',
+		id: 'dom-update:pending',
+		graphNodeId: 'state:collections',
 		path: ['pending'],
 		run(value) {
 			return {
@@ -578,21 +626,21 @@ test('runtime graph skips Array.push and Array.unshift invalidation when no valu
 
 	expect(
 		graph.call({
-			bindingId: 'state:collections',
+			graphNodeId: 'state:collections',
 			path: ['appendItems'],
 			method: 'push',
 		}),
 	).toBe(1);
 	expect(
 		graph.call({
-			bindingId: 'state:collections',
+			graphNodeId: 'state:collections',
 			path: ['prependItems'],
 			method: 'unshift',
 		}),
 	).toBe(1);
 	expect(
 		graph.call({
-			bindingId: 'state:collections',
+			graphNodeId: 'state:collections',
 			path: ['pending'],
 			method: 'push',
 			args: ['item'],
@@ -613,15 +661,15 @@ test('runtime graph rejects unsupported collection method calls without invalida
 	const graph = createRuntimeGraph({
 		cells: [
 			{
-				bindingId: 'state:items',
+				graphNodeId: 'state:items',
 				value: ['first'],
 			},
 		],
 	});
 
 	graph.subscribe({
-		id: 'binding:items',
-		bindingId: 'state:items',
+		id: 'dom-update:items',
+		graphNodeId: 'state:items',
 		path: [],
 		run(value) {
 			return {
@@ -634,7 +682,7 @@ test('runtime graph rejects unsupported collection method calls without invalida
 
 	expect(() =>
 		graph.call({
-			bindingId: 'state:items',
+			graphNodeId: 'state:items',
 			path: [],
 			method: 'map',
 			args: [(value: unknown) => value],
@@ -651,30 +699,30 @@ test('runtime graph deletes object paths with path invalidation', async () => {
 	const graph = createRuntimeGraph({
 		cells: [
 			{
-				bindingId: 'state:menu',
+				graphNodeId: 'state:menu',
 				value: { open: true, title: 'Menu' },
 			},
 		],
 	});
 
 	graph.subscribe({
-		id: 'binding:open',
-		bindingId: 'state:menu',
+		id: 'dom-update:open',
+		graphNodeId: 'state:menu',
 		path: ['open'],
 		run(value) {
 			return { type: 'setText', locator: 'text:open', value };
 		},
 	});
 	graph.subscribe({
-		id: 'binding:title',
-		bindingId: 'state:menu',
+		id: 'dom-update:title',
+		graphNodeId: 'state:menu',
 		path: ['title'],
 		run(value) {
 			return { type: 'setText', locator: 'text:title', value };
 		},
 	});
 
-	expect(graph.delete({ bindingId: 'state:menu', path: ['open'] })).toBe(true);
+	expect(graph.delete({ graphNodeId: 'state:menu', path: ['open'] })).toBe(true);
 	await graph.flush();
 
 	expect(graph.read('state:menu', ['open'])).toBeUndefined();
@@ -688,22 +736,22 @@ test('runtime graph skips object delete invalidation when no property is removed
 	const graph = createRuntimeGraph({
 		cells: [
 			{
-				bindingId: 'state:menu',
+				graphNodeId: 'state:menu',
 				value: { open: true },
 			},
 		],
 	});
 
 	graph.subscribe({
-		id: 'binding:missing',
-		bindingId: 'state:menu',
+		id: 'dom-update:missing',
+		graphNodeId: 'state:menu',
 		path: ['missing'],
 		run(value) {
 			return { type: 'setText', locator: 'text:missing', value };
 		},
 	});
 
-	expect(graph.delete({ bindingId: 'state:menu', path: ['missing'] })).toBe(true);
+	expect(graph.delete({ graphNodeId: 'state:menu', path: ['missing'] })).toBe(true);
 	await graph.flush();
 
 	expect(graph.read('state:menu', ['missing'])).toBeUndefined();
@@ -712,12 +760,12 @@ test('runtime graph skips object delete invalidation when no property is removed
 
 test('runtime graph update can return previous or next graph values', async () => {
 	const graph = createRuntimeGraph({
-		cells: [{ bindingId: 'state:count', value: 1 }],
+		cells: [{ graphNodeId: 'state:count', value: 1 }],
 	});
 
 	graph.subscribe({
-		id: 'binding:count',
-		bindingId: 'state:count',
+		id: 'dom-update:count',
+		graphNodeId: 'state:count',
 		path: [],
 		run(value) {
 			return { type: 'setText', locator: 'text:count', value };
@@ -726,7 +774,7 @@ test('runtime graph update can return previous or next graph values', async () =
 
 	expect(
 		graph.update({
-			bindingId: 'state:count',
+			graphNodeId: 'state:count',
 			update: (value) => Number(value) + 1,
 			returnValue: 'previous',
 		}),
@@ -735,7 +783,7 @@ test('runtime graph update can return previous or next graph values', async () =
 
 	expect(
 		graph.update({
-			bindingId: 'state:count',
+			graphNodeId: 'state:count',
 			update: (value) => Number(value) + 1,
 			returnValue: 'next',
 		}),
@@ -749,20 +797,20 @@ test('runtime graph update can return previous or next graph values', async () =
 
 test('runtime graph schedules a microtask flush for writes in an idle turn', async () => {
 	const graph = createRuntimeGraph({
-		cells: [{ bindingId: 'state:count', value: 0 }],
+		cells: [{ graphNodeId: 'state:count', value: 0 }],
 	});
 
 	graph.subscribe({
-		id: 'binding:count',
-		bindingId: 'state:count',
+		id: 'dom-update:count',
+		graphNodeId: 'state:count',
 		path: [],
 		run(value) {
 			return { type: 'setText', locator: 'button:text', value };
 		},
 	});
 
-	graph.write({ bindingId: 'state:count', value: 1 });
-	graph.write({ bindingId: 'state:count', value: 2 });
+	graph.write({ graphNodeId: 'state:count', value: 1 });
+	graph.write({ graphNodeId: 'state:count', value: 2 });
 
 	expect(graph.takeJournal()).toEqual([]);
 
@@ -773,11 +821,11 @@ test('runtime graph schedules a microtask flush for writes in an idle turn', asy
 
 test('runtime graph lazily recomputes sync computed nodes after path-granular invalidation', async () => {
 	const graph = createRuntimeGraph({
-		cells: [{ bindingId: 'state:menu', value: { open: true, title: 'Menu' } }],
+		cells: [{ graphNodeId: 'state:menu', value: { open: true, title: 'Menu' } }],
 		computed: [
 			{
-				bindingId: 'computed:menuTitle',
-				dependencies: [{ bindingId: 'state:menu', path: ['title'] }],
+				graphNodeId: 'computed:menuTitle',
+				dependencies: [{ graphNodeId: 'state:menu', path: ['title'] }],
 				compute: (read) => `${String(read('state:menu', ['title']))}!`,
 			},
 		],
@@ -786,25 +834,62 @@ test('runtime graph lazily recomputes sync computed nodes after path-granular in
 	expect(graph.read('computed:menuTitle')).toBe('Menu!');
 
 	graph.subscribe({
-		id: 'binding:menuTitle',
-		bindingId: 'computed:menuTitle',
+		id: 'dom-update:menuTitle',
+		graphNodeId: 'computed:menuTitle',
 		path: [],
 		run(value) {
 			return { type: 'setText', locator: 'text:menu-title', value };
 		},
 	});
 
-	graph.write({ bindingId: 'state:menu', path: ['open'], value: false });
+	graph.write({ graphNodeId: 'state:menu', path: ['open'], value: false });
 	await graph.flush();
 	expect(graph.read('computed:menuTitle')).toBe('Menu!');
 	expect(graph.takeJournal()).toEqual([]);
 
-	graph.write({ bindingId: 'state:menu', path: ['title'], value: 'File' });
+	graph.write({ graphNodeId: 'state:menu', path: ['title'], value: 'File' });
 	expect(graph.read('computed:menuTitle')).toBe('File!');
 	await graph.flush();
 
 	expect(graph.takeJournal()).toEqual([
 		{ type: 'setText', locator: 'text:menu-title', value: 'File!' },
+	]);
+});
+
+test('runtime graph invalidates computed dependency chains', async () => {
+	const graph = createRuntimeGraph({
+		cells: [{ graphNodeId: 'state:user', value: { first: 'Ada', last: 'Lovelace' } }],
+		computed: [
+			{
+				graphNodeId: 'computed:displayName',
+				dependencies: [{ graphNodeId: 'state:user', path: ['first'] }],
+				compute: (read) => String(read('state:user', ['first'])).toUpperCase(),
+			},
+			{
+				graphNodeId: 'computed:greeting',
+				dependencies: [{ graphNodeId: 'computed:displayName', path: [] }],
+				compute: (read) => `Hello ${String(read('computed:displayName'))}`,
+			},
+		],
+	});
+
+	expect(graph.read('computed:greeting')).toBe('Hello ADA');
+
+	graph.subscribe({
+		id: 'dom-update:greeting',
+		graphNodeId: 'computed:greeting',
+		path: [],
+		run(value) {
+			return { type: 'setText', locator: 'text:greeting', value };
+		},
+	});
+
+	graph.write({ graphNodeId: 'state:user', path: ['first'], value: 'Grace' });
+	await graph.flush();
+
+	expect(graph.read('computed:greeting')).toBe('Hello GRACE');
+	expect(graph.takeJournal()).toEqual([
+		{ type: 'setText', locator: 'text:greeting', value: 'Hello GRACE' },
 	]);
 });
 
@@ -814,11 +899,11 @@ test('runtime graph versions async computed requests and ignores stale completio
 	const runs: Array<{ readonly key: unknown; readonly signal: AbortSignal }> = [];
 
 	const graph = createRuntimeGraph({
-		cells: [{ bindingId: 'state:userId', value: 'a' }],
+		cells: [{ graphNodeId: 'state:userId', value: 'a' }],
 		asyncComputed: [
 			{
-				bindingId: 'computed:user',
-				dependencies: [{ bindingId: 'state:userId', path: [] }],
+				graphNodeId: 'computed:user',
+				dependencies: [{ graphNodeId: 'state:userId', path: [] }],
 				key: (read) => read('state:userId'),
 				run({ key, signal }) {
 					runs.push({ key, signal });
@@ -836,8 +921,8 @@ test('runtime graph versions async computed requests and ignores stale completio
 	expect(runs).toHaveLength(1);
 
 	graph.subscribe({
-		id: 'binding:user',
-		bindingId: 'computed:user',
+		id: 'dom-update:user',
+		graphNodeId: 'computed:user',
 		path: [],
 		run(value) {
 			const snapshot = value as { readonly status: string; readonly value?: unknown };
@@ -849,7 +934,7 @@ test('runtime graph versions async computed requests and ignores stale completio
 		},
 	});
 
-	graph.write({ bindingId: 'state:userId', value: 'b' });
+	graph.write({ graphNodeId: 'state:userId', value: 'b' });
 	await graph.flush();
 
 	expect(runs[0].signal.aborted).toBe(true);
@@ -885,6 +970,237 @@ test('runtime graph versions async computed requests and ignores stale completio
 		value: 'Bob',
 	});
 	expect(graph.takeJournal()).toEqual([{ type: 'setText', locator: 'text:user', value: 'Bob' }]);
+});
+
+test('runtime graph ignores stale rejected async computed completions', async () => {
+	const first = deferred<string>();
+	const second = deferred<string>();
+	const staleError = new Error('stale');
+	const runs: Array<{ readonly key: unknown; readonly signal: AbortSignal }> = [];
+
+	const graph = createRuntimeGraph({
+		cells: [{ graphNodeId: 'state:userId', value: 'a' }],
+		asyncComputed: [
+			{
+				graphNodeId: 'computed:user',
+				dependencies: [{ graphNodeId: 'state:userId', path: [] }],
+				key: (read) => read('state:userId'),
+				run({ key, signal }) {
+					runs.push({ key, signal });
+					return key === 'a' ? first.promise : second.promise;
+				},
+			},
+		],
+	});
+
+	graph.subscribe({
+		id: 'dom-update:user',
+		graphNodeId: 'computed:user',
+		path: [],
+		run(value) {
+			const snapshot = value as { readonly status: string; readonly value?: unknown };
+			return {
+				type: 'setText',
+				locator: 'text:user',
+				value: snapshot.status === 'fulfilled' ? snapshot.value : snapshot.status,
+			};
+		},
+	});
+
+	expect(graph.read('computed:user')).toEqual({
+		status: 'pending',
+		version: 1,
+		key: 'a',
+	});
+	await drainMicrotasks();
+	expect(graph.takeJournal()).toEqual([
+		{ type: 'setText', locator: 'text:user', value: 'pending' },
+	]);
+
+	graph.write({ graphNodeId: 'state:userId', value: 'b' });
+	await graph.flush();
+
+	expect(runs[0].signal.aborted).toBe(true);
+	expect(runs).toHaveLength(2);
+	expect(graph.takeJournal()).toEqual([
+		{ type: 'setText', locator: 'text:user', value: 'pending' },
+	]);
+
+	first.reject(staleError);
+	await drainMicrotasks();
+	await graph.flush();
+
+	expect(graph.read('computed:user')).toEqual({
+		status: 'pending',
+		version: 2,
+		key: 'b',
+	});
+	expect(graph.takeJournal()).toEqual([]);
+
+	second.resolve('Bob');
+	await drainMicrotasks();
+
+	expect(graph.read('computed:user')).toEqual({
+		status: 'fulfilled',
+		version: 2,
+		key: 'b',
+		value: 'Bob',
+	});
+	expect(graph.takeJournal()).toEqual([{ type: 'setText', locator: 'text:user', value: 'Bob' }]);
+});
+
+test('runtime graph skips async computed invalidation when the dependency key is unchanged', async () => {
+	const request = deferred<string>();
+	const runs: Array<{ readonly key: unknown; readonly signal: AbortSignal }> = [];
+	const graph = createRuntimeGraph({
+		cells: [{ graphNodeId: 'state:route', value: { id: 'a', tab: 'overview' } }],
+		asyncComputed: [
+			{
+				graphNodeId: 'computed:user',
+				dependencies: [{ graphNodeId: 'state:route', path: [] }],
+				key: (read) => read('state:route', ['id']),
+				run({ key, signal }) {
+					runs.push({ key, signal });
+					return request.promise;
+				},
+			},
+		],
+	});
+
+	graph.subscribe({
+		id: 'dom-update:user',
+		graphNodeId: 'computed:user',
+		path: [],
+		run(value) {
+			const snapshot = value as { readonly status: string };
+			return { type: 'setText', locator: 'text:user', value: snapshot.status };
+		},
+	});
+
+	expect(graph.read('computed:user')).toEqual({
+		status: 'pending',
+		version: 1,
+		key: 'a',
+	});
+	await drainMicrotasks();
+	expect(graph.takeJournal()).toEqual([
+		{ type: 'setText', locator: 'text:user', value: 'pending' },
+	]);
+
+	graph.write({ graphNodeId: 'state:route', path: ['tab'], value: 'details' });
+	await graph.flush();
+
+	expect(runs).toHaveLength(1);
+	expect(runs[0].signal.aborted).toBe(false);
+	expect(graph.read('computed:user')).toEqual({
+		status: 'pending',
+		version: 1,
+		key: 'a',
+	});
+	expect(graph.takeJournal()).toEqual([]);
+});
+
+test('runtime graph schedules pending flush after standalone async computed demand', async () => {
+	const request = deferred<string>();
+	const graph = createRuntimeGraph({
+		cells: [{ graphNodeId: 'state:userId', value: 'a' }],
+		asyncComputed: [
+			{
+				graphNodeId: 'computed:user',
+				dependencies: [{ graphNodeId: 'state:userId', path: [] }],
+				key: (read) => read('state:userId'),
+				run() {
+					return request.promise;
+				},
+			},
+		],
+	});
+
+	graph.subscribe({
+		id: 'dom-update:user',
+		graphNodeId: 'computed:user',
+		path: [],
+		run(value) {
+			const snapshot = value as { readonly status: string; readonly value?: unknown };
+			return {
+				type: 'setText',
+				locator: 'text:user',
+				value: snapshot.status === 'fulfilled' ? snapshot.value : snapshot.status,
+			};
+		},
+	});
+
+	expect(graph.read('computed:user')).toEqual({
+		status: 'pending',
+		version: 1,
+		key: 'a',
+	});
+
+	await drainMicrotasks();
+
+	expect(graph.takeJournal()).toEqual([
+		{ type: 'setText', locator: 'text:user', value: 'pending' },
+	]);
+
+	request.resolve('Alice');
+	await drainMicrotasks();
+
+	expect(graph.takeJournal()).toEqual([
+		{ type: 'setText', locator: 'text:user', value: 'Alice' },
+	]);
+});
+
+test('runtime graph commits rejected async computed snapshots by request version', async () => {
+	const request = deferred<string>();
+	const failure = new Error('No user');
+	const graph = createRuntimeGraph({
+		cells: [{ graphNodeId: 'state:userId', value: 'missing' }],
+		asyncComputed: [
+			{
+				graphNodeId: 'computed:user',
+				dependencies: [{ graphNodeId: 'state:userId', path: [] }],
+				key: (read) => read('state:userId'),
+				run() {
+					return request.promise;
+				},
+			},
+		],
+	});
+
+	graph.subscribe({
+		id: 'dom-update:user',
+		graphNodeId: 'computed:user',
+		path: [],
+		run(value) {
+			const snapshot = value as { readonly status: string };
+			return { type: 'setText', locator: 'text:user', value: snapshot.status };
+		},
+	});
+
+	expect(graph.read('computed:user')).toEqual({
+		status: 'pending',
+		version: 1,
+		key: 'missing',
+	});
+
+	await drainMicrotasks();
+
+	expect(graph.takeJournal()).toEqual([
+		{ type: 'setText', locator: 'text:user', value: 'pending' },
+	]);
+
+	request.reject(failure);
+	await drainMicrotasks();
+
+	expect(graph.read('computed:user')).toEqual({
+		status: 'rejected',
+		version: 1,
+		key: 'missing',
+		error: failure,
+	});
+	expect(graph.takeJournal()).toEqual([
+		{ type: 'setText', locator: 'text:user', value: 'rejected' },
+	]);
 });
 
 function deferred<T>(): {

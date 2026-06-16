@@ -156,8 +156,8 @@ AST model. The artifact combines:
   reads, writes, calls, literals, object/array expressions, and event
   attributes
 - host-specific annotations: graph-state creation sites, computed bodies,
-  DOM binding expressions, event/behavior boundaries, capture candidates, and
-  DOM locator ownership
+  DOM update expressions, event/behavior boundaries, capture candidates, and DOM
+  locator ownership
 
 The compiler must prefer this semantic artifact over ad hoc source-string
 inspection. For example, an authored event prop is an element attribute whose
@@ -187,8 +187,8 @@ no annotation:
 - element behavior expressions (`use={...}` on host elements), including each
   entry in behavior arrays
 - `computed()` bodies
-- async computed run functions and async boundary branch bindings
-- DOM binding expressions (text/attribute bindings — the system's only effects)
+- async computed run functions and async boundary branch DOM updates
+- DOM update expressions (text/attribute updates — the system's only effects)
 - component bodies (executed during initial render only)
 
 ### The Capture Rule (replaces the marker)
@@ -225,8 +225,22 @@ Diagnostic quality is a first-class deliverable, not polish.
 - **Runtime:** unit tests on the graph (dependency tracking, path-level
   subscriptions, lazy computed, async computed status/versioning/cancellation).
 - **Resumability end-to-end:** perform initial render for a fixture app, load it
-  in a headless browser with **zero framework JS executed**, assert no execution
-  before interaction, assert initial-render-resolved async data does not refetch
-  on resume, then interact and assert only the expected symbols were fetched and
-  the DOM updated.
+  in a headless browser with only the tiny framework resumer allowed to execute,
+  assert zero app/component/symbol execution before interaction or visibility,
+  assert initial-render-resolved async data does not refetch on resume, then
+  interact and assert only the expected symbols were fetched and the DOM updated.
   This e2e harness is the core invariant check and gets built early, not last.
+  Use `@async/witness` for any resume mechanic that must prove initially
+  rendered HTML, payload scripts, generated chunks, Vite/Rolldown integration,
+  browser-loaded symbols, or no component execution on browser resume. If the
+  local Witness package cannot observe or assert a resume behavior the framework
+  needs, add that capability to the local `@async/witness` repo first instead of
+  creating an ad hoc one-off harness in this monorepo.
+- **Vitest browser mode:** use a framework-owned `packages/vitest-browser`
+  package for targeted CSR browser mechanics where SSR/initial-render output is
+  not the point. Its initial scope is real-browser event timing, DOM journal
+  application, `IntersectionObserver`, element handle lookup, microtask
+  behavior, and similarly focused DOM/runtime checks. Model the package after
+  the CSR `render` / cleanup / `page.extend` shape in
+  `/Users/jacksm5pro/dev/open-source/vitest-browser-qwik`, but do not adopt its
+  SSR transform plugin path as the resumability proof strategy.

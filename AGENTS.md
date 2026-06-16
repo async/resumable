@@ -46,6 +46,20 @@ is the Codex-facing always-on guidance for building the TSRX resumable framework
   not add standalone esbuild, terser, Rollup, SWC, webpack, Babel build
   pipelines, or similar secondary transformers/minifiers.
 
+## Naming For Contributors And Agents
+
+- Prefer names a junior developer can understand from the local file and the
+  current task. Use concrete nouns from the user-facing concept (`imports`,
+  `frameworkApi`, `payload`, `locator`) over internal shorthand or abstract
+  labels that require project history.
+- Compiler helper files and functions should make the ownership and reason
+  visible. If a name still needs framework context, add a short comment near the
+  helper that explains what it reads, why it exists, and what callers should do
+  with the result.
+- Avoid introducing new terms such as "intrinsic", "authored primitive", or
+  similar compiler jargon in source names unless the spec section and diagnostic
+  already use that exact term for users.
+
 ## Pnpm / Vite-Plus Monorepo Shape
 
 This framework will be a **pnpm workspace** and vite-plus monorepo with multiple
@@ -73,8 +87,7 @@ Expected shape:
   maintenance task
 - production package folders are `packages/resumable`, `packages/core`,
   `packages/protocol`, `packages/runtime`, `packages/serializer`,
-  `packages/compiler`, `packages/rolldown`, `packages/vite`, and
-  `packages/test-utils`
+  `packages/compiler`, `packages/bundler`, and `packages/test-utils`
 - `packages/resumable` is the main package for `@async/resumable`; the other
   packages are internal implementation boundaries until tests prove what should
   become public
@@ -257,8 +270,9 @@ For bundling behavior, structure the framework plugins similarly to:
 
 `/Users/jacksm5pro/dev/open-source/qwik-bundler`
 
-Use its `src` and `fixtures` as the reference shape for Rolldown and Vite plugin
-architecture:
+Before changing `packages/bundler` or its fixture tests, inspect the applicable
+`qwik-bundler` source/fixtures and use them as the reference shape for Rolldown
+and Vite plugin architecture:
 
 - `src/rolldown.ts` style entry for Rolldown-first plugin behavior.
 - `src/vite/*` style adapter layer for Vite-specific dev/HMR/HTML integration.

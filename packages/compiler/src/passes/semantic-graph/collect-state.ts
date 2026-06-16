@@ -1,9 +1,15 @@
 import { asNodes, getIdentifierName, type AnyNode } from '../../ast/nodes.ts';
 import { sourceSpan } from '../../ast/source.ts';
 import type { SemanticGraphBinding, SemanticLocalBinding } from '../../artifacts.ts';
+import {
+	getFrameworkApiForCall,
+	getCallName,
+	isFrameworkApiName,
+} from './imports.ts';
 import { collectDestructuredAliases } from './collect-aliases.ts';
 import { collectAsyncComputedPostAwaitReads, collectGraphDependencies } from './collect-async.ts';
 import { collectExpressionReads } from './collect-expressions.ts';
+import { frameworkImportRequiredDiagnostic } from './diagnostics.ts';
 import type { WalkState } from './types.ts';
 
 export function collectVariableDeclaration(node: AnyNode, state: WalkState): void {
@@ -19,8 +25,16 @@ export function collectVariableDeclaration(node: AnyNode, state: WalkState): voi
 
 		const name = getIdentifierName(id);
 		const callName = getCallName(init);
+		const frameworkApi = getFrameworkApiForCall(init, state.frameworkApiImports);
 
 		if (!name || !init) continue;
+
+		if (callName && isFrameworkApiName(callName) && !frameworkApi) {
+			state.graph.diagnostics.push(
+				frameworkImportRequiredDiagnostic(callName, init, state.filename),
+			);
+			continue;
+		}
 
 		const localBindingAlias = aliasedLocalBinding(init, state);
 		if (localBindingAlias) {
@@ -68,7 +82,15 @@ export function collectVariableDeclaration(node: AnyNode, state: WalkState): voi
 			});
 		}
 
-		if (callName === 'state') {
+		const syncPolicyConstant = evaluateSyncPolicyConstant(init);
+		if (declarationKind === 'const' && syncPolicyConstant.ok) {
+			state.graph.syncPolicyConstants.push({
+				name,
+				value: syncPolicyConstant.value,
+			});
+		}
+
+		if (frameworkApi === 'state') {
 			const initial = firstArgument(init);
 			state.graph.graphBindings.push({
 				id: `state:${name}`,
@@ -81,7 +103,7 @@ export function collectVariableDeclaration(node: AnyNode, state: WalkState): voi
 			});
 		}
 
-		if (callName === 'computed') {
+		if (frameworkApi === 'computed') {
 			const body = firstArgument(init);
 			const isAsync = body?.async === true;
 			const dependencies = collectGraphDependencies(body, state);
@@ -99,7 +121,7 @@ export function collectVariableDeclaration(node: AnyNode, state: WalkState): voi
 			if (isAsync) collectAsyncComputedPostAwaitReads(name, body, state);
 		}
 
-		if (callName === 'element') {
+		if (frameworkApi === 'element') {
 			state.graph.graphBindings.push({
 				id: `element:${name}`,
 				name,
@@ -397,12 +419,6 @@ function containsNonSerializableConstantValue(
 	return isNonSerializableConstantValue(node, state);
 }
 
-function getCallName(node: AnyNode | undefined | null): string | null {
-	if (node?.type !== 'CallExpression') return null;
-
-	return getIdentifierName(node.callee as AnyNode | undefined);
-}
-
 function variableDeclarationKind(node: AnyNode): SemanticGraphBinding['declarationKind'] {
 	if (node.kind === 'const' || node.kind === 'let' || node.kind === 'var') {
 		return node.kind;
@@ -440,6 +456,130 @@ function evaluateInitialStateValue(node: AnyNode | undefined): unknown {
 	}
 
 	return undefined;
+}
+
+export function evaluateSyncPolicyConstant(
+	node: AnyNode | undefined,
+): { readonly ok: true; readonly value: unknown } | { readonly ok: false } {
+	if (!node) return { ok: false };
+
+	if (node.type === 'Literal') return { ok: true, value: node.value };
+	if (node.type === 'ObjectExpression') return evaluateSyncPolicyConstantObjectExpression(node);
+	if (node.type === 'ArrayExpression') return evaluateSyncPolicyConstantArrayExpression(node);
+	if (node.type === 'UnaryExpression') {
+		const argument = evaluateSyncPolicyConstant(node.argument as AnyNode | undefined);
+		if (!argument.ok) return { ok: false };
+
+		if (node.operator === '-') return { ok: true, value: -Number(argument.value) };
+		if (node.operator === '+') return { ok: true, value: Number(argument.value) };
+		if (node.operator === '!') return { ok: true, value: !argument.value };
+	}
+	if (node.type === 'LogicalExpression') {
+		const left = evaluateSyncPolicyConstant(node.left as AnyNode | undefined);
+		if (!left.ok) return { ok: false };
+
+		if (node.operator === '&&') {
+			if (!left.value) return { ok: true, value: left.value };
+			return evaluateSyncPolicyConstant(node.right as AnyNode | undefined);
+		}
+		if (node.operator === '||') {
+			if (left.value) return { ok: true, value: left.value };
+			return evaluateSyncPolicyConstant(node.right as AnyNode | undefined);
+		}
+		if (node.operator === '??') {
+			if (left.value !== null && left.value !== undefined) {
+				return { ok: true, value: left.value };
+			}
+			return evaluateSyncPolicyConstant(node.right as AnyNode | undefined);
+		}
+	}
+	if (node.type === 'BinaryExpression') {
+		const left = evaluateSyncPolicyConstant(node.left as AnyNode | undefined);
+		const right = evaluateSyncPolicyConstant(node.right as AnyNode | undefined);
+		if (!left.ok || !right.ok) return { ok: false };
+
+		return evaluateSyncPolicyBinaryConstant(node.operator, left.value, right.value);
+	}
+	if (node.type === 'ConditionalExpression') {
+		const test = evaluateSyncPolicyConstant(node.test as AnyNode | undefined);
+		if (!test.ok) return { ok: false };
+
+		return evaluateSyncPolicyConstant(
+			(test.value ? node.consequent : node.alternate) as AnyNode | undefined,
+		);
+	}
+
+	return { ok: false };
+}
+
+function evaluateSyncPolicyConstantObjectExpression(
+	node: AnyNode,
+): { readonly ok: true; readonly value: Record<string, unknown> } | { readonly ok: false } {
+	const output: Record<string, unknown> = {};
+
+	for (const property of asNodes(node.properties)) {
+		if (property.type !== 'Property') return { ok: false };
+
+		const key = objectPropertyKey(property.key as AnyNode | undefined);
+		if (!key) return { ok: false };
+
+		const value = evaluateSyncPolicyConstant(property.value as AnyNode | undefined);
+		if (!value.ok) return { ok: false };
+
+		output[key] = value.value;
+	}
+
+	return { ok: true, value: output };
+}
+
+function evaluateSyncPolicyConstantArrayExpression(
+	node: AnyNode,
+): { readonly ok: true; readonly value: unknown[] } | { readonly ok: false } {
+	const output: unknown[] = [];
+
+	for (const element of asNodes(node.elements)) {
+		const value = evaluateSyncPolicyConstant(element);
+		if (!value.ok) return { ok: false };
+
+		output.push(value.value);
+	}
+
+	return { ok: true, value: output };
+}
+
+function evaluateSyncPolicyBinaryConstant(
+	operator: unknown,
+	left: unknown,
+	right: unknown,
+): { readonly ok: true; readonly value: unknown } | { readonly ok: false } {
+	if (typeof operator !== 'string') return { ok: false };
+
+	if (operator === '===') return { ok: true, value: left === right };
+	if (operator === '!==') return { ok: true, value: left !== right };
+	if (operator === '==') return { ok: true, value: left === right };
+	if (operator === '!=') return { ok: true, value: left !== right };
+	if (operator === '<') return { ok: true, value: Number(left) < Number(right) };
+	if (operator === '<=') return { ok: true, value: Number(left) <= Number(right) };
+	if (operator === '>') return { ok: true, value: Number(left) > Number(right) };
+	if (operator === '>=') return { ok: true, value: Number(left) >= Number(right) };
+	if (operator === '+') return evaluateSyncPolicyAddConstant(left, right);
+	if (operator === '-') return { ok: true, value: Number(left) - Number(right) };
+	if (operator === '*') return { ok: true, value: Number(left) * Number(right) };
+	if (operator === '/') return { ok: true, value: Number(left) / Number(right) };
+	if (operator === '%') return { ok: true, value: Number(left) % Number(right) };
+
+	return { ok: false };
+}
+
+function evaluateSyncPolicyAddConstant(
+	left: unknown,
+	right: unknown,
+): { readonly ok: true; readonly value: unknown } {
+	if (typeof left === 'string' || typeof right === 'string') {
+		return { ok: true, value: `${left}${right}` };
+	}
+
+	return { ok: true, value: Number(left) + Number(right) };
 }
 
 function evaluateObjectExpression(node: AnyNode): Record<string, unknown> {

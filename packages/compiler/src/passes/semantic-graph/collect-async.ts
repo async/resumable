@@ -48,7 +48,7 @@ export function propagateAsyncComputedCapability(graph: MutableSemanticGraphArti
 			if (binding.kind !== 'computed' || asyncCapableIds.has(binding.id)) continue;
 
 			const dependsOnAsync = (binding.dependencies ?? []).some((dependency) =>
-				asyncCapableIds.has(dependency.bindingId),
+				asyncCapableIds.has(dependency.graphNodeId),
 			);
 			if (!dependsOnAsync) continue;
 
@@ -142,7 +142,7 @@ export function collectGraphDependencies(
 
 	return uniqueBy(
 		dependencies,
-		(dependency) => `${dependency.bindingId}:${dependency.path.join('.')}:${dependency.source}`,
+		(dependency) => `${dependency.graphNodeId}:${dependency.path.join('.')}:${dependency.source}`,
 	);
 }
 
@@ -171,7 +171,7 @@ function graphDependency(
 
 	return {
 		source,
-		bindingId: resolved.binding.id,
+		graphNodeId: resolved.binding.id,
 		path: resolved.path,
 	};
 }

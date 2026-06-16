@@ -34,7 +34,7 @@ export function collectElement(node: AnyNode, state: WalkState, walk: SemanticGr
 		state.currentHostNodeId = hostNodeId;
 	}
 
-	for (const attribute of asNodes(node.attributes)) {
+	for (const attribute of getElementAttributes(node)) {
 		collectAttribute(
 			attribute,
 			state,
@@ -62,6 +62,9 @@ export function collectTemplateExpression(node: AnyNode, state: WalkState): void
 		hostNodeId: state.currentHostNodeId,
 		source: expressionSource(expression, state.source),
 		sourceSpan: sourceSpan(expression, state.filename),
+		target: {
+			kind: 'text',
+		},
 		asyncBoundaryId: state.currentAsyncBoundaryId ?? undefined,
 	});
 }
@@ -103,14 +106,15 @@ function collectAttribute(
 	if (!attributeName) return;
 
 	const value = attribute.value as AnyNode | undefined;
+	const expressionValue = unwrapExpressionContainer(value);
 
 	if (attributeName === 'use' && !isHostElement) {
-		if (value) {
+		if (expressionValue) {
 			state.graph.diagnostics.push(
-				useHostElementRequiredDiagnostic(ownerTagName, value, state),
+				useHostElementRequiredDiagnostic(ownerTagName, expressionValue, state),
 			);
-			collectExpressionReads(value, state);
-			walk(value, state);
+			collectExpressionReads(expressionValue, state);
+			walk(expressionValue, state);
 		}
 		return;
 	}
@@ -118,11 +122,11 @@ function collectAttribute(
 	if (!hostNodeId) return;
 
 	if (isEventAttribute(attributeName)) {
-		const handlerSources = eventHandlerExpressions(value).map((handler) =>
+		const handlerSources = eventHandlerExpressions(expressionValue).map((handler) =>
 			expressionSource(handler, state.source),
 		);
-		const syncPolicy = extractSyncPolicy(value, state);
-		const hasSyncPolicyCandidate = hasSyncEventPolicyCandidate(value);
+		const syncPolicy = extractSyncPolicy(expressionValue, state);
+		const hasSyncPolicyCandidate = hasSyncEventPolicyCandidate(expressionValue);
 		if (hasSyncPolicyCandidate && !syncPolicy) {
 			state.graph.diagnostics.push(
 				unextractableSyncPolicyDiagnostic(attributeName, value, state),
@@ -132,50 +136,75 @@ function collectAttribute(
 			id: `event:${state.nextEventId++}`,
 			hostNodeId,
 			eventName: normalizeEventName(attributeName),
-			handlerCount: getHandlerCount(value),
+			handlerCount: getHandlerCount(expressionValue),
 			handlerSources,
 			hasSyncPolicyCandidate,
 			syncPolicy,
 		});
-		collectExpressionReads(value, state);
-		walk(value, state);
+		collectExpressionReads(expressionValue, state);
+		walk(expressionValue, state);
 		return;
 	}
 
 	if (attributeName === 'use') {
-		if (value) {
-			for (const behavior of behaviorExpressions(value)) {
+		if (expressionValue) {
+			for (const behavior of behaviorExpressions(expressionValue)) {
 				state.graph.behaviors.push({
 					hostNodeId,
 					source: expressionSource(behavior, state.source),
 				});
 			}
-			collectExpressionReads(value, state);
-			walk(value, state);
+			collectExpressionReads(expressionValue, state);
+			walk(expressionValue, state);
 		}
 		return;
 	}
 
 	if (attributeName === 'el') {
-		if (value) {
+		if (expressionValue) {
 			state.graph.elementHandleBindings.push({
 				hostNodeId,
-				handleName: expressionSource(value, state.source),
-				sourceSpan: sourceSpan(value, state.filename),
+				handleName: expressionSource(expressionValue, state.source),
+				sourceSpan: sourceSpan(expressionValue, state.filename),
 			});
 		}
 		return;
 	}
 
-	if (value && value.type !== 'Literal') {
+	if (expressionValue && expressionValue.type !== 'Literal') {
 		state.graph.templateReads.push({
 			hostNodeId,
-			source: expressionSource(value, state.source),
-			sourceSpan: sourceSpan(value, state.filename),
+			source: expressionSource(expressionValue, state.source),
+			sourceSpan: sourceSpan(expressionValue, state.filename),
+			target: bindingTargetForAttribute(attributeName),
 			asyncBoundaryId: state.currentAsyncBoundaryId ?? undefined,
 		});
-		walk(value, state);
+		walk(expressionValue, state);
 	}
+}
+
+function bindingTargetForAttribute(attributeName: string): {
+	readonly kind: 'attribute' | 'property' | 'class' | 'style';
+	readonly name?: string;
+} {
+	if (attributeName === 'class') return { kind: 'class' };
+	if (attributeName === 'style') return { kind: 'style' };
+
+	if (isDomPropertyBindingName(attributeName)) {
+		return {
+			kind: 'property',
+			name: attributeName,
+		};
+	}
+
+	return {
+		kind: 'attribute',
+		name: attributeName,
+	};
+}
+
+function isDomPropertyBindingName(attributeName: string): boolean {
+	return attributeName === 'value' || attributeName === 'checked' || attributeName === 'selected';
 }
 
 function unextractableSyncPolicyDiagnostic(
@@ -221,8 +250,25 @@ function getElementTagName(node: AnyNode): string | null {
 	return getIdentifierName(node.id) ?? getIdentifierName((node.openingElement as AnyNode)?.name);
 }
 
+function getElementAttributes(node: AnyNode): AnyNode[] {
+	const directAttributes = asNodes(node.attributes);
+	if (directAttributes.length > 0) {
+		return directAttributes;
+	}
+
+	return asNodes((node.openingElement as AnyNode | undefined)?.attributes);
+}
+
 function isHostTagName(name: string): boolean {
 	return name.length > 0 && name[0] === name[0].toLowerCase();
+}
+
+function unwrapExpressionContainer(node: AnyNode | undefined): AnyNode | undefined {
+	if (node?.type === 'JSXExpressionContainer' || node?.type === 'TSRXExpression') {
+		return node.expression as AnyNode | undefined;
+	}
+
+	return node;
 }
 
 function behaviorExpressions(node: AnyNode): AnyNode[] {

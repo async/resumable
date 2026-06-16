@@ -18,6 +18,10 @@ their prerequisites exist:
   plan.
 - Server functions / RPC story.
 - Devtools (graph visualization).
+- Strict no-inline CSP mode for the resumer, including external bootstrap
+  emission, hash/nonce automation beyond caller-provided `renderToString`
+  nonces, and the tradeoff between extra requests and per-container
+  specialization.
 - OXC/Rust/native compiler backend or parser replacement. The first compiler
   implementation uses JS/TS with `@tsrx/core`; native migration comes only after
   the artifact contracts and behavior fixtures are proven.

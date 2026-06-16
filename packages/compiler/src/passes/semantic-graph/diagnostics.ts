@@ -8,7 +8,32 @@ import type {
 	SemanticTemplateRead,
 	SourceSpan,
 } from '../../artifacts.ts';
+import type { FrameworkApiName } from './imports.ts';
 import type { WalkState } from './types.ts';
+
+export function frameworkImportRequiredDiagnostic(
+	apiName: FrameworkApiName,
+	call: AnyNode,
+	filename: string,
+): SemanticGraphDiagnostic {
+	return {
+		code: 'AA_FRAMEWORK_IMPORT_REQUIRED',
+		severity: 'error',
+		phase: 'semantic-graph',
+		title: 'Framework API must be imported',
+		message: `Cannot use ${apiName}() until it is imported from @async/resumable.`,
+		why: `${apiName}() is a compiler-rewritten @async/resumable API. The import makes ownership explicit for TypeScript, editors, junior developers, and AI agents.`,
+		primarySpan: sourceSpan(call, filename),
+		passId: 'tsrx-semantic-graph',
+		artifactKeys: ['semanticGraph'],
+		suggestions: [
+			{
+				message: `Add \`import { ${apiName} } from '@async/resumable';\` to this .tsrx file.`,
+			},
+		],
+		docsUrl: 'https://async.await.dev/errors/AA_FRAMEWORK_IMPORT_REQUIRED',
+	};
+}
 
 export function moduleScopeGraphCreationDiagnostic(
 	name: string,

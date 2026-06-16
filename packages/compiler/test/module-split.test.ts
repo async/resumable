@@ -7,6 +7,7 @@ import { renderPayloadScriptArtifact } from '../src/passes/payload-scripts.ts';
 import { createProtocolStatePayloadFromArena } from '../src/passes/protocol-state.ts';
 import { createProtocolViewPayload } from '../src/passes/protocol-view.ts';
 import { buildSemanticGraph } from '../src/passes/semantic-graph/index.ts';
+import { emitSymbolModules } from '../src/passes/symbol-modules.ts';
 
 test('compiler split modules expose their owning boundaries', () => {
 	expect(defaultCompilerPasses.map((pass) => pass.passId)).toEqual([
@@ -18,6 +19,7 @@ test('compiler split modules expose their owning boundaries', () => {
 		'protocol-state',
 		'protocol-view',
 		'payload-scripts',
+		'symbol-modules',
 		'symbol-resolver-module',
 	]);
 	expect(typeof validateCompilerPassGraph).toBe('function');
@@ -27,4 +29,5 @@ test('compiler split modules expose their owning boundaries', () => {
 	expect(typeof createProtocolStatePayloadFromArena).toBe('function');
 	expect(typeof createProtocolViewPayload).toBe('function');
 	expect(typeof renderPayloadScriptArtifact).toBe('function');
+	expect(typeof emitSymbolModules).toBe('function');
 });

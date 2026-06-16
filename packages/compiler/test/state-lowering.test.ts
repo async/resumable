@@ -4,6 +4,8 @@ import { buildSemanticGraph } from '../src/index.ts';
 import { lowerStateAccess } from '../src/passes/state-lowering.ts';
 
 const source = `
+import { state, computed } from '@async/resumable';
+
 export function Counter() @{
 	let count = state(0);
 	let total = state(0);
@@ -40,6 +42,8 @@ export function Counter() @{
 `;
 
 const readOnlyWriteSource = `
+import { state, computed } from '@async/resumable';
+
 export function Counter() @{
 	let count = state(0);
 	const doubled = computed(() => count * 2);
@@ -55,6 +59,8 @@ export function Greeting({ label }: { label: string }) @{
 `;
 
 const constReassignmentSource = `
+import { state } from '@async/resumable';
+
 export function Counter() @{
 	const frozenCount = state(0);
 	const menu = state({ open: false });
@@ -85,72 +91,72 @@ test('lowerStateAccess resolves plain reads and writes to graph operations', asy
 		expect.arrayContaining([
 			{
 				source: 'count',
-				bindingId: 'state:count',
+				graphNodeId: 'state:count',
 				path: [],
 			},
 			{
 				source: 'doubled',
-				bindingId: 'computed:doubled',
+				graphNodeId: 'computed:doubled',
 				path: [],
 			},
 			{
 				source: 'total',
-				bindingId: 'state:total',
+				graphNodeId: 'state:total',
 				path: [],
 			},
 			{
 				source: 'increment',
-				bindingId: 'state:increment',
+				graphNodeId: 'state:increment',
 				path: [],
 			},
 			{
 				source: 'nextItem',
-				bindingId: 'state:nextItem',
+				graphNodeId: 'state:nextItem',
 				path: [],
 			},
 			{
 				source: 'menu.title',
-				bindingId: 'state:menu',
+				graphNodeId: 'state:menu',
 				path: ['title'],
 			},
 			{
 				source: 'menuTitle',
-				bindingId: 'state:menu',
+				graphNodeId: 'state:menu',
 				path: ['title'],
 			},
 			{
 				source: 'menuLabel',
-				bindingId: 'state:menu',
+				graphNodeId: 'state:menu',
 				path: ['meta', 'label'],
 			},
 			{
 				source: 'menuRest.meta.label',
-				bindingId: 'state:menu',
+				graphNodeId: 'state:menu',
 				path: ['meta', 'label'],
 			},
 			{
 				source: 'menuOpen',
-				bindingId: 'state:menu',
+				graphNodeId: 'state:menu',
 				path: ['open'],
 			},
 			{
 				source: 'menu.open',
-				bindingId: 'state:menu',
+				graphNodeId: 'state:menu',
 				path: ['open'],
 			},
 			{
 				source: 'chartConfig.palette',
-				bindingId: 'state:chartConfig',
+				graphNodeId: 'state:chartConfig',
 				path: ['palette'],
 			},
 			{
 				source: 'analytics.enabled',
-				bindingId: 'state:analytics',
+				graphNodeId: 'state:analytics',
 				path: ['enabled'],
 			},
 			{
 				source: 'hidden',
-				bindingId: 'state:hidden',
+				graphNodeId: 'state:hidden',
 				path: [],
 			},
 		]),
@@ -160,32 +166,32 @@ test('lowerStateAccess resolves plain reads and writes to graph operations', asy
 		expect.arrayContaining([
 			expect.objectContaining({
 				source: 'count',
-				bindingId: 'state:count',
+				graphNodeId: 'state:count',
 				path: [],
 				operation: 'update',
 			}),
 			expect.objectContaining({
 				source: 'menu.open',
-				bindingId: 'state:menu',
+				graphNodeId: 'state:menu',
 				path: ['open'],
 				operation: 'assign',
 			}),
 			expect.objectContaining({
 				source: 'menuOpen',
-				bindingId: 'state:menu',
+				graphNodeId: 'state:menu',
 				path: ['open'],
 				operation: 'assign',
 			}),
 			expect.objectContaining({
 				source: 'total',
-				bindingId: 'state:total',
+				graphNodeId: 'state:total',
 				path: [],
 				operation: 'assign',
 				assignmentOperator: '+=',
 			}),
 			expect.objectContaining({
 				source: 'items',
-				bindingId: 'state:items',
+				graphNodeId: 'state:items',
 				path: [],
 				operation: 'call',
 				method: 'push',
@@ -248,12 +254,12 @@ test('lowerStateAccess resolves array destructured aliases to indexed graph path
 		expect.arrayContaining([
 			{
 				source: 'firstItem',
-				bindingId: 'state:items',
+				graphNodeId: 'state:items',
 				path: ['0'],
 			},
 			{
 				source: 'secondItem',
-				bindingId: 'state:items',
+				graphNodeId: 'state:items',
 				path: ['1'],
 			},
 		]),
@@ -261,7 +267,7 @@ test('lowerStateAccess resolves array destructured aliases to indexed graph path
 	expect(lowered.writes).toEqual([
 		{
 			source: 'firstItem',
-			bindingId: 'state:items',
+			graphNodeId: 'state:items',
 			path: ['0'],
 			operation: 'assign',
 		},
@@ -545,7 +551,7 @@ test('lowerStateAccess reports a structured diagnostic for computed writes', asy
 	const lowered = lowerStateAccess({ semanticGraph });
 
 	expect(lowered.writes).not.toEqual(
-		expect.arrayContaining([expect.objectContaining({ bindingId: 'computed:doubled' })]),
+		expect.arrayContaining([expect.objectContaining({ graphNodeId: 'computed:doubled' })]),
 	);
 	expect(lowered.diagnostics).toEqual([
 		expect.objectContaining({
@@ -586,13 +592,13 @@ test('lowerStateAccess resolves prop reads and reports prop writes as read-only'
 		expect.arrayContaining([
 			{
 				source: 'label',
-				bindingId: 'prop:props',
+				graphNodeId: 'prop:props',
 				path: ['label'],
 			},
 		]),
 	);
 	expect(lowered.writes).not.toEqual(
-		expect.arrayContaining([expect.objectContaining({ bindingId: 'prop:props' })]),
+		expect.arrayContaining([expect.objectContaining({ graphNodeId: 'prop:props' })]),
 	);
 	expect(lowered.diagnostics).toEqual([
 		expect.objectContaining({
@@ -634,7 +640,7 @@ test('lowerStateAccess reports a structured diagnostic for const graph binding r
 		expect.arrayContaining([
 			{
 				source: 'menu.open',
-				bindingId: 'state:menu',
+				graphNodeId: 'state:menu',
 				path: ['open'],
 				operation: 'assign',
 				method: undefined,
@@ -642,7 +648,7 @@ test('lowerStateAccess reports a structured diagnostic for const graph binding r
 		]),
 	);
 	expect(lowered.writes).not.toEqual(
-		expect.arrayContaining([expect.objectContaining({ bindingId: 'state:frozenCount' })]),
+		expect.arrayContaining([expect.objectContaining({ graphNodeId: 'state:frozenCount' })]),
 	);
 	expect(lowered.writes).not.toEqual(
 		expect.arrayContaining([expect.objectContaining({ source: 'menuOpen' })]),

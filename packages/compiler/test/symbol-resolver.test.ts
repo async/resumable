@@ -3,6 +3,8 @@ import { buildSemanticGraph, lowerStateAccess, planPayloadArena } from '../src/i
 import { planSymbolResolver } from '../src/passes/symbol-resolver.ts';
 
 const source = `
+import { state, computed } from '@async/resumable';
+
 export function App() @{
 	let count = state(0);
 	let query = state('');
@@ -42,6 +44,7 @@ test('planSymbolResolver assigns lazy symbols while resolver owns import boundar
 	const plan = planSymbolResolver({
 		semanticGraph,
 		payloadArena,
+		stateLowering,
 	});
 
 	expect(plan.passId).toBe('symbol-resolver');
@@ -55,6 +58,13 @@ test('planSymbolResolver assigns lazy symbols while resolver owns import boundar
 				eventName: 'click',
 				order: 0,
 				source: '() => count++',
+				writes: [
+					expect.objectContaining({
+						graphNodeId: 'state:count',
+						operation: 'update',
+						updateOperator: '++',
+					}),
+				],
 			}),
 			expect.objectContaining({
 				kind: 'event-handler',
@@ -62,14 +72,14 @@ test('planSymbolResolver assigns lazy symbols while resolver owns import boundar
 				order: 1,
 				source: "() => query = 'clicked'",
 			}),
-			expect.objectContaining({ kind: 'dom-binding', source: 'query' }),
-			expect.objectContaining({ kind: 'dom-binding', source: 'count' }),
-			expect.objectContaining({ kind: 'dom-binding', source: 'result.title' }),
+			expect.objectContaining({ kind: 'dom-update', source: 'query' }),
+			expect.objectContaining({ kind: 'dom-update', source: 'count' }),
+			expect.objectContaining({ kind: 'dom-update', source: 'result.title' }),
 			expect.objectContaining({ kind: 'behavior', source: 'chart(result)' }),
 			expect.objectContaining({ kind: 'behavior', source: 'resizeCanvas' }),
 			expect.objectContaining({
 				kind: 'async-computed-runner',
-				bindingId: 'computed:result',
+				graphNodeId: 'computed:result',
 			}),
 		]),
 	);

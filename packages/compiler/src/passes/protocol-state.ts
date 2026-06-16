@@ -8,7 +8,7 @@ export function createProtocolStatePayloadFromArena(
 	return createProtocolStatePayload({
 		cells: input.payloadArena.state.cells.map((cell) => {
 			const binding = input.semanticGraph.graphBindings.find(
-				(candidate) => candidate.id === cell.bindingId,
+				(candidate) => candidate.id === cell.graphNodeId,
 			);
 
 			return {

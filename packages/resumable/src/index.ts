@@ -5,20 +5,35 @@ export {
 	state,
 	type AsyncComputedValue,
 	type ElementHandle,
+	FrameworkApiRuntimeError,
+	type FrameworkApiRuntimeDiagnostic,
+	type FrameworkApiName,
 	type SharedOptions,
 	type SharedScope,
 } from '@async/resumable-core';
 export {
+	render,
+	renderToString,
+	resumeFromPayloadDocument,
 	resumeFromPayloadScripts,
+	type CsrRenderContainer,
+	type CsrRenderOptions,
+	type CsrRenderOutput,
+	type RenderTarget,
+	type RenderToStringOptions,
+	type ResumePayloadDocumentInput,
 	type ResumePayloadScriptsInput,
 	type ResumePayloadScriptsResult,
-} from '../../runtime/src/index.ts';
+	type SsrRenderOutput,
+} from '@async/resumable-runtime';
 export {
-	asyncResumableRolldown,
+	resumableClient,
+	resumableLib,
+	resumableServer,
 	type ResumableRolldownOptions,
 	type ResumableRolldownPlugin,
 	type ResumableTransformManifest,
 	type ResumableVirtualModule,
 	type TransformTsrxModuleInput,
 	type TransformTsrxModuleResult,
-} from '@async/resumable-rolldown';
+} from '@async/resumable-bundler/rolldown';

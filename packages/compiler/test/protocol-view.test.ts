@@ -8,6 +8,8 @@ import {
 } from '../src/index.ts';
 
 const source = `
+import { state } from '@async/resumable';
+
 export function App() @{
 	let count = state(0);
 	const menu = state({ open: true });
@@ -28,6 +30,8 @@ export function App() @{
 `;
 
 const asyncBoundarySource = `
+import { computed } from '@async/resumable';
+
 export function App() @{
 	const details = computed(async ({ signal }) => {
 		const response = await fetch('/api/details', { signal });
@@ -75,12 +79,15 @@ test('createProtocolViewPayload links payload arena records to lazy symbol IDs',
 			}),
 		]),
 	);
-	expect(view.bindings).toEqual([
+	expect(view.domUpdates).toEqual([
 		{
 			hostNodeId: 'h2',
 			source: 'count',
-			bindingId: 'state:count',
+			graphNodeId: 'state:count',
 			path: [],
+			target: {
+				kind: 'text',
+			},
 			symbolId: 'symbol:3',
 		},
 	]);
@@ -115,11 +122,55 @@ test('createProtocolViewPayload links async boundary reads to runner symbols', a
 			asyncReads: [
 				{
 					source: 'details.title',
-					bindingId: 'computed:details',
+					graphNodeId: 'computed:details',
 					path: ['title'],
 					runnerSymbolId: 'symbol:1',
 				},
 			],
+		},
+	]);
+});
+
+test('createProtocolViewPayload keeps binding symbols distinct by target', async () => {
+	const semanticGraph = await buildSemanticGraph({
+		filename: 'src/RepeatedTarget.tsrx',
+		source: `
+import { state } from '@async/resumable';
+
+export function App() @{
+	const count = state(0);
+
+	<button title={count}>{count}</button>
+}
+`,
+	});
+	const stateLowering = lowerStateAccess({ semanticGraph });
+	const payloadArena = planPayloadArena({ semanticGraph, stateLowering });
+	const symbolResolver = planSymbolResolver({ semanticGraph, payloadArena });
+
+	const view = createProtocolViewPayload({ payloadArena, symbolResolver });
+
+	expect(view.domUpdates).toEqual([
+		{
+			hostNodeId: 'h0',
+			source: 'count',
+			graphNodeId: 'state:count',
+			path: [],
+			target: {
+				kind: 'attribute',
+				name: 'title',
+			},
+			symbolId: 'symbol:0',
+		},
+		{
+			hostNodeId: 'h0',
+			source: 'count',
+			graphNodeId: 'state:count',
+			path: [],
+			target: {
+				kind: 'text',
+			},
+			symbolId: 'symbol:1',
 		},
 	]);
 });

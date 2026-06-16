@@ -10,9 +10,9 @@ test('emitSymbolResolverModule emits dynamic imports owned by the generated reso
 				exportName: 'onKeyDown_symbol_key',
 			},
 			{
-				id: 'symbol:binding',
-				chunk: '/assets/menu.bindings.cd34.js',
-				exportName: 'textBinding_symbol_binding',
+				id: 'symbol:domUpdate',
+				chunk: '/assets/menu.domUpdates.cd34.js',
+				exportName: 'textDomUpdate_symbol_domUpdate',
 			},
 		],
 	});
@@ -21,8 +21,8 @@ test('emitSymbolResolverModule emits dynamic imports owned by the generated reso
 	expect(output).toContain('case "symbol:key":');
 	expect(output).toContain('return import("/assets/menu.handlers.ab12.js")');
 	expect(output).toContain('.then((mod) => mod.onKeyDown_symbol_key);');
-	expect(output).toContain('case "symbol:binding":');
-	expect(output).toContain('return import("/assets/menu.bindings.cd34.js")');
+	expect(output).toContain('case "symbol:domUpdate":');
+	expect(output).toContain('return import("/assets/menu.domUpdates.cd34.js")');
 	expect(output).toContain('throw createUnknownSymbolError(id);');
 	expect(output).toContain('code: "AA_SYMBOL_UNKNOWN"');
 });
@@ -61,7 +61,7 @@ test('emitSymbolResolverModule exports the symbol manifest with protocol and bui
 			{
 				id: 'symbol:private-export',
 				chunk: '/assets/private.cd34.js',
-				exportName: 'menu binding',
+				exportName: 'menu dom update',
 			},
 		],
 	});
@@ -84,7 +84,7 @@ test('emitSymbolResolverModule exports the symbol manifest with protocol and bui
 			{
 				id: 'symbol:private-export',
 				chunk: '/assets/private.cd34.js',
-				exportName: 'menu binding',
+				exportName: 'menu dom update',
 			},
 		],
 	});

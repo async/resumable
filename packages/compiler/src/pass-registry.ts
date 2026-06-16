@@ -50,6 +50,12 @@ export const defaultCompilerPasses: ReadonlyArray<CompilerPassDefinition> = [
 		produces: ['payloadScripts', 'renderShell'],
 	},
 	{
+		passId: 'symbol-modules',
+		description: 'Emit lazy symbol module sources for planned symbols.',
+		consumes: ['symbolResolver', 'captureAnalysis'],
+		produces: ['symbolModules'],
+	},
+	{
 		passId: 'symbol-resolver-module',
 		description: 'Emit the generated symbol resolver module that owns dynamic imports.',
 		consumes: ['symbols'],

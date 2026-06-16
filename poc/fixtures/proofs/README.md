@@ -47,6 +47,11 @@ a time through failing tests.
   artifact updates, and no Node-only assumptions in shared packages. Source
   fixture added; focused POC tests prove the minimal compiler/plugin pipeline
   behavior.
+- [`resumer-script`](./resumer-script/): isolated event-only SSR inline resumer
+  proof. It checks that static SSR emits no resumer, event metadata lives in
+  `async/view`, startup imports no app or symbol code, the first click imports
+  the matching symbol, and the inline bootstrap reports a reproducible
+  minified+gzip size against the 700 B target.
 
 ## Pass-Boundary Order
 

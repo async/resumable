@@ -2,6 +2,8 @@ import { expect, test } from 'vitest';
 import { buildSemanticGraph } from '../src/index.ts';
 
 const moduleScopeSource = `
+import { state, computed } from '@async/resumable';
+
 const leaked = state(0);
 export const doubled = computed(() => leaked * 2);
 
@@ -10,7 +12,19 @@ export function App() @{
 }
 `;
 
+const missingFrameworkImportSource = `
+export function Counter() @{
+	let count = state(0);
+	let double = computed(() => count * 2);
+	let input = element<HTMLInputElement>();
+
+	<button onClick={() => count++}>{count} / {double}</button>
+}
+`;
+
 const asyncPostAwaitReadSource = `
+import { state, computed } from '@async/resumable';
+
 export function UserRoute(route: { params: { userId: string } }) @{
 	const settings = state({ locale: 'en' });
 	const user = computed(async ({ signal }) => {
@@ -30,6 +44,8 @@ export function UserRoute(route: { params: { userId: string } }) @{
 `;
 
 const missingAsyncBoundarySource = `
+import { computed } from '@async/resumable';
+
 export function UserRoute() @{
 	const user = computed(async ({ signal }) => {
 		const response = await fetch('/api/user', { signal });
@@ -41,6 +57,8 @@ export function UserRoute() @{
 `;
 
 const transitiveAsyncBoundarySource = `
+import { computed } from '@async/resumable';
+
 export function UserRoute() @{
 	const user = computed(async ({ signal }) => {
 		const response = await fetch('/api/user', { signal });
@@ -53,6 +71,8 @@ export function UserRoute() @{
 `;
 
 const elementHandleDiagnosticsSource = `
+import { state, element } from '@async/resumable';
+
 export function Handles() @{
 	const menu = state({ open: false });
 	let input = element<HTMLInputElement>();
@@ -66,6 +86,8 @@ export function Handles() @{
 `;
 
 const componentUseSource = `
+import { state } from '@async/resumable';
+
 function ChartWrapper() @{
 	<canvas />
 }
@@ -80,6 +102,8 @@ export function Dashboard() @{
 `;
 
 const unextractableSyncPolicySource = `
+import { state } from '@async/resumable';
+
 export function Form() @{
 	const allowSubmit = state(false);
 
@@ -144,6 +168,71 @@ test('buildSemanticGraph reports module-scope graph state creation', async () =>
 				end: computedStart + 'computed(() => leaked * 2)'.length,
 			},
 			docsUrl: 'https://async.await.dev/errors/AA_STATE_MODULE_SCOPE',
+		}),
+	]);
+});
+
+test('buildSemanticGraph reports missing framework API imports', async () => {
+	const graph = await buildSemanticGraph({
+		filename: 'src/Counter.tsrx',
+		source: missingFrameworkImportSource,
+	});
+	const stateStart = missingFrameworkImportSource.indexOf('state(0)');
+	const computedStart = missingFrameworkImportSource.indexOf('computed(() => count * 2)');
+	const elementStart = missingFrameworkImportSource.indexOf('element<HTMLInputElement>()');
+
+	expect(graph.graphBindings).toEqual([]);
+	expect(graph.diagnostics).toEqual([
+		expect.objectContaining({
+			code: 'AA_FRAMEWORK_IMPORT_REQUIRED',
+			severity: 'error',
+			phase: 'semantic-graph',
+			passId: 'tsrx-semantic-graph',
+			artifactKeys: ['semanticGraph'],
+			title: 'Framework API must be imported',
+			message: 'Cannot use state() until it is imported from @async/resumable.',
+			why: 'state() is a compiler-rewritten @async/resumable API. The import makes ownership explicit for TypeScript, editors, junior developers, and AI agents.',
+			primarySpan: {
+				filename: 'src/Counter.tsrx',
+				start: stateStart,
+				end: stateStart + 'state(0)'.length,
+			},
+			suggestions: [
+				{
+					message: "Add `import { state } from '@async/resumable';` to this .tsrx file.",
+				},
+			],
+			docsUrl: 'https://async.await.dev/errors/AA_FRAMEWORK_IMPORT_REQUIRED',
+		}),
+		expect.objectContaining({
+			code: 'AA_FRAMEWORK_IMPORT_REQUIRED',
+			message: 'Cannot use computed() until it is imported from @async/resumable.',
+			primarySpan: {
+				filename: 'src/Counter.tsrx',
+				start: computedStart,
+				end: computedStart + 'computed(() => count * 2)'.length,
+			},
+			suggestions: [
+				{
+					message:
+						"Add `import { computed } from '@async/resumable';` to this .tsrx file.",
+				},
+			],
+		}),
+		expect.objectContaining({
+			code: 'AA_FRAMEWORK_IMPORT_REQUIRED',
+			message: 'Cannot use element() until it is imported from @async/resumable.',
+			primarySpan: {
+				filename: 'src/Counter.tsrx',
+				start: elementStart,
+				end: elementStart + 'element<HTMLInputElement>()'.length,
+			},
+			suggestions: [
+				{
+					message:
+						"Add `import { element } from '@async/resumable';` to this .tsrx file.",
+				},
+			],
 		}),
 	]);
 });
@@ -282,7 +371,7 @@ test('buildSemanticGraph reports sync computed reads that transitively depend on
 				dependencies: [
 					{
 						source: 'user.name',
-						bindingId: 'computed:user',
+						graphNodeId: 'computed:user',
 						path: ['name'],
 					},
 				],

@@ -11,13 +11,13 @@ test('renderPayloadScripts emits canonical async/state and async/view data scrip
 	const state = createProtocolStatePayload({
 		cells: [
 			{
-				bindingId: 'state:menu',
+				graphNodeId: 'state:menu',
 				name: 'menu',
 				valueKind: 'object',
 				value: { open: true, author: shared, assignee: shared },
 			},
 		],
-		computed: [{ bindingId: 'computed:details', name: 'details', async: true }],
+		computed: [{ graphNodeId: 'computed:details', name: 'details', async: true }],
 	});
 	const view: ProtocolViewPayload = {
 		version: 1,
@@ -29,7 +29,7 @@ test('renderPayloadScripts emits canonical async/state and async/view data scrip
 				symbolIds: ['symbol:0'],
 			},
 		],
-		bindings: [],
+		domUpdates: [],
 		behaviors: [],
 		elementHandles: [],
 		asyncBoundaries: [],

@@ -100,7 +100,7 @@ test('sync-policy collector extracts graph and event-field guard policy', () => 
 			conditions: [
 				{
 					type: 'graph-truthy',
-					bindingId: 'state:menu',
+					graphNodeId: 'state:menu',
 					path: ['open'],
 				},
 				{

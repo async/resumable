@@ -3,7 +3,7 @@ import type { ProtocolViewPayloadInput } from '../artifacts.ts';
 
 export function createProtocolViewPayload(input: ProtocolViewPayloadInput): ProtocolViewPayload {
 	const eventSymbols = new Map<string, string[]>();
-	const bindingSymbols = new Map<string, string>();
+	const domUpdateSymbols = new Map<string, string>();
 	const behaviorSymbols = new Map<string, string[]>();
 	const asyncRunnerSymbols = new Map<string, string>();
 
@@ -15,9 +15,9 @@ export function createProtocolViewPayload(input: ProtocolViewPayloadInput): Prot
 			eventSymbols.set(key, symbols);
 		}
 
-		if (symbol.kind === 'dom-binding') {
-			bindingSymbols.set(
-				`${symbol.hostNodeId}:${symbol.bindingId}:${symbol.source}`,
+		if (symbol.kind === 'dom-update') {
+			domUpdateSymbols.set(
+				`${symbol.hostNodeId}:${domUpdateTargetKey(symbol.target)}:${symbol.graphNodeId}:${symbol.source}`,
 				symbol.id,
 			);
 		}
@@ -29,7 +29,7 @@ export function createProtocolViewPayload(input: ProtocolViewPayloadInput): Prot
 		}
 
 		if (symbol.kind === 'async-computed-runner') {
-			asyncRunnerSymbols.set(symbol.bindingId, symbol.id);
+			asyncRunnerSymbols.set(symbol.graphNodeId, symbol.id);
 		}
 	}
 
@@ -42,10 +42,10 @@ export function createProtocolViewPayload(input: ProtocolViewPayloadInput): Prot
 			syncPolicy: event.syncPolicy,
 			symbolIds: eventSymbols.get(`${event.hostNodeId}:${event.eventName}`) ?? [],
 		})),
-		bindings: input.payloadArena.view.bindings.map((binding) => ({
-			...binding,
-			symbolId: bindingSymbols.get(
-				`${binding.hostNodeId}:${binding.bindingId}:${binding.source}`,
+		domUpdates: input.payloadArena.view.domUpdates.map((domUpdate) => ({
+			...domUpdate,
+			symbolId: domUpdateSymbols.get(
+				`${domUpdate.hostNodeId}:${domUpdateTargetKey(domUpdate.target)}:${domUpdate.graphNodeId}:${domUpdate.source}`,
 			),
 		})),
 		behaviors: input.payloadArena.view.behaviors.map((behavior, index) => ({
@@ -57,8 +57,16 @@ export function createProtocolViewPayload(input: ProtocolViewPayloadInput): Prot
 			...boundary,
 			asyncReads: boundary.asyncReads.map((read) => ({
 				...read,
-				runnerSymbolId: asyncRunnerSymbols.get(read.bindingId),
+				runnerSymbolId: asyncRunnerSymbols.get(read.graphNodeId),
 			})),
 		})),
 	};
+}
+
+function domUpdateTargetKey(
+	target: ProtocolViewPayloadInput['payloadArena']['view']['domUpdates'][number]['target'],
+): string {
+	if (target.kind === 'attribute') return `attribute:${target.name}`;
+	if (target.kind === 'property') return `property:${target.name}`;
+	return target.kind;
 }

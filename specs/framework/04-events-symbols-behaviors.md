@@ -76,9 +76,12 @@ use={}      installs longer-lived DOM behavior owned by this node
 ```
 
 The behavior result is never serialized. Initial render records the host element
-locator, the behavior code reference, and the serializable behavior inputs. The
-browser resume phase resolves the element, lazy-loads the behavior symbol, runs
-it in the browser, and stores the cleanup with that node.
+locator, the behavior code reference, and the serializable behavior inputs.
+Browser resume startup records that metadata but does not run app behavior code.
+The behavior symbol is imported only when an explicit browser trigger activates
+it, such as visibility, an event, or a future declared behavior policy. A behavior
+that must run eagerly when connected must be represented as an explicit opt-in
+trigger for that host; it is not component replay.
 
 `use` is compiler-special on host elements. In `use={chart(config)}`, the
 factory call is not normal eager initial-render execution. The compiler treats
@@ -130,7 +133,8 @@ Visibility is modeled as an element event, parallel to `onClick`:
 Semantics:
 
 - An `on*` event handler where the event is "element entered the viewport."
-  The resumer registers one shared IntersectionObserver for wired elements;
+  The resumer registers one shared, container-scoped IntersectionObserver for
+  wired elements;
   the handler is extracted as a lazy symbol (capture rule applies) and loads
   only when its element first becomes visible.
 - Fires once per element instance, receives the element, may return a cleanup
@@ -234,6 +238,13 @@ and production output should not require per-node event attributes. The
 or other private locator data, then the resumer builds internal side tables such
 as `WeakMap<Element, EventRecord>`.
 
+The compiler and bundler own event discovery, locator assignment, symbol IDs,
+chunk/export tables, and compact resolver rows. The browser resumer does not
+scan QRL-like attributes, infer event names from markup, discover chunks, or
+plan symbols. CSR may use the same event-record model after `render()` creates a
+live container, but CSR does not use the inline SSR resumer to avoid component
+execution.
+
 Dynamic imports are owned by a generated symbol resolver, not by each event prop.
 The resolver is a page/build-scoped module or equivalent compact runtime table
 that maps symbol IDs from `async/view` to chunks and exports:
@@ -244,7 +255,7 @@ export function loadSymbol(id: number) {
 		case 7:
 			return import('/assets/menu.handlers.ab12.js').then((mod) => mod.onKeyDown_7);
 		case 8:
-			return import('/assets/menu.bindings.cd34.js').then((mod) => mod.textBinding_8);
+			return import('/assets/menu.domUpdates.cd34.js').then((mod) => mod.textBinding_8);
 		default:
 			return Promise.reject(new Error(`Unknown async symbol ${id}`));
 	}
@@ -256,7 +267,7 @@ build artifact. The browser receives only the resolver/table needed for
 the current build or page, plus enough build/protocol identity to fail closed if
 `async/view` references a symbol the resolver does not know.
 
-The same resolver path is used for event handlers, DOM binding symbols,
+The same resolver path is used for event handlers, DOM update symbols,
 `use={...}` behavior symbols, async computed run functions, and other lazy
 runtime behavior. Captures are materialized by the runtime from graph references,
 serializable constants, props/shared references, and element locators; they are

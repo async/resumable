@@ -56,7 +56,7 @@ test('lowerStateAccess preserves update expression operator and prefix metadata'
 	expect(lowered.writes).toEqual([
 		{
 			source: 'count',
-			bindingId: 'state:count',
+			graphNodeId: 'state:count',
 			path: [],
 			operation: 'update',
 			updateOperator: '++',
@@ -64,7 +64,7 @@ test('lowerStateAccess preserves update expression operator and prefix metadata'
 		},
 		{
 			source: 'total',
-			bindingId: 'state:total',
+			graphNodeId: 'state:total',
 			path: [],
 			operation: 'update',
 			updateOperator: '--',

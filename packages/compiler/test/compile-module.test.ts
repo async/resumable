@@ -3,6 +3,8 @@ import { compileTsrxModule } from '../src/index.ts';
 import { deserializeGraphValue } from '../../serializer/src/index.ts';
 
 const source = `
+import { state } from '@async/resumable';
+
 export function App() @{
 	let count = state(1);
 	const menu = state({ open: true, title: 'Menu' });
@@ -39,12 +41,12 @@ test('compileTsrxModule orchestrates source to payload scripts and resolver modu
 			},
 			{
 				id: 'symbol:2',
-				chunk: '/assets/app.bindings.js',
+				chunk: '/assets/app.domUpdates.js',
 				exportName: 'inputValue_2',
 			},
 			{
 				id: 'symbol:3',
-				chunk: '/assets/app.bindings.js',
+				chunk: '/assets/app.domUpdates.js',
 				exportName: 'buttonText_3',
 			},
 		],
@@ -72,10 +74,10 @@ test('compileTsrxModule orchestrates source to payload scripts and resolver modu
 		result.renderShell.indexOf('<script type="async/view">'),
 	);
 	expect(result.symbolResolverModule).toContain('return import("/assets/app.handlers.js")');
-	expect(result.symbolResolverModule).toContain('return import("/assets/app.bindings.js")');
+	expect(result.symbolResolverModule).toContain('return import("/assets/app.domUpdates.js")');
 
-	const countCell = result.protocolState.cells.find((cell) => cell.bindingId === 'state:count');
-	const menuCell = result.protocolState.cells.find((cell) => cell.bindingId === 'state:menu');
+	const countCell = result.protocolState.cells.find((cell) => cell.graphNodeId === 'state:count');
+	const menuCell = result.protocolState.cells.find((cell) => cell.graphNodeId === 'state:menu');
 
 	expect(countCell?.valueKind).toBe('scalar');
 	expect(deserializeGraphValue(countCell!.value!)).toBe(1);
@@ -95,7 +97,7 @@ test('compileTsrxModule orchestrates source to payload scripts and resolver modu
 			}),
 		]),
 	);
-	expect(result.protocolView.bindings).toEqual(
+	expect(result.protocolView.domUpdates).toEqual(
 		expect.arrayContaining([
 			expect.objectContaining({
 				source: 'menu.title',

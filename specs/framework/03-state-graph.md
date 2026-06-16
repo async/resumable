@@ -6,7 +6,8 @@ Author-facing graph state semantics, async derivation, shared state, identity, a
 
 ### Surface API
 
-The author-facing graph data model is three intent-named words:
+The author-facing graph data model is three intent-named APIs imported from
+`@async/resumable`:
 
 - `state()` creates graph state.
 - `computed()` creates sync or async derived graph state.
@@ -16,10 +17,12 @@ The author-facing graph data model is three intent-named words:
 Signals, stores, subscriptions, and object-state representation are
 implementation details of graph management. `onVisible` is an element event
 prop, not a state primitive.
-The two local-state intrinsics, available in any `.tsrx` file (components and
-shared logic alike):
+The two local-state APIs, available in any `.tsrx` file (components and shared
+logic alike), must be imported by the file that uses them:
 
 ```tsrx
+import { state, computed } from '@async/resumable';
+
 export function Counter() @{
   let count = state(0);
   let double = computed(() => count * 2);
@@ -39,6 +42,8 @@ export function Counter() @{
   if real apps demand it).
 
 ```tsrx
+import { state } from '@async/resumable';
+
 let count = state(0);
 let session = state({ user: null, status: "anonymous" });
 
@@ -51,7 +56,7 @@ session.status = "ready"; // invalidates only the `status` path
 
 A tree is a constrained graph: one root, parent/child ancestry, no arbitrary
 cross-edges. UI structure is usefully tree-shaped, but state dependencies are
-not. One state path may feed unrelated DOM bindings; one derived value may depend
+not. One state path may feed unrelated DOM updates; one derived value may depend
 on local state, shared request state, and another derived value; one event may
 write several paths. That is a general directed graph, not a component tree.
 
@@ -70,7 +75,7 @@ boundaries. In this framework, the boundary is the dataflow:
 
 ```txt
 where the graph instance lives
-which bindings read it
+which DOM updates read it
 which handlers write it
 where it must serialize
 where it must sync across runtimes
@@ -80,7 +85,7 @@ That distinction is core to marker-free resumability. Because the compiler owns
 the dataflow graph directly, authors do not mark lazy boundaries or manually
 construct state boundaries with providers; the graph itself is the resumable
 unit. Resuming means loading the symbol touched by an event, materializing its
-graph references, applying writes to graph nodes, and updating the DOM bindings
+graph references, applying writes to graph nodes, and running the DOM updates
 that actually depend on those paths.
 
 ### No effects, no tasks — by design, not omission
@@ -94,7 +99,7 @@ spaghetti (reacting to state you don't own). Removing it yields the framework's
 core invariant:
 
 > **The entire graph is demand-driven from the DOM.** State → computed →
-> bindings, where compiler-generated DOM bindings are the only effects in the
+> DOM updates, where compiler-generated DOM update symbols are the only effects in the
 > system. Nothing computes unless the screen needs it.
 
 The classic uses of effects each have a better home:
@@ -104,8 +109,8 @@ The classic uses of effects each have a better home:
 - _"When X changes, update Y"_ → an antipattern in every fine-grained system;
   with no render loop, every mutation originates at an identifiable site (an
   event handler), so co-locate the side work there as a plain function.
-- _Sync external targets_ (`document.title`, imperative DOM) → these are
-  bindings to targets the template can't express; solved at the template level,
+- _Sync external targets_ (`document.title`, imperative DOM) → these are DOM
+  updates to targets the template can't express; solved at the template level,
   not with lifecycle APIs.
 - _React to state you don't own_ → deliberately unsupported.
 - _Eager browser setup_ (third-party widgets, canvas init, observers) →
@@ -118,6 +123,8 @@ path, users will rebuild effects by hand with `loading`, `error`, and `data`
 state. The framework instead treats async as derived graph state:
 
 ```tsrx
+import { computed } from '@async/resumable';
+
 function UserRoute() @{
   const user = computed(async ({ signal }) => {
     const id = route.params.userId;
@@ -141,7 +148,7 @@ function UserRoute() @{
 Semantics:
 
 - `computed(async ({ signal }) => ...)` creates a lazy async graph node. It does
-  not run at creation; it runs only when demanded by a DOM binding or TSRX async
+  not run at creation; it runs only when demanded by a DOM update or TSRX async
   boundary.
 - Reactive reads before the first `await` form the dependency key for the async
   node. When that key changes, the runtime creates a new request version.
@@ -150,6 +157,8 @@ Semantics:
   sync computed:
 
 ```tsrx
+import { computed } from '@async/resumable';
+
 const rawUser = computed(async ({ signal }) =>
   fetchUser(route.params.userId, signal)
 );
@@ -198,14 +207,17 @@ can recover some async dependencies in compiler-visible expressions. This
 framework takes the TSRX-only route: no marker, but strict compiler diagnostics
 at the async boundary.
 
-The state, async, element, event, and element-behavior primitives are
-**compiler intrinsics**, not imports of a value type. There is no
+The state, async, element, event, and element-behavior APIs are
+**compiler-rewritten framework APIs**, not runtime reactive values. Authors must
+import APIs such as `state`, `computed`, `shared`, and `element` from
+`@async/resumable`; bare calls are diagnostics. The compiler recognizes these
+APIs through their imported bindings, rewrites supported `.tsrx` usage, and the
+runtime stubs fail loudly if called directly without compilation. There is no
 `Signal`/`Tracked` type in the public API. Event handler props are camelCase
 (`onClick`, `onInput`), matching TSRX event-prop convention — no directive
-namespace. Element handles use the host prop `el`, which only accepts
-`element()` handles.
-Element behaviors use the host prop `use`, which only accepts compiler-known
-element behavior expressions.
+namespace. Element handles use the host prop `el`, which only accepts imported
+`element()` handles. Element behaviors use the host prop `use`, which only
+accepts compiler-known element behavior expressions.
 
 `state()`/`computed()` may be created anywhere in a call tree rooted in a
 component or shared instance — including helper functions in non-component
@@ -217,8 +229,9 @@ instead.
 
 ### Implementation: compiler-owned graph state
 
-**Primitives (compiler-rewritten).** The compiler knows every `state()`/`computed()`
-creation site statically, so every read of that binding compiles to a graph read
+**Imported framework APIs (compiler-rewritten).** The compiler knows every
+`state()`/`computed()` creation site whose callee resolves to an import from
+`@async/resumable`, so every read of that binding compiles to a graph read
 (`_get(count)`) and every supported write compiles to a graph write — including
 reads inside closures, template expressions, destructured aliases, and
 non-component helper functions in `.tsrx` files. Reactivity crosses `.tsrx`
@@ -229,8 +242,10 @@ This rewrite is driven by TSRX semantic analysis, not by the lowered output or
 string matching. The state compiler consumes the TSRX structural graph plus
 normal JavaScript/TypeScript AST and scope information:
 
-- `state()` / `computed()` calls in variable declarators become graph bindings
-  owned by the nearest stable TSRX graph scope.
+- Imported `state()` / `computed()` calls in variable declarators become graph
+  bindings owned by the nearest stable TSRX graph scope. Bare calls with the
+  same names are rejected with a diagnostic that asks the author to import the
+  API from `@async/resumable`.
 - Reads in TSRX expression children, element attributes, event handlers,
   behavior inputs, computed bodies, and nested helper functions resolve through
   the lexical binding map and lower to graph reads when they target a known
@@ -296,9 +311,9 @@ function Counter() @{
 ```
 
 The semantic graph records one graph binding (`count`), one event attribute
-(`onClick`), one update expression (`count++`), and one text binding read
-(`{count}`). The event symbol write lowers to `graph.update(countId, +1)`;
-the text binding lowers to `graph.read(countId)`.
+(`onClick`), one update expression (`count++`), and one text DOM update read
+(`{count}`). The event symbol write lowers to `graph.update({ graphNodeId:
+countId, ... })`; the text DOM update lowers to `graph.read(countId)`.
 
 For object state:
 
@@ -319,7 +334,7 @@ without treating the whole object as an opaque value.
 **Objects and collections.** `state(obj)` supports objects, arrays, `Map`, `Set`,
 and `Date` without a separate `store()` primitive or reactive collection
 subclasses. `user.profile.name = x` and `items.push(x)` are graph writes with
-path-level invalidation semantics, so a deep mutation updates only the bindings
+path-level invalidation semantics, so a deep mutation updates only the DOM updates
 that read that path.
 
 Object identity is part of the state graph contract. If two state paths point to
@@ -630,7 +645,7 @@ rendered widget. A second `<SelectRoot>` gets a different graph instance. No
 provider component, context ID, wrapper hook, or tree-shaped public API is
 introduced; the compiler/runtime records graph instance identity in the same
 render/resume metadata used for events, projection, keyed loops, and DOM
-bindings.
+updates.
 
 **Self-contained local widget state**
 

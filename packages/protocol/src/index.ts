@@ -15,8 +15,12 @@ export type ProtocolSyncPolicyCondition =
 	  }
 	| {
 			readonly type: 'graph-truthy';
-			readonly bindingId: string;
+			readonly graphNodeId: string;
 			readonly path?: ReadonlyArray<string>;
+	  }
+	| {
+			readonly type: 'constant-truthy';
+			readonly value: unknown;
 	  }
 	| {
 			readonly type: 'event-equals';
@@ -24,21 +28,27 @@ export type ProtocolSyncPolicyCondition =
 			readonly value: unknown;
 	  };
 
-export type ProtocolSyncPolicy = {
+export type ProtocolSyncPolicyBranch = {
 	readonly when: ProtocolSyncPolicyCondition;
 	readonly actions: ReadonlyArray<'preventDefault' | 'stopPropagation'>;
 };
 
+export type ProtocolSyncPolicy =
+	| ProtocolSyncPolicyBranch
+	| {
+			readonly branches: ReadonlyArray<ProtocolSyncPolicyBranch>;
+	  };
+
 export type ProtocolStatePayload = {
 	readonly version: typeof ASYNC_PROTOCOL_VERSION;
 	readonly cells: ReadonlyArray<{
-		readonly bindingId: string;
+		readonly graphNodeId: string;
 		readonly name: string;
 		readonly valueKind: 'scalar' | 'object' | 'array' | 'unknown';
 		readonly value?: unknown;
 	}>;
 	readonly computed: ReadonlyArray<{
-		readonly bindingId: string;
+		readonly graphNodeId: string;
 		readonly name: string;
 		readonly async: boolean;
 	}>;
@@ -58,11 +68,29 @@ export type ProtocolViewPayload = {
 		readonly syncPolicy?: ProtocolSyncPolicy;
 		readonly symbolIds: ReadonlyArray<string>;
 	}>;
-	readonly bindings: ReadonlyArray<{
+	readonly domUpdates: ReadonlyArray<{
 		readonly hostNodeId: string;
 		readonly source: string;
-		readonly bindingId: string;
+		readonly graphNodeId: string;
 		readonly path: ReadonlyArray<string>;
+		readonly target?:
+			| {
+					readonly kind: 'text';
+			  }
+			| {
+					readonly kind: 'attribute';
+					readonly name: string;
+			  }
+			| {
+					readonly kind: 'property';
+					readonly name: string;
+			  }
+			| {
+					readonly kind: 'class';
+			  }
+			| {
+					readonly kind: 'style';
+			  };
 		readonly symbolId?: string;
 	}>;
 	readonly behaviors: ReadonlyArray<{
@@ -87,7 +115,7 @@ export type ProtocolViewPayload = {
 		};
 		readonly asyncReads: ReadonlyArray<{
 			readonly source: string;
-			readonly bindingId: string;
+			readonly graphNodeId: string;
 			readonly path: ReadonlyArray<string>;
 			readonly runnerSymbolId?: string;
 		}>;

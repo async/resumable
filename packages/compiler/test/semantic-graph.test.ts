@@ -2,6 +2,7 @@ import { expect, test } from 'vitest';
 import { buildSemanticGraph } from '../src/index.ts';
 
 const source = `
+import { state, computed, element } from '@async/resumable';
 import { makeChart } from './chart';
 
 export function App({ label }: { label: string }) @{
