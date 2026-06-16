@@ -1,5 +1,5 @@
 import type { ProtocolViewPayload } from '@async/resumable-protocol';
-import type { DomJournalRecord, DomJournalResult, RuntimeGraph } from './graph.ts';
+import type { DomJournalEntry, DomJournalResult, RuntimeGraph } from './graph.ts';
 
 export type ResumeDomNode = {
 	readonly nodeType: number;
@@ -66,7 +66,7 @@ export type ResumeSyncPolicyCondition =
 	  }
 	| {
 			readonly type: 'graph-truthy';
-			readonly bindingId: string;
+			readonly graphNodeId: string;
 			readonly path?: ReadonlyArray<string>;
 	  }
 	| {
@@ -115,7 +115,7 @@ export type ResumeViewRecord = {
 		readonly tagName: string;
 	}>;
 	readonly events: ReadonlyArray<ResumeEventRecord>;
-	readonly bindings: ProtocolViewPayload['bindings'];
+	readonly domUpdates: ProtocolViewPayload['domUpdates'];
 	readonly behaviors: ProtocolViewPayload['behaviors'];
 	readonly elementHandles: ProtocolViewPayload['elementHandles'];
 	readonly asyncBoundaries: ProtocolViewPayload['asyncBoundaries'];
@@ -126,7 +126,7 @@ export type ResumeSymbolContext = {
 	readonly event?: ResumeDomEvent;
 	readonly element: ResumeDomElement;
 	readonly getElementHandle: (handleIdOrName: string) => ResumeDomElement | undefined;
-	readonly binding?: ProtocolViewPayload['bindings'][number];
+	readonly domUpdate?: ProtocolViewPayload['domUpdates'][number];
 	readonly value?: unknown;
 	readonly asyncBoundary?: ResumeAsyncBoundaryRecord;
 	readonly asyncRead?: ResumeAsyncBoundaryRead;
@@ -148,7 +148,7 @@ export type ResumeRuntimeInput = {
 	readonly view: ResumeViewRecord;
 	readonly loadSymbol: (symbolId: string) => ResumeSymbol | Promise<ResumeSymbol>;
 	readonly createVisibilityObserver?: ResumeVisibilityObserverFactory;
-	readonly applyDomJournal?: (records: ReadonlyArray<DomJournalRecord>) => void | Promise<void>;
+	readonly applyDomJournal?: (entries: ReadonlyArray<DomJournalEntry>) => void | Promise<void>;
 };
 
 export type ResumeRuntime = {
@@ -252,23 +252,23 @@ export function createResumeRuntime(input: ResumeRuntimeInput): ResumeRuntime {
 		eventTypes.add(eventRecord.eventName);
 	}
 
-	for (const binding of input.view.bindings) {
-		if (!binding.symbolId) continue;
+	for (const domUpdate of input.view.domUpdates) {
+		if (!domUpdate.symbolId) continue;
 
-		const element = elementsByHostId.get(binding.hostNodeId);
+		const element = elementsByHostId.get(domUpdate.hostNodeId);
 		if (!element) continue;
 
 		input.graph.subscribe({
-			id: `view-binding:${binding.hostNodeId}:${binding.bindingId}:${binding.path.join('.')}`,
-			bindingId: binding.bindingId,
-			path: binding.path,
+			id: `view-dom-update:${domUpdate.hostNodeId}:${domUpdate.graphNodeId}:${domUpdate.path.join('.')}`,
+			graphNodeId: domUpdate.graphNodeId,
+			path: domUpdate.path,
 			async run(value) {
-				const symbol = await input.loadSymbol(binding.symbolId!);
+				const symbol = await input.loadSymbol(domUpdate.symbolId!);
 				return await symbol({
 					graph: input.graph,
 					element,
 					getElementHandle: elementHandles.get,
-					binding,
+					domUpdate,
 					value,
 				});
 			},
@@ -280,8 +280,8 @@ export function createResumeRuntime(input: ResumeRuntimeInput): ResumeRuntime {
 			if (!asyncRead.runnerSymbolId) continue;
 
 			input.graph.subscribe({
-				id: `async-boundary:${boundary.id}:${asyncRead.bindingId}:${asyncRead.path.join('.')}`,
-				bindingId: asyncRead.bindingId,
+				id: `async-boundary:${boundary.id}:${asyncRead.graphNodeId}:${asyncRead.path.join('.')}`,
+				graphNodeId: asyncRead.graphNodeId,
 				path: asyncRead.path,
 				async run() {
 					const symbol = await input.loadSymbol(asyncRead.runnerSymbolId!);
@@ -406,7 +406,7 @@ export function createResumeRuntime(input: ResumeRuntimeInput): ResumeRuntime {
 	async function demandAsyncBoundaries(): Promise<void> {
 		for (const boundary of asyncBoundariesById.values()) {
 			for (const asyncRead of boundary.asyncReads) {
-				input.graph.read(asyncRead.bindingId, asyncRead.path);
+				input.graph.read(asyncRead.graphNodeId, asyncRead.path);
 			}
 		}
 
@@ -623,7 +623,7 @@ function missingElementLocatorError(
 		phase: 'resume',
 		title: 'Resume locator did not match the document',
 		message: `Resume locator ${locator.hostNodeId} expected <${locator.tagName}> at DOM order index ${String(locator.index)}.`,
-		why: 'The async/view payload points at an element that was not present in the resumed document. The runtime cannot safely attach events, behaviors, element handles, or bindings to a missing host node.',
+		why: 'The async/view payload points at an element that was not present in the resumed document. The runtime cannot safely attach events, behaviors, element handles, or DOM updates to a missing host node.',
 		hostNodeId: locator.hostNodeId,
 		elementLocator: domOrderLocator(locator.index),
 		expectedTagName: locator.tagName.toLowerCase(),
@@ -710,7 +710,7 @@ function evaluateSyncPolicy(
 		return !evaluateSyncPolicy(condition.condition, graph, event);
 	}
 	if (condition.type === 'graph-truthy') {
-		return Boolean(graph.read(condition.bindingId, condition.path ?? []));
+		return Boolean(graph.read(condition.graphNodeId, condition.path ?? []));
 	}
 	if (condition.type === 'constant-truthy') {
 		return Boolean(condition.value);

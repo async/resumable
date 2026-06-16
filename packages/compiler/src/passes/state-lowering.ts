@@ -44,7 +44,7 @@ export function lowerStateAccess(input: StateLoweringInput): StateLoweringArtifa
 
 		reads.push({
 			source: read.source,
-			bindingId: resolved.binding.id,
+			graphNodeId: resolved.binding.id,
 			path: resolved.path,
 		});
 	}
@@ -66,7 +66,7 @@ export function lowerStateAccess(input: StateLoweringInput): StateLoweringArtifa
 
 		reads.push({
 			source: read.source,
-			bindingId: resolved.binding.id,
+			graphNodeId: resolved.binding.id,
 			path: resolved.path,
 		});
 	}
@@ -120,7 +120,7 @@ export function lowerStateAccess(input: StateLoweringInput): StateLoweringArtifa
 
 		writes.push({
 			source: write.target,
-			bindingId: resolved.binding.id,
+			graphNodeId: resolved.binding.id,
 			path: resolved.path,
 			operation: write.operation,
 			assignmentOperator: write.assignmentOperator,
@@ -133,7 +133,7 @@ export function lowerStateAccess(input: StateLoweringInput): StateLoweringArtifa
 
 	return {
 		passId: 'state-lowering',
-		reads: uniqueBy(reads, (read) => `${read.bindingId}:${read.path.join('.')}:${read.source}`),
+		reads: uniqueBy(reads, (read) => `${read.graphNodeId}:${read.path.join('.')}:${read.source}`),
 		writes,
 		diagnostics,
 	};

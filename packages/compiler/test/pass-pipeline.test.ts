@@ -274,7 +274,7 @@ test('compileTsrxModule validates and returns the default pass graph', async () 
 			},
 			{
 				id: 'symbol:1',
-				chunk: '/assets/app.bindings.js',
+				chunk: '/assets/app.domUpdates.js',
 				exportName: 'buttonText_1',
 			},
 		],
@@ -304,7 +304,7 @@ test('compileTsrxModule validates and returns the default pass graph', async () 
 	expect(result.symbolModules.modules).toEqual(
 		expect.arrayContaining([
 			expect.objectContaining({
-				kind: 'dom-binding',
+				kind: 'dom-update',
 				symbolId: 'symbol:1',
 			}),
 		]),

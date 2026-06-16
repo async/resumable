@@ -55,12 +55,12 @@ test('planPayloadArena separates graph state from view wiring metadata', async (
 	expect(payload.state.cells).toEqual(
 		expect.arrayContaining([
 			{
-				bindingId: 'state:count',
+				graphNodeId: 'state:count',
 				name: 'count',
 				valueKind: 'scalar',
 			},
 			{
-				bindingId: 'state:menu',
+				graphNodeId: 'state:menu',
 				name: 'menu',
 				valueKind: 'object',
 			},
@@ -68,7 +68,7 @@ test('planPayloadArena separates graph state from view wiring metadata', async (
 	);
 	expect(payload.state.computed).toEqual([
 		{
-			bindingId: 'computed:details',
+			graphNodeId: 'computed:details',
 			name: 'details',
 			async: true,
 		},
@@ -98,12 +98,12 @@ test('planPayloadArena separates graph state from view wiring metadata', async (
 			}),
 		]),
 	);
-	expect(payload.view.bindings).toEqual(
+	expect(payload.view.domUpdates).toEqual(
 		expect.arrayContaining([
 			{
 				hostNodeId: 'h1',
 				source: 'menu.title',
-				bindingId: 'state:menu',
+				graphNodeId: 'state:menu',
 				path: ['title'],
 				target: {
 					kind: 'property',
@@ -113,7 +113,7 @@ test('planPayloadArena separates graph state from view wiring metadata', async (
 			{
 				hostNodeId: 'h2',
 				source: 'count',
-				bindingId: 'state:count',
+				graphNodeId: 'state:count',
 				path: [],
 				target: {
 					kind: 'text',
@@ -122,7 +122,7 @@ test('planPayloadArena separates graph state from view wiring metadata', async (
 			{
 				hostNodeId: 'h4',
 				source: 'details.title',
-				bindingId: 'computed:details',
+				graphNodeId: 'computed:details',
 				path: ['title'],
 				target: {
 					kind: 'text',
@@ -157,7 +157,7 @@ test('planPayloadArena separates graph state from view wiring metadata', async (
 			asyncReads: [
 				{
 					source: 'details.title',
-					bindingId: 'computed:details',
+					graphNodeId: 'computed:details',
 					path: ['title'],
 				},
 			],
@@ -186,11 +186,11 @@ export function App() @{
 		stateLowering,
 	});
 
-	expect(payload.view.bindings).toEqual([
+	expect(payload.view.domUpdates).toEqual([
 		{
 			hostNodeId: 'h0',
 			source: 'count',
-			bindingId: 'state:count',
+			graphNodeId: 'state:count',
 			path: [],
 			target: {
 				kind: 'attribute',
@@ -200,7 +200,7 @@ export function App() @{
 		{
 			hostNodeId: 'h0',
 			source: 'count',
-			bindingId: 'state:count',
+			graphNodeId: 'state:count',
 			path: [],
 			target: {
 				kind: 'text',
@@ -230,11 +230,11 @@ export function App() @{
 		stateLowering,
 	});
 
-	expect(payload.view.bindings).toEqual([
+	expect(payload.view.domUpdates).toEqual([
 		{
 			hostNodeId: 'h0',
 			source: 'activeClass',
-			bindingId: 'state:activeClass',
+			graphNodeId: 'state:activeClass',
 			path: [],
 			target: {
 				kind: 'class',
@@ -243,7 +243,7 @@ export function App() @{
 		{
 			hostNodeId: 'h0',
 			source: 'color',
-			bindingId: 'state:color',
+			graphNodeId: 'state:color',
 			path: [],
 			target: {
 				kind: 'style',
@@ -252,7 +252,7 @@ export function App() @{
 		{
 			hostNodeId: 'h0',
 			source: 'activeClass',
-			bindingId: 'state:activeClass',
+			graphNodeId: 'state:activeClass',
 			path: [],
 			target: {
 				kind: 'text',

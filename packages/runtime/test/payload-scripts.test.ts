@@ -1,7 +1,7 @@
 import { expect, test } from 'vitest';
 import { createProtocolStatePayload, renderPayloadScripts } from '../../serializer/src/index.ts';
 import {
-	createBindingDomJournalRecord,
+	createDomUpdateEntry,
 	createResumeRuntime,
 	createRuntimeGraphFromStatePayload,
 	decodePayloadScripts,
@@ -80,7 +80,7 @@ test('runtime decodes async payload scripts into graph state and resume view rec
 	const state = createProtocolStatePayload({
 		cells: [
 			{
-				bindingId: 'state:menu',
+				graphNodeId: 'state:menu',
 				name: 'menu',
 				valueKind: 'object',
 				value: { open: true },
@@ -101,7 +101,7 @@ test('runtime decodes async payload scripts into graph state and resume view rec
 					when: {
 						type: 'and',
 						conditions: [
-							{ type: 'graph-truthy', bindingId: 'state:menu', path: ['open'] },
+							{ type: 'graph-truthy', graphNodeId: 'state:menu', path: ['open'] },
 							{ type: 'event-equals', field: 'key', value: 'Escape' },
 						],
 					},
@@ -110,7 +110,7 @@ test('runtime decodes async payload scripts into graph state and resume view rec
 				symbolIds: ['symbol:key'],
 			},
 		],
-		bindings: [],
+		domUpdates: [],
 		behaviors: [],
 		elementHandles: [],
 		asyncBoundaries: [],
@@ -129,7 +129,7 @@ test('runtime decodes async payload scripts into graph state and resume view rec
 		loadSymbol(symbolId) {
 			loadedSymbols.push(symbolId);
 			return ({ graph: runtimeGraph }) => {
-				runtimeGraph.write({ bindingId: 'state:menu', path: ['open'], value: false });
+				runtimeGraph.write({ graphNodeId: 'state:menu', path: ['open'], value: false });
 			};
 		},
 	});
@@ -156,7 +156,7 @@ test('runtime decodes async payload scripts from a document-like script lookup',
 	const state = createProtocolStatePayload({
 		cells: [
 			{
-				bindingId: 'state:menu',
+				graphNodeId: 'state:menu',
 				name: 'menu',
 				valueKind: 'object',
 				value: { open: true },
@@ -167,7 +167,7 @@ test('runtime decodes async payload scripts from a document-like script lookup',
 		version: 1,
 		locators: [],
 		events: [],
-		bindings: [],
+		domUpdates: [],
 		behaviors: [],
 		elementHandles: [],
 		asyncBoundaries: [],
@@ -182,11 +182,11 @@ test('runtime decodes async payload scripts from a document-like script lookup',
 	});
 });
 
-test('payload document resume applies DOM journal records through async/view locators by default', async () => {
+test('payload document resume applies DOM journal entries through async/view locators by default', async () => {
 	const button = element('BUTTON');
 	const root = element('SECTION', [button]);
 	const state = createProtocolStatePayload({
-		cells: [{ bindingId: 'state:count', name: 'count', valueKind: 'scalar', value: 0 }],
+		cells: [{ graphNodeId: 'state:count', name: 'count', valueKind: 'scalar', value: 0 }],
 	});
 	const view: ProtocolViewPayload = {
 		version: 1,
@@ -195,14 +195,14 @@ test('payload document resume applies DOM journal records through async/view loc
 			{ hostNodeId: 'h1', strategy: 'dom-order', index: 1, tagName: 'button' },
 		],
 		events: [],
-		bindings: [
+		domUpdates: [
 			{
 				hostNodeId: 'h1',
 				source: 'count',
-				bindingId: 'state:count',
+				graphNodeId: 'state:count',
 				path: [],
 				target: { kind: 'text' },
-				symbolId: 'symbol:binding',
+				symbolId: 'symbol:domUpdate',
 			},
 		],
 		behaviors: [],
@@ -215,15 +215,15 @@ test('payload document resume applies DOM journal records through async/view loc
 		root,
 		loadSymbol() {
 			return (context) =>
-				createBindingDomJournalRecord({
-					locator: context.binding!.hostNodeId,
-					target: context.binding!.target!,
+				createDomUpdateEntry({
+					locator: context.domUpdate!.hostNodeId,
+					target: context.domUpdate!.target!,
 					value: context.value,
 				});
 		},
 	});
 
-	resumed.graph.write({ bindingId: 'state:count', value: 1 });
+	resumed.graph.write({ graphNodeId: 'state:count', value: 1 });
 	await resumed.graph.flush();
 
 	expect(button.textContent).toBe('1');
@@ -233,7 +233,7 @@ test('payload document resume applies DOM journal records through async/view loc
 test('runtime rejects payload scripts missing required state or view fields', () => {
 	const validState = '<script type="async/state">{"version":1,"cells":[]}</script>';
 	const validView =
-		'<script type="async/view">{"version":1,"locators":[],"events":[],"bindings":[],"behaviors":[],"elementHandles":[],"asyncBoundaries":[]}</script>';
+		'<script type="async/view">{"version":1,"locators":[],"events":[],"domUpdates":[],"behaviors":[],"elementHandles":[],"asyncBoundaries":[]}</script>';
 
 	expect(() =>
 		decodePayloadScripts({
@@ -257,7 +257,7 @@ test('runtime rejects payload scripts with malformed nested view records', () =>
 		decodePayloadScripts({
 			stateScript: validState,
 			viewScript:
-				'<script type="async/view">{"version":1,"locators":[{"strategy":"dom-order","index":0,"tagName":"section"}],"events":[],"bindings":[],"behaviors":[],"elementHandles":[],"asyncBoundaries":[]}</script>',
+				'<script type="async/view">{"version":1,"locators":[{"strategy":"dom-order","index":0,"tagName":"section"}],"events":[],"domUpdates":[],"behaviors":[],"elementHandles":[],"asyncBoundaries":[]}</script>',
 		}),
 	).toThrow('Invalid async/view locator[0]: expected hostNodeId string.');
 
@@ -265,7 +265,7 @@ test('runtime rejects payload scripts with malformed nested view records', () =>
 		decodePayloadScripts({
 			stateScript: validState,
 			viewScript:
-				'<script type="async/view">{"version":1,"locators":[],"events":[{"hostNodeId":"h1","eventName":"click"}],"bindings":[],"behaviors":[],"elementHandles":[],"asyncBoundaries":[]}</script>',
+				'<script type="async/view">{"version":1,"locators":[],"events":[{"hostNodeId":"h1","eventName":"click"}],"domUpdates":[],"behaviors":[],"elementHandles":[],"asyncBoundaries":[]}</script>',
 		}),
 	).toThrow('Invalid async/view event[0]: expected symbolIds array.');
 
@@ -273,23 +273,23 @@ test('runtime rejects payload scripts with malformed nested view records', () =>
 		decodePayloadScripts({
 			stateScript: validState,
 			viewScript:
-				'<script type="async/view">{"version":1,"locators":[],"events":[],"bindings":[{"hostNodeId":"h1","source":"count","bindingId":"state:count","path":[],"target":{"kind":"attribute"}}],"behaviors":[],"elementHandles":[],"asyncBoundaries":[]}</script>',
+				'<script type="async/view">{"version":1,"locators":[],"events":[],"domUpdates":[{"hostNodeId":"h1","source":"count","graphNodeId":"state:count","path":[],"target":{"kind":"attribute"}}],"behaviors":[],"elementHandles":[],"asyncBoundaries":[]}</script>',
 		}),
-	).toThrow('Invalid async/view binding[0].target: expected attribute name string.');
+	).toThrow('Invalid async/view domUpdate[0].target: expected attribute name string.');
 
 	expect(() =>
 		decodePayloadScripts({
 			stateScript: validState,
 			viewScript:
-				'<script type="async/view">{"version":1,"locators":[],"events":[],"bindings":[{"hostNodeId":"h1","source":"count","bindingId":"state:count","path":[],"target":{"kind":"property"}}],"behaviors":[],"elementHandles":[],"asyncBoundaries":[]}</script>',
+				'<script type="async/view">{"version":1,"locators":[],"events":[],"domUpdates":[{"hostNodeId":"h1","source":"count","graphNodeId":"state:count","path":[],"target":{"kind":"property"}}],"behaviors":[],"elementHandles":[],"asyncBoundaries":[]}</script>',
 		}),
-	).toThrow('Invalid async/view binding[0].target: expected property name string.');
+	).toThrow('Invalid async/view domUpdate[0].target: expected property name string.');
 
 	expect(() =>
 		decodePayloadScripts({
 			stateScript: validState,
 			viewScript:
-				'<script type="async/view">{"version":1,"locators":[],"events":[],"bindings":[{"hostNodeId":"h1","source":"count","bindingId":"state:count","path":[],"target":{"kind":"class"}}],"behaviors":[],"elementHandles":[],"asyncBoundaries":[]}</script>',
+				'<script type="async/view">{"version":1,"locators":[],"events":[],"domUpdates":[{"hostNodeId":"h1","source":"count","graphNodeId":"state:count","path":[],"target":{"kind":"class"}}],"behaviors":[],"elementHandles":[],"asyncBoundaries":[]}</script>',
 		}),
 	).not.toThrow();
 
@@ -297,7 +297,7 @@ test('runtime rejects payload scripts with malformed nested view records', () =>
 		decodePayloadScripts({
 			stateScript: validState,
 			viewScript:
-				'<script type="async/view">{"version":1,"locators":[],"events":[],"bindings":[{"hostNodeId":"h1","source":"count","bindingId":"state:count","path":[],"target":{"kind":"style"}}],"behaviors":[],"elementHandles":[],"asyncBoundaries":[]}</script>',
+				'<script type="async/view">{"version":1,"locators":[],"events":[],"domUpdates":[{"hostNodeId":"h1","source":"count","graphNodeId":"state:count","path":[],"target":{"kind":"style"}}],"behaviors":[],"elementHandles":[],"asyncBoundaries":[]}</script>',
 		}),
 	).not.toThrow();
 });
@@ -309,7 +309,7 @@ test('runtime rejects payload scripts with malformed sync policy records', () =>
 		decodePayloadScripts({
 			stateScript: validState,
 			viewScript:
-				'<script type="async/view">{"version":1,"locators":[],"events":[{"hostNodeId":"h1","eventName":"click","symbolIds":[],"syncPolicy":{"when":{"type":"event-equals","field":"key","value":"Escape"},"actions":["cancel"]}}],"bindings":[],"behaviors":[],"elementHandles":[],"asyncBoundaries":[]}</script>',
+				'<script type="async/view">{"version":1,"locators":[],"events":[{"hostNodeId":"h1","eventName":"click","symbolIds":[],"syncPolicy":{"when":{"type":"event-equals","field":"key","value":"Escape"},"actions":["cancel"]}}],"domUpdates":[],"behaviors":[],"elementHandles":[],"asyncBoundaries":[]}</script>',
 		}),
 	).toThrow('Invalid async/view event[0].syncPolicy: expected supported sync action.');
 
@@ -317,14 +317,14 @@ test('runtime rejects payload scripts with malformed sync policy records', () =>
 		decodePayloadScripts({
 			stateScript: validState,
 			viewScript:
-				'<script type="async/view">{"version":1,"locators":[],"events":[{"hostNodeId":"h1","eventName":"click","symbolIds":[],"syncPolicy":{"when":{"type":"graph-truthy","path":[]},"actions":["preventDefault"]}}],"bindings":[],"behaviors":[],"elementHandles":[],"asyncBoundaries":[]}</script>',
+				'<script type="async/view">{"version":1,"locators":[],"events":[{"hostNodeId":"h1","eventName":"click","symbolIds":[],"syncPolicy":{"when":{"type":"graph-truthy","path":[]},"actions":["preventDefault"]}}],"domUpdates":[],"behaviors":[],"elementHandles":[],"asyncBoundaries":[]}</script>',
 		}),
-	).toThrow('Invalid async/view event[0].syncPolicy.when: expected bindingId string.');
+	).toThrow('Invalid async/view event[0].syncPolicy.when: expected graphNodeId string.');
 });
 
 test('runtime payload decode errors expose structured payload diagnostics', () => {
 	const validView =
-		'<script type="async/view">{"version":1,"locators":[],"events":[],"bindings":[],"behaviors":[],"elementHandles":[],"asyncBoundaries":[]}</script>';
+		'<script type="async/view">{"version":1,"locators":[],"events":[],"domUpdates":[],"behaviors":[],"elementHandles":[],"asyncBoundaries":[]}</script>';
 	const error = captureThrown(() =>
 		decodePayloadScripts({
 			stateScript: '{"version":1,"cells":[]}',
@@ -355,7 +355,7 @@ test('runtime payload decode errors expose structured payload diagnostics', () =
 
 test('runtime protocol version mismatch errors expose expected and actual versions', () => {
 	const validView =
-		'<script type="async/view">{"version":1,"locators":[],"events":[],"bindings":[],"behaviors":[],"elementHandles":[],"asyncBoundaries":[]}</script>';
+		'<script type="async/view">{"version":1,"locators":[],"events":[],"domUpdates":[],"behaviors":[],"elementHandles":[],"asyncBoundaries":[]}</script>';
 	const error = captureThrown(() =>
 		decodePayloadScripts({
 			stateScript: '<script type="async/state">{"version":2,"cells":[]}</script>',
@@ -387,7 +387,7 @@ test('runtime resumes directly from async payload scripts', async () => {
 	const state = createProtocolStatePayload({
 		cells: [
 			{
-				bindingId: 'state:menu',
+				graphNodeId: 'state:menu',
 				name: 'menu',
 				valueKind: 'object',
 				value: { open: true },
@@ -408,7 +408,7 @@ test('runtime resumes directly from async payload scripts', async () => {
 					when: {
 						type: 'and',
 						conditions: [
-							{ type: 'graph-truthy', bindingId: 'state:menu', path: ['open'] },
+							{ type: 'graph-truthy', graphNodeId: 'state:menu', path: ['open'] },
 							{ type: 'event-equals', field: 'key', value: 'Escape' },
 						],
 					},
@@ -417,7 +417,7 @@ test('runtime resumes directly from async payload scripts', async () => {
 				symbolIds: ['symbol:key'],
 			},
 		],
-		bindings: [],
+		domUpdates: [],
 		behaviors: [],
 		elementHandles: [],
 		asyncBoundaries: [],
@@ -431,7 +431,7 @@ test('runtime resumes directly from async payload scripts', async () => {
 		loadSymbol(symbolId) {
 			loadedSymbols.push(symbolId);
 			return ({ graph }) => {
-				graph.write({ bindingId: 'state:menu', path: ['open'], value: false });
+				graph.write({ graphNodeId: 'state:menu', path: ['open'], value: false });
 			};
 		},
 	});
@@ -467,7 +467,7 @@ test('runtime resumes from async payload scripts found in a document-like root',
 	const state = createProtocolStatePayload({
 		cells: [
 			{
-				bindingId: 'state:menu',
+				graphNodeId: 'state:menu',
 				name: 'menu',
 				valueKind: 'object',
 				value: { open: true },
@@ -491,7 +491,7 @@ test('runtime resumes from async payload scripts found in a document-like root',
 				symbolIds: ['symbol:key'],
 			},
 		],
-		bindings: [],
+		domUpdates: [],
 		behaviors: [],
 		elementHandles: [],
 		asyncBoundaries: [],
@@ -504,7 +504,7 @@ test('runtime resumes from async payload scripts found in a document-like root',
 		loadSymbol(symbolId) {
 			loadedSymbols.push(symbolId);
 			return ({ graph }) => {
-				graph.write({ bindingId: 'state:menu', path: ['open'], value: false });
+				graph.write({ graphNodeId: 'state:menu', path: ['open'], value: false });
 			};
 		},
 	});

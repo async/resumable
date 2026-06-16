@@ -33,15 +33,15 @@ Completed slices are concentrated in:
 - focused state-lowering diagnostics and graph write forms including assignment,
   update, collection calls, and static property deletes
 - payload arena and symbol resolver planning artifacts
-- template binding target metadata through payload/protocol and a runtime helper
-  that maps those targets to structural DOM journal records
+- template DOM update target metadata through payload/protocol and a runtime helper
+  that maps those targets to structural DOM journal entries
 - runtime graph scheduling, invalidation, collection-method calls, and partial
   resume wiring
 - pure-value serializer support for identity/cycles and the accepted built-in
   value set
 - early public package re-exports and Rolldown/Vite adapter shells, including
   virtual module exposure for current simple event-handler update symbols,
-  DOM binding symbol modules, and transform
+  DOM update symbol modules, and transform
   manifests, a unit-tested build manifest asset hook, a fixture-backed Vite
   library build, and a direct Rolldown build that load the generated payload,
   resolver, manifest, and current generated symbol virtual modules while
@@ -69,7 +69,7 @@ Completed slices are concentrated in:
   client environment without a Vite update payload, prove a real browser page
   receives the cancelable custom event without navigating, and prove the CSR
   production build emits `async-resumable-manifest.json`, `build/bundle-graph.json`,
-  and generated event-handler/DOM-binding async chunks without leaking dev-HMR
+  and generated event-handler/DOM-update async chunks without leaking dev-HMR
   client strings; the CSR production build is also served through Vite preview
   and proves client-created DOM can load the generated payload/resolver/symbol
   pipeline for a counter click with no console errors or failed requests; a
@@ -107,6 +107,10 @@ The critical path to "full spec implementation" still requires:
   treating it as the whole render pipeline
 - browser resume that performs concrete DOM replacement/mutation behavior for
   all planned binding and async-boundary cases
+- a CSR-only `packages/vitest-browser` package for targeted Vitest browser-mode
+  runtime DOM mechanics where SSR/initial-render output is not under test,
+  including event timing, DOM journal application, `IntersectionObserver`,
+  element handle lookup, and microtask behavior
 - full `onVisible` visibility-event support beyond the current host-agnostic
   observer hook and structural global `IntersectionObserver` adapter coverage,
   including current value read semantics, generated-build integration, real
@@ -115,7 +119,7 @@ The critical path to "full spec implementation" still requires:
   handle-id/name lookup, current DOM resolution, initial-render absence, and
   removed-locator `undefined` semantics
 - generated symbol resolver integration with real build chunks and manifests
-  beyond the current generated DOM-binding and simple event-handler update
+  beyond the current generated DOM-update and simple event-handler update
   filename/symbol map, including behavior/async-runner source-to-module
   extraction, broader event write forms, generated exports, and resolver tables
   fully derived from build output rather than fixture-supplied symbol tables
@@ -156,10 +160,12 @@ path is covered by fixtures and browser tests.
   flat pack entry map for ten source entries and one Node test project include;
   it does not yet model package-local publish output or browser/witness test
   projects.
-- Production package folders exist for `resumable`, `core`, `protocol`,
-  `runtime`, `serializer`, `compiler`, `rolldown`, `vite`, and `test-utils`.
-- The current package inventory has package manifests for those nine production
-  folders and no `packages/server` manifest.
+- Production package folders currently exist for `resumable`, `core`,
+  `protocol`, `runtime`, `serializer`, `compiler`, `bundler`, and
+  `test-utils`.
+- The current package inventory has package manifests for those eight production
+  folders, no `packages/server` manifest, and no `packages/vitest-browser`
+  package yet.
 - The current split-spec inventory has `00` through `09` under
   `specs/framework/`.
 - `packages/compiler` has the initial production pass-boundary layout with
@@ -264,7 +270,7 @@ in the split specs.
 - Pass-owned modules exist for semantic graph collection, state lowering,
   payload arena planning, symbol resolver planning, capture analysis, protocol
   state planning, protocol view planning, payload script rendering, lazy symbol
-  module emission for current DOM binding symbols, and symbol resolver module
+  module emission for current DOM update symbols, and symbol resolver module
   emission.
 - Semantic graph collection is split into collector modules for module-scope
   diagnostics, components, elements, state/computed/element bindings, aliases,
@@ -277,7 +283,7 @@ in the split specs.
 - `compileTsrxModule` currently returns pass artifacts, protocol payloads,
   canonical payload scripts, a concatenated payload-only `renderShell`, a
   first `symbolModules` artifact for planned simple event-handler update symbols
-  and DOM binding symbols, a generated symbol resolver module string, and a
+  and DOM update symbols, a generated symbol resolver module string, and a
   resolver manifest object. It does not return a final emitted JavaScript module
   for component execution, state access rewriting, behavior modules,
   async-runner modules, broad event write forms, or complete build-ready
@@ -449,16 +455,16 @@ in the split specs.
   each async boundary, so `async/view` can connect boundary anchors to demanded
   graph data without re-walking TSRX source.
 - Payload arena and protocol view planning currently normalize template reads
-  into source-bearing graph binding records with `hostNodeId`, `source`,
-  `bindingId`, `path`, text, plain-attribute, common DOM property, class, or
-  style target metadata, and an optional binding `symbolId`. Focused
+  into source-bearing DOM update records with `hostNodeId`, `source`,
+  `graphNodeId`, `path`, text, plain-attribute, common DOM property, class, or
+  style target metadata, and an optional DOM update `symbolId`. Focused
   payload/protocol tests prove repeated reads of the same graph path on one host
-  are kept distinct when their DOM targets differ and receive distinct binding
-  symbol IDs. The runtime now has a focused helper that maps those binding
-  targets to `setText`, `setAttr`, or `setProp` journal records, and lazy
-  binding symbols receive the current subscription value plus the protocol
-  binding record in their resume symbol context. They do not yet carry range
-  target metadata or final compiler-emitted binding code.
+  are kept distinct when their DOM targets differ and receive distinct DOM update
+  symbol IDs. The runtime now has a focused `createDomUpdateEntry` helper that
+  maps those DOM update targets to `setText`, `setAttr`, or `setProp` journal
+  entries, and lazy DOM update symbols receive the current subscription value plus
+  the protocol DOM update record in their resume symbol context. They do not yet
+  carry range target metadata or final compiler-emitted DOM update code.
 - Payload arena and protocol view planning carry element handle locator records,
   host behavior records, and behavior symbol IDs into the current `async/view`
   payload shape.
@@ -472,13 +478,13 @@ in the split specs.
   current event, binding, behavior, and async-computed-runner artifacts. Resolver
   module emission owns dynamic import dispatch for the supplied chunk/export
   table. The `symbol-modules` pass now emits source strings for planned DOM
-  binding symbols that consume resume binding context and
-  `createBindingDomJournalRecord`, and it emits event-handler modules for the
+  DOM update symbols that consume resume DOM update context and `createDomUpdateEntry`,
+  and it emits event-handler modules for the
   current lowered `++`/`--` graph-update path through `context.graph.update`.
   Behavior, async-runner, assignment, collection-call, and delete
   source-to-module extraction are not implemented yet. The Rolldown/Vite adapter
   path can now derive resolver rows for current generated event-handler and DOM
-  binding virtual modules, and the current Vite fixture build proves the
+  DOM update virtual modules, and the current Vite fixture build proves the
   transformed `.tsrx` entry imports generated payload/resolver/manifest virtual
   modules so those generated symbol modules reach build output. The emitted
   `async-resumable-manifest.json` now records bundle-derived file names for
@@ -516,18 +522,18 @@ in the split specs.
   fulfilled/rejected async completion suppression, same-key async invalidation
   skips, committed rejected async snapshots, standalone initial async-demand
   pending flush, and collection of subscriber-produced DOM mutation journal
-  records.
+  entries.
 - The runtime package exposes a structural DOM journal applier for caller-resolved
   DOM-like targets. Focused coverage proves ordered `setText`, `setAttr`, and
   `setProp` application, removal for nullish/false attributes, and
   `runCleanup` callbacks in journal order. It also routes `insertRange`,
-  `removeRange`, and `moveRange` records through host callbacks in journal order;
+  `removeRange`, and `moveRange` entries through host callbacks in journal order;
   it does not yet apply those ranges to real browser DOM nodes. The runtime also
-  exposes a helper that maps protocol binding targets for text, attribute,
-  property, class, and style updates to concrete journal records. Resume binding
-  subscriptions pass the current graph value and protocol binding record to lazy
-  binding symbols, so generated symbols have the runtime data needed to consume
-  that helper. The compiler does not yet emit those generated binding symbols.
+  exposes a helper that maps protocol DOM update targets for text, attribute,
+  property, class, and style updates to concrete journal entries. Resume DOM update
+  subscriptions pass the current graph value and protocol DOM update record to lazy
+  DOM update symbols, so generated symbols have the runtime data needed to consume
+  that helper. The compiler does not yet emit those generated DOM update symbols.
 - The runtime graph can return either the previous or next value from graph
   updates, giving generated update-expression code a target for preserving
   postfix and prefix JavaScript value semantics.
@@ -565,7 +571,7 @@ in the split specs.
   fake-DOM `childNodes` for element nodes, matching DOM-order indexes and
   case-insensitive tag names, then registers delegated DOM events, evaluates sync
   event policy before lazy symbol loading, dispatches delegated events from
-  nested targets to owner element records, registers async view bindings as
+  nested targets to owner element records, registers async view DOM updates as
   graph subscriptions, and invalidates explicit disposed-host locators plus
   their delegated event records. Missing DOM-order element locators and
   tag-mismatched locators now fail loudly with structured `RuntimeResumeError`
@@ -642,13 +648,13 @@ in the split specs.
   Vite transform/resolveId/load/generateBundle hook forwarding, a direct
   Rolldown build, and a temporary Vite library build that write
   `async-resumable-manifest.json` while loading the generated payload, resolver,
-  manifest, and current generated event-handler/DOM-binding symbol virtual
+  manifest, and current generated event-handler/DOM-update symbol virtual
   modules and recording their emitted chunk filenames plus finalized
   generated-symbol manifest rows, including the final emitted file names in the
   resolver's exported symbol manifest for the current generated symbol chunks.
   Focused adapter
   tests also simulate an HMR-style module update by retransforming the same
-  `.tsrx` file and proving stale generated DOM-binding virtual modules no longer
+  `.tsrx` file and proving stale generated DOM-update virtual modules no longer
   resolve or load after the binding is removed, and a structural
   `handleHotUpdate` test proves generated virtual module graph nodes are
   invalidated and returned with the changed `.tsrx` module. A focused
@@ -703,15 +709,15 @@ in the split specs.
 - Add generic pass execution and human-readable artifact dump tooling beyond the
   current manual `compileTsrxModule` pass calls.
 - Finish template/view lowering and final emit beyond the early payload and
-  resolver artifacts, including range binding target metadata, build-ready
-  emitted binding chunks from the current symbol module artifact, broader
+  resolver artifacts, including range DOM update target metadata, build-ready
+  emitted DOM update chunks from the current symbol module artifact, broader
   event write module emission, behavior and async-runner module emission, and
-  generated DOM operation wiring for those bindings.
+  generated DOM operation wiring for those DOM updates.
 - Implement TSRX control-flow identity support beyond the current generic AST
   walk, including keyed loop scope records, positional/unkeyed loop diagnostics
   for stateful or interactive bodies, branch-local graph scope records, branch
   disposal diagnostics, branch/list payload locators, and runtime disposal of
-  branch/list-owned graph state, bindings, events, async work, and behaviors.
+  branch/list-owned graph state, DOM updates, events, async work, and behaviors.
 - Implement children/projection support beyond current prop aliases, including
   opaque projection artifacts, projection-site payload metadata, pass-through and
   wrapping behavior, disposal semantics, and diagnostics for inspecting, mapping,
@@ -773,6 +779,15 @@ in the split specs.
   source/manifest derivation from emitted chunk filenames beyond the current
   generated build fixture paths, and real DOM hot replacement beyond the
   fixture-level custom-event consumer.
+- Add or extend local `@async/witness` capabilities whenever a required resume
+  mechanic cannot be observed by current Witness APIs, and keep Witness as the
+  canonical harness for resume mechanics instead of moving those proofs into
+  jsdom or Vitest browser-mode SSR workarounds.
+- Add `packages/vitest-browser` for CSR-only Vitest browser-mode support modeled
+  after the CSR helper surface in
+  `/Users/jacksm5pro/dev/open-source/vitest-browser-qwik`, covering targeted
+  real-browser DOM/runtime mechanics where SSR/initial-render output is not the
+  behavior under test.
 - Finish production packaging/build metadata beyond the current flat root
   `dist/` output, including package-local export wiring, package build ordering,
   dependency externalization policy, and the final public/internal package split.
@@ -861,11 +876,11 @@ as evidence for a new source change.
 - `pnpm exec vp test packages/compiler/test/semantic-diagnostics.test.ts packages/compiler/test/payload-arena.test.ts packages/compiler/test/protocol-view.test.ts packages/runtime/test/behaviors.test.ts packages/runtime/test/payload-scripts.test.ts`
 - `pnpm exec vp test packages/serializer/test/payload-scripts.test.ts packages/runtime/test/payload-scripts.test.ts packages/test-utils/test/payload-helpers.test.ts packages/compiler/test/compile-module.test.ts`
 - `pnpm exec vp test packages/compiler/test/semantic-diagnostics.test.ts packages/compiler/test/semantic-diagnostic-constructors.test.ts packages/compiler/test/state-lowering.test.ts packages/compiler/test/state-lowering-delete.test.ts packages/compiler/test/capture-analysis.test.ts packages/compiler/test/symbol-resolver-emit.test.ts packages/serializer/test/serializer.test.ts`
-- `pnpm exec vp test packages/runtime/test/resume.test.ts packages/runtime/test/payload-scripts.test.ts packages/runtime/test/behaviors.test.ts packages/runtime/test/bindings.test.ts`
+- `pnpm exec vp test packages/runtime/test/resume.test.ts packages/runtime/test/payload-scripts.test.ts packages/runtime/test/behaviors.test.ts packages/runtime/test/dom-updates.test.ts`
 - `pnpm exec vp test packages/runtime/test/runtime-graph.test.ts packages/runtime/test/resume.test.ts`
 - `pnpm exec vp test packages/compiler/test/compile-module.test.ts packages/compiler/test/pass-pipeline.test.ts packages/bundler/test/rolldown.test.ts packages/bundler/test/vite.test.ts`
 - `pnpm exec vp test packages/compiler/test/symbol-resolver-emit.test.ts packages/compiler/test/semantic-diagnostic-constructors.test.ts`
-- `pnpm exec vp test packages/compiler/test/payload-arena.test.ts packages/compiler/test/protocol-view.test.ts packages/compiler/test/symbol-resolver.test.ts packages/compiler/test/compile-module.test.ts packages/runtime/test/bindings.test.ts packages/runtime/test/resume.test.ts`
+- `pnpm exec vp test packages/compiler/test/payload-arena.test.ts packages/compiler/test/protocol-view.test.ts packages/compiler/test/symbol-resolver.test.ts packages/compiler/test/compile-module.test.ts packages/runtime/test/dom-updates.test.ts packages/runtime/test/resume.test.ts`
 - `pnpm exec vp test packages/compiler/test/compile-module.test.ts packages/serializer/test/payload-scripts.test.ts packages/serializer/test/serializer.test.ts`
 - `pnpm exec vp test packages/runtime/test/runtime-graph.test.ts`
 - `pnpm exec vp test packages/compiler/test/sync-policy.test.ts`
@@ -873,7 +888,7 @@ as evidence for a new source change.
 - `pnpm exec vp test packages/runtime/test/resume.test.ts`
 - `pnpm exec vp test packages/runtime/test/*.test.ts`
 - `pnpm exec vp test`
-- `pnpm exec vp test packages/runtime/test/resume.test.ts packages/runtime/test/payload-scripts.test.ts packages/runtime/test/behaviors.test.ts packages/runtime/test/bindings.test.ts`
+- `pnpm exec vp test packages/runtime/test/resume.test.ts packages/runtime/test/payload-scripts.test.ts packages/runtime/test/behaviors.test.ts packages/runtime/test/dom-updates.test.ts`
 - `pnpm exec vp test packages/serializer/test/serializer.test.ts`
 - `pnpm exec vp test packages/resumable/test/public-surface.test.ts packages/bundler/test/rolldown.test.ts packages/bundler/test/vite.test.ts`
 - `pnpm exec vp test packages/core/test/framework-api.test.ts packages/protocol/test/protocol.test.ts packages/test-utils/test/payload-helpers.test.ts`
@@ -950,7 +965,7 @@ commands are listed in the implementation/build section above.
   microtask flush path used by graph writes. Focused runtime tests now cover
   standalone demanded async computed auto-flush and same-key invalidation skips.
 - async-boundary DOM audit confirmed current resume tests use a boundary runner
-  symbol that returns `setText` journal records for pending/fulfilled status; no
+  symbol that returns `setText` journal entries for pending/fulfilled status; no
   package source or test applies pending, fulfilled, or catch branch DOM
   replacement between async boundary anchors.
 - state-lowering audit confirmed current coverage is focused on semantic
@@ -1051,7 +1066,7 @@ commands are listed in the implementation/build section above.
   into runtime graph cells only. Current runtime tests prove top-level
   structural validation for required state/view fields such as `cells` and
   `events`, plus nested validation for state cells and the current view record
-  arrays: locators, events, bindings, behaviors, element handles, and async
+  arrays: locators, events, DOM updates, behaviors, element handles, and async
   boundary records. Nested sync-policy validation now covers branch arrays,
   supported sync actions, and current condition variants. Payload decode,
   document lookup, structural validation, and protocol-version failures now use
@@ -1124,7 +1139,7 @@ commands are listed in the implementation/build section above.
   artifact orchestration, payload script rendering, generated resolver strings,
   and Rolldown virtual module metadata. `transformTsrxModule` emits an
   `__async_resumable_module` export plus resolver, payload, current
-  event-handler-symbol, DOM-binding-symbol, and manifest virtual module IDs; it
+  event-handler-symbol, DOM-update-symbol, and manifest virtual module IDs; it
   now statically imports the generated resolver/payload/manifest virtual modules
   so a Vite library build loads them, and the generated resolver can pull the
   current generated symbol virtual modules into build output. The build manifest
@@ -1153,7 +1168,7 @@ commands are listed in the implementation/build section above.
   a transform manifest object, and emits accumulated transform manifests plus any
   bundle-exposed generated virtual-module output filenames as
   `async-resumable-manifest.json` through `generateBundle`; for current
-  generated event-handler and DOM-binding symbols, it also records finalized
+  generated event-handler and DOM-update symbols, it also records finalized
   symbol rows when the symbol's virtual module has an emitted file name, while
   the emitted public module manifests omit the internal pre-build symbol rows.
   Repeated transforms for the same `.tsrx` module drop the previous transform's
@@ -1177,7 +1192,7 @@ commands are listed in the implementation/build section above.
   `.tsrx` source file through Vite. One direct Rolldown build fixture and one
   temporary Vite library build fixture now prove real builds write the manifest
   asset, include generated
-  payload/resolver/current event-handler and DOM-binding symbol code, record emitted file names
+  payload/resolver/current event-handler and DOM-update symbol code, record emitted file names
   plus finalized symbol rows for those generated virtual modules, patch the
   emitted resolver symbol manifest to use those generated symbols' final file
   names, and keep internal pre-build symbol rows out of emitted module
@@ -1210,7 +1225,7 @@ commands are listed in the implementation/build section above.
   structured runtime failure metadata for compiler-rewritten framework APIs, protocol
   version/type fixtures, canonical payload script wrapper assertions, JSON
   script decoding, selected protocol record-count summaries for cells, computed
-  entries, locators, events, bindings, behaviors, element handles, and async
+  entries, locators, events, DOM updates, behaviors, element handles, and async
   boundaries, plus a decoded human-readable payload debug dump for fixture
   assertions.
   It still does not prove public API stability for internal packages, protocol
@@ -1251,11 +1266,11 @@ commands are listed in the implementation/build section above.
   metadata, comment-aware async-anchor offsets, or statement-container lexical
   scope artifacts.
 - symbol-extraction audit confirmed `planSymbolResolver` creates source-bearing
-  planned symbols for event handlers, DOM bindings, behaviors, and
+  planned symbols for event handlers, DOM updates, behaviors, and
   async-computed runners, while `compileTsrxModule`, `transformTsrxModule`, the
   Rolldown adapter, and the Vite wrapper still accept caller-supplied
   `id`/`chunk`/`exportName` tables for resolver emission. The `symbol-modules`
-  pass emits source strings for planned DOM binding modules and simple
+  pass emits source strings for planned DOM update modules and simple
   event-handler `++`/`--` graph-update modules, and the Rolldown and Vite
   adapters expose those modules as in-memory virtual modules. The Rolldown
   transform derives resolver rows for those generated virtual modules. No
@@ -1264,24 +1279,24 @@ commands are listed in the implementation/build section above.
   writes, and no build adapter derives resolver tables from real chunk output
   beyond the current generated symbol virtual-module path.
 - runtime-graph journal audit confirmed current graph source accepts the full
-  `DomJournalRecord` union, records subscription-produced DOM journal entries,
+  `DomJournalEntry` union, collects subscription-produced DOM journal entries,
   and exposes them through `takeJournal`. The resume runtime can also deliver
-  journal records from runtime-owned graph flushes and later scheduled graph
+  journal entries from runtime-owned graph flushes and later scheduled graph
   flushes to an optional host DOM journal adapter without draining journals when
   no adapter is configured. Executable coverage currently exercises `setText`
-  records, one multi-record subscription that appends ordered `setText`,
-  `setAttr`, and `setProp` records from a single binding run, one `setAttr`
+  entries, one multi-entry subscription that appends ordered `setText`,
+  `setAttr`, and `setProp` entries from a single DOM update run, one `setAttr`
   resume path, adapter delivery for a dispatch-owned `setAttr` flush, and
-  adapter delivery for a scheduled binding `setText` flush. A structural DOM
+  adapter delivery for a scheduled DOM update `setText` flush. A structural DOM
   journal applier now covers ordered application of `setText`, `setAttr`, and
   `setProp` to caller-resolved DOM-like targets, including nullish/false
   attribute removal, plus `runCleanup` callbacks in journal order. The runtime
-  helper for protocol binding targets now maps text, attribute, property, class,
-  and style targets to `setText`, `setAttr`, or `setProp` records. Focused
-  binding-resume coverage proves lazy binding symbols receive the current graph
-  value and protocol binding target metadata and can return concrete journal
-  records through the runtime journal adapter. Current coverage also routes
-  `insertRange`, `removeRange`, and `moveRange` records through host callbacks
+  helper for protocol DOM update targets now maps text, attribute, property,
+  class, and style targets to `setText`, `setAttr`, or `setProp` entries. Focused
+  DOM-update-resume coverage proves lazy DOM update symbols receive the current graph
+  value and protocol DOM update target metadata and can return concrete journal
+  entries through the runtime journal adapter. Current coverage also routes
+  `insertRange`, `removeRange`, and `moveRange` entries through host callbacks
   in journal order. It still has no browser DOM, compiler-emitted binding module
   integration, or browser-ordering coverage.
 - runtime-scheduler audit confirmed current graph source schedules microtask
@@ -1316,7 +1331,7 @@ commands are listed in the implementation/build section above.
   binding's syntax-evaluated `initialValue` into
   `createProtocolStatePayload`. The serializer wrapper now converts
   `AA_SERIALIZE_UNSUPPORTED_VALUE` results into `ProtocolStateSerializationError`
-  objects that preserve the serializer diagnostic fields plus `bindingId` and
+  objects that preserve the serializer diagnostic fields plus `graphNodeId` and
   `cellName`, so protocol-state construction failures keep structured diagnostic
   metadata.
 - dynamic-initializer payload audit confirmed `initialValueKind` classifies only
@@ -1372,7 +1387,7 @@ commands are listed in the implementation/build section above.
   data-script wrappers, and Node fake-DOM payload decoding/resume helpers. They
   do not prove async snapshot records, shared snapshot records, protocol schema
   validation beyond exact script-wrapper, version checks, and optional text /
-  plain-attribute / common-property / class / style binding target shape checks,
+  plain-attribute / common-property / class / style DOM update target shape checks,
   protocol computed entries becoming runtime computed/async nodes, range binding
   target metadata, compact production payload encoding, browser `TreeWalker`
   materialization, skip runs for static nodes, ignored/nested
@@ -1387,7 +1402,7 @@ commands are listed in the implementation/build section above.
   authored `@if`, `@for`, or `@switch` parsing fixtures; keyed `@for` identity;
   positional/unkeyed loop diagnostics; branch-local graph scope ownership;
   `@if`/`@switch` branch disposal; branch/list payload locators; or runtime
-  cleanup of graph state, events, bindings, async work, and behaviors owned by
+  cleanup of graph state, events, DOM updates, async work, and behaviors owned by
   removed control-flow ranges.
 - Current sync-event-policy tests prove selected compiler IR extraction,
   `AA_SYNC_POLICY_UNEXTRACTABLE` object shape for one unsupported guard, and
@@ -1437,7 +1452,7 @@ commands are listed in the implementation/build section above.
   abort signals, stale fulfilled and rejected completion suppression, same-key
   async invalidation skips, committed rejected async snapshots, standalone
   initial async-demand auto-flush, and fake-DOM boundary runner dispatch for
-  pending/fulfilled status through journal records. They do not prove
+  pending/fulfilled status through journal entries. They do not prove
   initial-render awaiting, serialized async snapshots that prevent browser
   refetch, rejected-status runner dispatch, rejected branch rendering,
   pending/fulfilled/error DOM range replacement between anchors, branch cleanup,
@@ -1462,18 +1477,18 @@ commands are listed in the implementation/build section above.
   `reverse`, `sort`, and `splice`, but focused tests do not directly exercise
   those methods. Current resume-runtime tests add one `setAttr` journal path,
   host-adapter delivery for a dispatch-owned `setAttr` flush, and host-adapter
-  delivery for a scheduled binding `setText` flush. Runtime graph coverage now
-  proves one subscription can return an ordered multi-record batch containing
+  delivery for a scheduled DOM update `setText` flush. Runtime graph coverage now
+  proves one subscription can return an ordered multi-entry batch containing
   `setText`, `setAttr`, and `setProp`, and the runtime DOM journal applier
-  proves those record types mutate caller-resolved DOM-like targets in order.
-  Runtime DOM journal coverage also proves protocol binding targets map to the
-  expected concrete journal records, and runtime binding-resume coverage proves
-  lazy binding symbols receive the current value plus binding target metadata
-  before returning a concrete journal record. It also proves `runCleanup`
+  proves those entry types mutate caller-resolved DOM-like targets in order.
+  Runtime DOM journal coverage also proves protocol DOM update targets map to the
+  expected concrete journal entries, and runtime DOM-update-resume coverage proves
+  lazy DOM update symbols receive the current value plus DOM update target metadata
+  before returning a concrete journal entry. It also proves `runCleanup`
   callbacks run in journal order. It does not prove
-  `insertRange`, `removeRange`, or `moveRange` records against real browser DOM;
+  `insertRange`, `removeRange`, or `moveRange` entries against real browser DOM;
   that compiler-emitted binding modules apply the DOM journal to real browser
-  nodes; generated binding-symbol integration for computed dependencies; or that
+  nodes; generated DOM update-symbol integration for computed dependencies; or that
   journal ordering is correct under a browser event loop.
 - Current state-lowering tests prove artifact lowering and diagnostics for
   selected graph reads/writes, assignment/update metadata, static collection
@@ -1484,7 +1499,7 @@ commands are listed in the implementation/build section above.
   or array mutation forms, or browser/runtime integration beyond focused runtime
   graph tests.
 - Current props/projection coverage proves first-parameter synthetic prop
-  binding collection, object-pattern prop aliases, `prop:props` read lowering,
+  DOM update collection, object-pattern prop aliases, `prop:props` read lowering,
   and read-only prop write diagnostics. It does not prove default/rest/nested
   parameter handling beyond the current object-pattern alias collector, runtime
   getter-backed props, parent graph re-read behavior, prop update propagation
@@ -1528,9 +1543,9 @@ commands are listed in the implementation/build section above.
   across empty state/view payloads, canonical payload script wrapper checks
   including the closing tag, payload script JSON decoding, and selected
   protocol record counting for cells, computed entries, locators, events,
-  bindings, behaviors, element handles, and async boundaries. They also prove a
+  DOM updates, behaviors, element handles, and async boundaries. They also prove a
   decoded human-readable payload debug dump with state/view IDs, names, symbol
-  IDs, sync-policy presence, binding targets, and locator indexes.
+  IDs, sync-policy presence, DOM update targets, and locator indexes.
   They do not prove public API stability for internal packages, protocol
   migration/version negotiation, browser helpers, or witness integration
   helpers.
@@ -1555,7 +1570,7 @@ commands are listed in the implementation/build section above.
   failures, duplicate-producer failures, dependency-cycle failures, source layout
   ownership, duplicate pass-ID validation, structured pass-graph failure
   metadata, the returned `compileTsrxModule` pass graph, and the first
-  `symbolModules` event-handler and DOM binding source artifacts. They do not prove a generic pass
+  `symbolModules` event-handler and DOM update source artifacts. They do not prove a generic pass
   executor, artifact dump tooling, disabled/reordered pass execution, full
   artifact-focused coverage for every pass output, or build-ready emitted
   JavaScript snapshots for component code, broad state rewriting,
@@ -1564,11 +1579,11 @@ commands are listed in the implementation/build section above.
   re-exports, unit-level `.tsrx` transforms with fixture-supplied symbol tables,
   in-memory resolver/payload/generated-symbol/manifest virtual module
   resolution and loads, transform manifest objects, resolver rows derived from
-  current event-handler and DOM-binding symbol virtual modules, direct Vite wrapper hook
+  current event-handler and DOM-update symbol virtual modules, direct Vite wrapper hook
   forwarding for transform, resolveId, load, and generateBundle, and one
   direct Rolldown build fixture and one fixture-backed Vite library build that
   write the build manifest asset while loading generated
-  payload/resolver/current event-handler and DOM-binding symbol virtual modules and recording
+  payload/resolver/current event-handler and DOM-update symbol virtual modules and recording
   their emitted chunk filenames plus finalized generated-symbol rows without
   leaking internal pre-build symbol rows in the public module manifests. Those
   fixtures also prove the emitted resolver's exported symbol manifest uses the

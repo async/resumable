@@ -15,7 +15,7 @@ export type ProtocolPayloadSummary = {
 	readonly computed: number;
 	readonly locators: number;
 	readonly events: number;
-	readonly bindings: number;
+	readonly domUpdates: number;
 	readonly behaviors: number;
 	readonly elementHandles: number;
 	readonly asyncBoundaries: number;
@@ -26,7 +26,7 @@ export type PayloadDebugDump = {
 	readonly state: {
 		readonly version: ProtocolStatePayload['version'];
 		readonly cells: ReadonlyArray<{
-			readonly bindingId: string;
+			readonly graphNodeId: string;
 			readonly name: string;
 			readonly valueKind: ProtocolStatePayload['cells'][number]['valueKind'];
 		}>;
@@ -45,7 +45,7 @@ export type PayloadDebugDump = {
 			readonly symbolIds: ReadonlyArray<string>;
 			readonly hasSyncPolicy: boolean;
 		}>;
-		readonly bindings: ProtocolViewPayload['bindings'];
+		readonly domUpdates: ProtocolViewPayload['domUpdates'];
 		readonly behaviors: ProtocolViewPayload['behaviors'];
 		readonly elementHandles: ProtocolViewPayload['elementHandles'];
 		readonly asyncBoundaries: ReadonlyArray<{
@@ -81,7 +81,7 @@ export function createPayloadDebugDump(input: PayloadScriptPair): PayloadDebugDu
 		state: {
 			version: decoded.state.version,
 			cells: decoded.state.cells.map((cell) => ({
-				bindingId: cell.bindingId,
+				graphNodeId: cell.graphNodeId,
 				name: cell.name,
 				valueKind: cell.valueKind,
 			})),
@@ -100,13 +100,13 @@ export function createPayloadDebugDump(input: PayloadScriptPair): PayloadDebugDu
 				symbolIds: [...event.symbolIds],
 				hasSyncPolicy: event.syncPolicy !== undefined,
 			})),
-			bindings: decoded.view.bindings.map((binding) => ({
-				hostNodeId: binding.hostNodeId,
-				source: binding.source,
-				bindingId: binding.bindingId,
-				path: [...binding.path],
-				...(binding.target ? { target: cloneBindingTarget(binding.target) } : {}),
-				symbolId: binding.symbolId,
+			domUpdates: decoded.view.domUpdates.map((domUpdate) => ({
+				hostNodeId: domUpdate.hostNodeId,
+				source: domUpdate.source,
+				graphNodeId: domUpdate.graphNodeId,
+				path: [...domUpdate.path],
+				...(domUpdate.target ? { target: cloneDomUpdateTarget(domUpdate.target) } : {}),
+				symbolId: domUpdate.symbolId,
 			})),
 			behaviors: decoded.view.behaviors.map((behavior) => ({ ...behavior })),
 			elementHandles: decoded.view.elementHandles.map((handle) => ({ ...handle })),
@@ -116,7 +116,7 @@ export function createPayloadDebugDump(input: PayloadScriptPair): PayloadDebugDu
 				endIndex: boundary.endAnchor.index,
 				asyncReads: boundary.asyncReads.map((read) => ({
 					source: read.source,
-					bindingId: read.bindingId,
+					graphNodeId: read.graphNodeId,
 					path: [...read.path],
 					runnerSymbolId: read.runnerSymbolId,
 				})),
@@ -134,7 +134,7 @@ export function summarizeProtocolPayload(input: {
 		computed: input.state.computed.length,
 		locators: input.view.locators.length,
 		events: input.view.events.length,
-		bindings: input.view.bindings.length,
+		domUpdates: input.view.domUpdates.length,
 		behaviors: input.view.behaviors.length,
 		elementHandles: input.view.elementHandles.length,
 		asyncBoundaries: input.view.asyncBoundaries.length,
@@ -151,9 +151,9 @@ function parsePayloadScript(script: string, type: 'async/state' | 'async/view'):
 	}
 }
 
-function cloneBindingTarget(
-	target: NonNullable<ProtocolViewPayload['bindings'][number]['target']>,
-): NonNullable<ProtocolViewPayload['bindings'][number]['target']> {
+function cloneDomUpdateTarget(
+	target: NonNullable<ProtocolViewPayload['domUpdates'][number]['target']>,
+): NonNullable<ProtocolViewPayload['domUpdates'][number]['target']> {
 	if (target.kind === 'attribute') return { kind: 'attribute', name: target.name };
 	if (target.kind === 'property') return { kind: 'property', name: target.name };
 	if (target.kind === 'class') return { kind: 'class' };

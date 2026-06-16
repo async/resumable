@@ -4,7 +4,7 @@ import {
 	type ProtocolViewPayload,
 } from '@async/resumable-protocol';
 import { deserializeGraphValue, type SerializedGraphPayload } from '@async/resumable-serializer';
-import { applyDomJournalRecords } from './dom-journal.ts';
+import { applyDomJournalEntries } from './dom-journal.ts';
 import { createRuntimeGraph, type RuntimeGraph } from './graph.ts';
 import {
 	createResumeRuntime,
@@ -132,7 +132,7 @@ export function decodePayloadScriptsFromDocument(
 export function createRuntimeGraphFromStatePayload(payload: ProtocolStatePayload): RuntimeGraph {
 	return createRuntimeGraph({
 		cells: payload.cells.map((cell) => ({
-			bindingId: cell.bindingId,
+			graphNodeId: cell.graphNodeId,
 			value:
 				cell.value === undefined
 					? undefined
@@ -149,8 +149,8 @@ export async function resumeFromPayloadScripts(
 	let runtime: ResumeRuntime | undefined;
 	const applyDomJournal =
 		input.applyDomJournal ??
-		((records) =>
-			applyDomJournalRecords(records, {
+		((entries) =>
+			applyDomJournalEntries(entries, {
 				resolveTarget(locator) {
 					return runtime?.getElement(String(locator));
 				},
@@ -242,7 +242,7 @@ function assertStatePayloadShape(payload: unknown): asserts payload is ProtocolS
 	for (const [index, cell] of payload.cells.entries()) {
 		const context = `async/state cell[${index}]`;
 		assertRecordShape(cell, context);
-		assertStringField(cell, 'bindingId', context);
+		assertStringField(cell, 'graphNodeId', context);
 		assertStringField(cell, 'name', context);
 		assertStateValueKind(cell, context);
 	}
@@ -258,7 +258,7 @@ function assertStatePayloadShape(payload: unknown): asserts payload is ProtocolS
 		for (const [index, computed] of payload.computed.entries()) {
 			const context = `async/state computed[${index}]`;
 			assertRecordShape(computed, context);
-			assertStringField(computed, 'bindingId', context);
+			assertStringField(computed, 'graphNodeId', context);
 			assertStringField(computed, 'name', context);
 			assertBooleanField(computed, 'async', context);
 		}
@@ -282,7 +282,7 @@ function assertViewPayloadShape(payload: unknown): asserts payload is ProtocolVi
 	for (const key of [
 		'locators',
 		'events',
-		'bindings',
+		'domUpdates',
 		'behaviors',
 		'elementHandles',
 		'asyncBoundaries',
@@ -315,15 +315,15 @@ function assertViewPayloadShape(payload: unknown): asserts payload is ProtocolVi
 		}
 	}
 
-	for (const [index, binding] of payload.bindings.entries()) {
-		const context = `async/view binding[${index}]`;
-		assertRecordShape(binding, context);
-		assertStringField(binding, 'hostNodeId', context);
-		assertStringField(binding, 'source', context);
-		assertStringField(binding, 'bindingId', context);
-		assertStringArrayField(binding, 'path', context);
-		assertOptionalBindingTarget(binding.target, `${context}.target`);
-		assertOptionalStringField(binding, 'symbolId', context);
+	for (const [index, domUpdate] of payload.domUpdates.entries()) {
+		const context = `async/view domUpdate[${index}]`;
+		assertRecordShape(domUpdate, context);
+		assertStringField(domUpdate, 'hostNodeId', context);
+		assertStringField(domUpdate, 'source', context);
+		assertStringField(domUpdate, 'graphNodeId', context);
+		assertStringArrayField(domUpdate, 'path', context);
+		assertOptionalDomUpdateTarget(domUpdate.target, `${context}.target`);
+		assertOptionalStringField(domUpdate, 'symbolId', context);
 	}
 
 	for (const [index, behavior] of payload.behaviors.entries()) {
@@ -492,13 +492,13 @@ function assertAsyncBoundaryReads(value: unknown, context: string): void {
 		const readContext = `${context}.asyncRead[${index}]`;
 		assertRecordShape(read, readContext);
 		assertStringField(read, 'source', readContext);
-		assertStringField(read, 'bindingId', readContext);
+		assertStringField(read, 'graphNodeId', readContext);
 		assertStringArrayField(read, 'path', readContext);
 		assertOptionalStringField(read, 'runnerSymbolId', readContext);
 	}
 }
 
-function assertOptionalBindingTarget(value: unknown, context: string): void {
+function assertOptionalDomUpdateTarget(value: unknown, context: string): void {
 	if (value === undefined) return;
 
 	assertRecordShape(value, context);
@@ -526,7 +526,7 @@ function assertOptionalBindingTarget(value: unknown, context: string): void {
 
 	throw invalidPayloadShapeError(
 		contextPayloadType(context),
-		`Invalid ${context}: expected supported binding target kind.`,
+		`Invalid ${context}: expected supported DOM update target kind.`,
 	);
 }
 
@@ -594,7 +594,7 @@ function assertSyncPolicyCondition(value: unknown, context: string): void {
 	}
 
 	if (value.type === 'graph-truthy') {
-		assertStringField(value, 'bindingId', context);
+		assertStringField(value, 'graphNodeId', context);
 		assertOptionalStringArrayField(value, 'path', context);
 		return;
 	}

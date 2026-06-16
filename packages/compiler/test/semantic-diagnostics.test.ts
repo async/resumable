@@ -371,7 +371,7 @@ test('buildSemanticGraph reports sync computed reads that transitively depend on
 				dependencies: [
 					{
 						source: 'user.name',
-						bindingId: 'computed:user',
+						graphNodeId: 'computed:user',
 						path: ['name'],
 					},
 				],

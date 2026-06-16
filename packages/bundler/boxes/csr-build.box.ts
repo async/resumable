@@ -64,7 +64,7 @@ export default box(
 				) &&
 				!!module.symbols?.some(
 					(symbol) =>
-						symbol.kind === 'dom-binding' && typeof symbol.fileName === 'string',
+						symbol.kind === 'dom-update' && typeof symbol.fileName === 'string',
 				) &&
 				!!value.bundles &&
 				Object.keys(value.bundles).some((name) => name.startsWith('async-'))

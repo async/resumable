@@ -23,7 +23,7 @@ Every runtime graph implementation must preserve:
 
 - stable graph references across initial render, serialization, and browser resume
 - path-granular reads and writes for object state
-- dependency tracking for computed nodes, async nodes, DOM bindings, and sync
+- dependency tracking for computed nodes, async nodes, DOM updates, and sync
   event policies
 - invalidation after writes and deterministic flush ordering
 - object identity and cycle preservation for serializable state
@@ -33,15 +33,15 @@ Every runtime graph implementation must preserve:
 
 This graph is not a virtual DOM. It does not store a virtual element tree,
 virtual child arrays, component render-output snapshots, or a reconciliation
-target. State writes invalidate graph subscribers directly; DOM binding symbols
-patch located real DOM nodes in place. `async/view` records and graph DOM
-binding records may describe how to find/update existing DOM, but they are not
-an alternate UI tree to diff.
+target. State writes invalidate graph subscribers directly; DOM update symbols
+patch located real DOM nodes in place. `async/view` records and graph DOM update
+records may describe how to find/update existing DOM, but they are not an
+alternate UI tree to diff.
 
 ### Scheduler and flush semantics
 
 The scheduler is a graph scheduler with a DOM mutation journal. A journal is
-allowed, but it records concrete DOM operations produced by graph binding work;
+allowed, but it records concrete DOM operations produced by graph DOM update work;
 it is not a VNode journal, render-output journal, or diff queue.
 
 The v1 scheduler contract is:
@@ -51,13 +51,13 @@ The v1 scheduler contract is:
 - Lazy event handler symbols for one event run in authored order. Handler arrays
   await each entry before running the next entry.
 - Graph writes made during one framework-owned event turn are batched. They
-  invalidate graph paths immediately, but DOM bindings update during the next
+  invalidate graph paths immediately, but DOM updates run during the next
   flush point.
 - The default flush point is a microtask scheduled by the first graph write in
   an otherwise idle turn. The runtime may also force an internal flush before it
   must observe updated DOM or finish an initial render/resume operation.
 - A flush drains graph work until stable: recompute dirty sync computed nodes,
-  discover newly dirty bindings, enqueue demanded binding symbols, and repeat
+  discover newly dirty DOM updates, enqueue demanded DOM update symbols, and repeat
   until no synchronous graph work remains.
 - DOM work produced during the flush is appended to a DOM mutation journal and
   applied after graph work settles for that flush.
@@ -89,6 +89,32 @@ component render output, or "old tree/new tree" reconciliation records. It is a
 batching and ordering mechanism for real DOM mutations, not an alternate UI
 representation.
 
+### Runtime verification harnesses
+
+Runtime graph behavior that does not need a browser stays in ordinary package
+unit tests. Any resume mechanic that depends on the browser resuming existing
+initial-render output must be proven with `@async/witness` against a real
+Vite/Rolldown dev, build, preview, or SSR fixture. That includes payload scripts
+already present in the document, generated resolver/chunk loading, delegated
+events on initially rendered DOM, DOM updates after lazy symbols, async boundary
+replacement, behavior cleanup on removed hosts, and the invariant that component
+bodies do not execute during browser resume.
+
+Witness is the canonical proof surface for resume mechanics. If a needed
+resume assertion is awkward or impossible with current Witness APIs, extend the
+local `@async/witness` package directly and use that new capability here. Do not
+replace the resume harness with jsdom, fake DOM, or Vitest browser-mode SSR
+workarounds just because they are easier to wire for one fixture.
+
+Vitest browser mode remains useful for focused real-browser DOM mechanics where
+SSR/initial-render output is not the behavior under test. The framework should
+provide a CSR-only `packages/vitest-browser` support package for tests such as
+event/default timing, DOM journal application, `IntersectionObserver`, element
+handle lookup, microtask ordering, and other isolated runtime-browser checks.
+That package should follow the CSR helper shape of
+`/Users/jacksm5pro/dev/open-source/vitest-browser-qwik` and intentionally leave
+resume proofs to Witness-backed fixtures.
+
 ### Resume behavior
 
 - One global delegated event listener (capture phase) from the resumer.
@@ -112,7 +138,7 @@ representation.
   behavior. Removed nodes clean up their behaviors before their locators are
   discarded.
 - State writes during that run propagate through the graph and are flushed by
-  the scheduler above; subscribed binding symbols are loaded on demand and
+  the scheduler above; subscribed DOM update symbols are loaded on demand and
   update the DOM in place. Nothing re-renders; there is no component
   re-execution path in the browser runtime at all.
 - Async computed invalidation aborts the prior request version, imports the async

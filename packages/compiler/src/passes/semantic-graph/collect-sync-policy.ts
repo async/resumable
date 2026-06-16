@@ -191,7 +191,7 @@ function extractSyncCondition(
 
 	return {
 		type: 'graph-truthy',
-		bindingId: resolved.binding.id,
+		graphNodeId: resolved.binding.id,
 		path: resolved.path,
 	};
 }

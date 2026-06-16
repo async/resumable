@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { applyDomJournalRecords, createBindingDomJournalRecord } from '../src/index.ts';
+import { applyDomJournalEntries, createDomUpdateEntry } from '../src/index.ts';
 
 type FakeElement = {
 	textContent: string;
@@ -31,7 +31,7 @@ test('runtime DOM journal applier mutates concrete text attribute and property t
 		['button:count', button],
 	]);
 
-	applyDomJournalRecords(
+	applyDomJournalEntries(
 		[
 			{ type: 'setText', locator: 'text:count', value: 1 },
 			{
@@ -65,7 +65,7 @@ test('runtime DOM journal applier removes nullish and false attributes', () => {
 	button.attributes.set('aria-busy', 'true');
 	const targets = new Map<string, unknown>([['button:count', button]]);
 
-	applyDomJournalRecords(
+	applyDomJournalEntries(
 		[
 			{ type: 'setAttr', locator: 'button:count', name: 'hidden', value: false },
 			{ type: 'setAttr', locator: 'button:count', name: 'aria-busy', value: null },
@@ -81,13 +81,13 @@ test('runtime DOM journal applier removes nullish and false attributes', () => {
 	expect(button.attributes.has('aria-busy')).toBe(false);
 });
 
-test('runtime DOM journal applier runs cleanup records in journal order', () => {
+test('runtime DOM journal applier runs cleanup entries in journal order', () => {
 	const statusText = { textContent: '' };
 	const cleanups: string[] = [];
 	const steps: string[] = [];
 	const targets = new Map<string, unknown>([['text:status', statusText]]);
 
-	applyDomJournalRecords(
+	applyDomJournalEntries(
 		[
 			{ type: 'setText', locator: 'text:status', value: 'pending' },
 			{ type: 'runCleanup', locator: 'behavior:menu' },
@@ -110,10 +110,10 @@ test('runtime DOM journal applier runs cleanup records in journal order', () => 
 	expect(steps).toEqual(['resolve:text:status', 'cleanup:behavior:menu', 'resolve:text:status']);
 });
 
-test('runtime DOM journal applier routes range records through host callbacks in journal order', () => {
+test('runtime DOM journal applier routes range entries through host callbacks in journal order', () => {
 	const steps: string[] = [];
 
-	applyDomJournalRecords(
+	applyDomJournalEntries(
 		[
 			{ type: 'insertRange', locator: 'anchor:items', fragment: ['first', 'second'] },
 			{ type: 'moveRange', locator: 'range:first', before: 'anchor:end' },
@@ -143,9 +143,9 @@ test('runtime DOM journal applier routes range records through host callbacks in
 	]);
 });
 
-test('createBindingDomJournalRecord maps binding targets to concrete DOM operations', () => {
+test('createDomUpdateEntry maps DOM update targets to concrete DOM operations', () => {
 	expect(
-		createBindingDomJournalRecord({
+		createDomUpdateEntry({
 			locator: 'text:count',
 			target: { kind: 'text' },
 			value: 7,
@@ -153,7 +153,7 @@ test('createBindingDomJournalRecord maps binding targets to concrete DOM operati
 	).toEqual({ type: 'setText', locator: 'text:count', value: 7 });
 
 	expect(
-		createBindingDomJournalRecord({
+		createDomUpdateEntry({
 			locator: 'button:title',
 			target: { kind: 'attribute', name: 'title' },
 			value: 'Open',
@@ -161,7 +161,7 @@ test('createBindingDomJournalRecord maps binding targets to concrete DOM operati
 	).toEqual({ type: 'setAttr', locator: 'button:title', name: 'title', value: 'Open' });
 
 	expect(
-		createBindingDomJournalRecord({
+		createDomUpdateEntry({
 			locator: 'input:value',
 			target: { kind: 'property', name: 'value' },
 			value: 'Menu',
@@ -169,7 +169,7 @@ test('createBindingDomJournalRecord maps binding targets to concrete DOM operati
 	).toEqual({ type: 'setProp', locator: 'input:value', name: 'value', value: 'Menu' });
 
 	expect(
-		createBindingDomJournalRecord({
+		createDomUpdateEntry({
 			locator: 'button:class',
 			target: { kind: 'class' },
 			value: 'is-active',
@@ -177,7 +177,7 @@ test('createBindingDomJournalRecord maps binding targets to concrete DOM operati
 	).toEqual({ type: 'setAttr', locator: 'button:class', name: 'class', value: 'is-active' });
 
 	expect(
-		createBindingDomJournalRecord({
+		createDomUpdateEntry({
 			locator: 'button:style',
 			target: { kind: 'style' },
 			value: 'color: red;',

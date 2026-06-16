@@ -144,7 +144,7 @@ test('compiler extracts sync preventDefault policy while keeping writes lazy', a
 				when: {
 					type: 'and',
 					conditions: [
-						{ type: 'graph-truthy', bindingId: 'state:menu', path: ['open'] },
+						{ type: 'graph-truthy', graphNodeId: 'state:menu', path: ['open'] },
 						{ type: 'event-equals', field: 'key', value: 'Escape' },
 					],
 				},
@@ -156,7 +156,7 @@ test('compiler extracts sync preventDefault policy while keeping writes lazy', a
 	expect(stateLowering.writes).toEqual([
 		{
 			source: 'menu.open',
-			bindingId: 'state:menu',
+			graphNodeId: 'state:menu',
 			path: ['open'],
 			operation: 'assign',
 			method: undefined,
@@ -170,7 +170,7 @@ test('compiler extracts sync preventDefault policy while keeping writes lazy', a
 				when: {
 					type: 'and',
 					conditions: [
-						{ type: 'graph-truthy', bindingId: 'state:menu', path: ['open'] },
+						{ type: 'graph-truthy', graphNodeId: 'state:menu', path: ['open'] },
 						{ type: 'event-equals', field: 'key', value: 'Escape' },
 					],
 				},
@@ -229,7 +229,7 @@ test('compiler preserves sync policy branches for handler arrays', async () => {
 				when: {
 					type: 'and',
 					conditions: [
-						{ type: 'graph-truthy', bindingId: 'state:menu', path: ['open'] },
+						{ type: 'graph-truthy', graphNodeId: 'state:menu', path: ['open'] },
 						{ type: 'event-equals', field: 'key', value: 'Escape' },
 					],
 				},
@@ -239,7 +239,7 @@ test('compiler preserves sync policy branches for handler arrays', async () => {
 				when: {
 					type: 'and',
 					conditions: [
-						{ type: 'graph-truthy', bindingId: 'state:menu', path: ['locked'] },
+						{ type: 'graph-truthy', graphNodeId: 'state:menu', path: ['locked'] },
 						{ type: 'event-equals', field: 'key', value: 'Enter' },
 					],
 				},
@@ -421,7 +421,7 @@ test('compiler extracts negated graph-state guards in sync event policy', async 
 					type: 'not',
 					condition: {
 						type: 'graph-truthy',
-						bindingId: 'state:menu',
+						graphNodeId: 'state:menu',
 						path: ['open'],
 					},
 				},

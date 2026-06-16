@@ -23,14 +23,14 @@ export function planSymbolResolver(input: SymbolResolverInput): SymbolResolverPl
 		}
 	}
 
-	for (const binding of input.payloadArena.view.bindings) {
+	for (const domUpdate of input.payloadArena.view.domUpdates) {
 		symbols.push({
 			id: `symbol:${nextSymbolId++}`,
-			kind: 'dom-binding',
-			hostNodeId: binding.hostNodeId,
-			source: binding.source,
-			bindingId: binding.bindingId,
-			target: binding.target,
+			kind: 'dom-update',
+			hostNodeId: domUpdate.hostNodeId,
+			source: domUpdate.source,
+			graphNodeId: domUpdate.graphNodeId,
+			target: domUpdate.target,
 		});
 	}
 
@@ -48,7 +48,7 @@ export function planSymbolResolver(input: SymbolResolverInput): SymbolResolverPl
 		symbols.push({
 			id: `symbol:${nextSymbolId++}`,
 			kind: 'async-computed-runner',
-			bindingId: computed.bindingId,
+			graphNodeId: computed.graphNodeId,
 			name: computed.name,
 		});
 	}

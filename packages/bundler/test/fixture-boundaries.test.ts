@@ -41,7 +41,7 @@ describe('fixture framework boundaries', () => {
 			expect(source).not.toContain('data-async-host');
 			expect(source).not.toContain('asyncHost');
 			expect(source).not.toContain('querySelectorAll');
-			expect(source).not.toContain('applyDomJournalRecords');
+			expect(source).not.toContain('applyDomJournalEntries');
 			expect(source).not.toContain('applyDomJournal');
 		}
 		expect(ssrEntry).toContain('resumeFromPayloadDocument');

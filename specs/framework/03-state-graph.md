@@ -56,7 +56,7 @@ session.status = "ready"; // invalidates only the `status` path
 
 A tree is a constrained graph: one root, parent/child ancestry, no arbitrary
 cross-edges. UI structure is usefully tree-shaped, but state dependencies are
-not. One state path may feed unrelated DOM bindings; one derived value may depend
+not. One state path may feed unrelated DOM updates; one derived value may depend
 on local state, shared request state, and another derived value; one event may
 write several paths. That is a general directed graph, not a component tree.
 
@@ -75,7 +75,7 @@ boundaries. In this framework, the boundary is the dataflow:
 
 ```txt
 where the graph instance lives
-which bindings read it
+which DOM updates read it
 which handlers write it
 where it must serialize
 where it must sync across runtimes
@@ -85,7 +85,7 @@ That distinction is core to marker-free resumability. Because the compiler owns
 the dataflow graph directly, authors do not mark lazy boundaries or manually
 construct state boundaries with providers; the graph itself is the resumable
 unit. Resuming means loading the symbol touched by an event, materializing its
-graph references, applying writes to graph nodes, and updating the DOM bindings
+graph references, applying writes to graph nodes, and running the DOM updates
 that actually depend on those paths.
 
 ### No effects, no tasks — by design, not omission
@@ -99,7 +99,7 @@ spaghetti (reacting to state you don't own). Removing it yields the framework's
 core invariant:
 
 > **The entire graph is demand-driven from the DOM.** State → computed →
-> bindings, where compiler-generated DOM bindings are the only effects in the
+> DOM updates, where compiler-generated DOM update symbols are the only effects in the
 > system. Nothing computes unless the screen needs it.
 
 The classic uses of effects each have a better home:
@@ -109,8 +109,8 @@ The classic uses of effects each have a better home:
 - _"When X changes, update Y"_ → an antipattern in every fine-grained system;
   with no render loop, every mutation originates at an identifiable site (an
   event handler), so co-locate the side work there as a plain function.
-- _Sync external targets_ (`document.title`, imperative DOM) → these are
-  bindings to targets the template can't express; solved at the template level,
+- _Sync external targets_ (`document.title`, imperative DOM) → these are DOM
+  updates to targets the template can't express; solved at the template level,
   not with lifecycle APIs.
 - _React to state you don't own_ → deliberately unsupported.
 - _Eager browser setup_ (third-party widgets, canvas init, observers) →
@@ -148,7 +148,7 @@ function UserRoute() @{
 Semantics:
 
 - `computed(async ({ signal }) => ...)` creates a lazy async graph node. It does
-  not run at creation; it runs only when demanded by a DOM binding or TSRX async
+  not run at creation; it runs only when demanded by a DOM update or TSRX async
   boundary.
 - Reactive reads before the first `await` form the dependency key for the async
   node. When that key changes, the runtime creates a new request version.
@@ -311,9 +311,9 @@ function Counter() @{
 ```
 
 The semantic graph records one graph binding (`count`), one event attribute
-(`onClick`), one update expression (`count++`), and one text binding read
-(`{count}`). The event symbol write lowers to `graph.update(countId, +1)`;
-the text binding lowers to `graph.read(countId)`.
+(`onClick`), one update expression (`count++`), and one text DOM update read
+(`{count}`). The event symbol write lowers to `graph.update({ graphNodeId:
+countId, ... })`; the text DOM update lowers to `graph.read(countId)`.
 
 For object state:
 
@@ -334,7 +334,7 @@ without treating the whole object as an opaque value.
 **Objects and collections.** `state(obj)` supports objects, arrays, `Map`, `Set`,
 and `Date` without a separate `store()` primitive or reactive collection
 subclasses. `user.profile.name = x` and `items.push(x)` are graph writes with
-path-level invalidation semantics, so a deep mutation updates only the bindings
+path-level invalidation semantics, so a deep mutation updates only the DOM updates
 that read that path.
 
 Object identity is part of the state graph contract. If two state paths point to
@@ -645,7 +645,7 @@ rendered widget. A second `<SelectRoot>` gets a different graph instance. No
 provider component, context ID, wrapper hook, or tree-shaped public API is
 introduced; the compiler/runtime records graph instance identity in the same
 render/resume metadata used for events, projection, keyed loops, and DOM
-bindings.
+updates.
 
 **Self-contained local widget state**
 

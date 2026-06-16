@@ -1,9 +1,9 @@
-import type { DomJournalRecord } from './graph.ts';
+import type { DomJournalEntry } from './graph.ts';
 import type { ProtocolViewPayload } from '@async/resumable-protocol';
 
-type InsertRangeRecord = Extract<DomJournalRecord, { readonly type: 'insertRange' }>;
-type RemoveRangeRecord = Extract<DomJournalRecord, { readonly type: 'removeRange' }>;
-type MoveRangeRecord = Extract<DomJournalRecord, { readonly type: 'moveRange' }>;
+type InsertRangeEntry = Extract<DomJournalEntry, { readonly type: 'insertRange' }>;
+type RemoveRangeEntry = Extract<DomJournalEntry, { readonly type: 'removeRange' }>;
+type MoveRangeEntry = Extract<DomJournalEntry, { readonly type: 'moveRange' }>;
 
 export type DomJournalApplyTarget = {
 	textContent?: string | null;
@@ -13,28 +13,28 @@ export type DomJournalApplyTarget = {
 };
 
 export type DomJournalApplyOptions = {
-	readonly resolveTarget: (locator: string, record: DomJournalRecord) => unknown;
-	readonly runCleanup?: (cleanupId: string, record: DomJournalRecord) => void;
+	readonly resolveTarget: (locator: string, entry: DomJournalEntry) => unknown;
+	readonly runCleanup?: (cleanupId: string, entry: DomJournalEntry) => void;
 	readonly insertRange?: (
 		anchorLocator: string,
 		fragment: unknown,
-		record: InsertRangeRecord,
+		entry: InsertRangeEntry,
 	) => void;
-	readonly removeRange?: (rangeLocator: string, record: RemoveRangeRecord) => void;
+	readonly removeRange?: (rangeLocator: string, entry: RemoveRangeEntry) => void;
 	readonly moveRange?: (
 		rangeLocator: string,
 		beforeLocator: string,
-		record: MoveRangeRecord,
+		entry: MoveRangeEntry,
 	) => void;
 };
 
-export type BindingDomJournalInput = {
+export type DomUpdateEntryInput = {
 	readonly locator: string;
-	readonly target: NonNullable<ProtocolViewPayload['bindings'][number]['target']>;
+	readonly target: NonNullable<ProtocolViewPayload['domUpdates'][number]['target']>;
 	readonly value: unknown;
 };
 
-export function createBindingDomJournalRecord(input: BindingDomJournalInput): DomJournalRecord {
+export function createDomUpdateEntry(input: DomUpdateEntryInput): DomJournalEntry {
 	if (input.target.kind === 'text') {
 		return {
 			type: 'setText',
@@ -78,50 +78,50 @@ export function createBindingDomJournalRecord(input: BindingDomJournalInput): Do
 	};
 }
 
-export function applyDomJournalRecords(
-	records: ReadonlyArray<DomJournalRecord>,
+export function applyDomJournalEntries(
+	entries: ReadonlyArray<DomJournalEntry>,
 	options: DomJournalApplyOptions,
 ): void {
-	for (const record of records) {
-		if (record.type === 'runCleanup') {
-			options.runCleanup?.(record.locator, record);
+	for (const entry of entries) {
+		if (entry.type === 'runCleanup') {
+			options.runCleanup?.(entry.locator, entry);
 			continue;
 		}
 
-		if (record.type === 'insertRange') {
-			options.insertRange?.(record.locator, record.fragment, record);
+		if (entry.type === 'insertRange') {
+			options.insertRange?.(entry.locator, entry.fragment, entry);
 			continue;
 		}
 
-		if (record.type === 'removeRange') {
-			options.removeRange?.(record.locator, record);
+		if (entry.type === 'removeRange') {
+			options.removeRange?.(entry.locator, entry);
 			continue;
 		}
 
-		if (record.type === 'moveRange') {
-			options.moveRange?.(record.locator, record.before, record);
+		if (entry.type === 'moveRange') {
+			options.moveRange?.(entry.locator, entry.before, entry);
 			continue;
 		}
 
-		const target = options.resolveTarget(record.locator, record);
+		const target = options.resolveTarget(entry.locator, entry);
 		if (!target) continue;
 
-		if (record.type === 'setText') {
-			setText(target, record.value);
+		if (entry.type === 'setText') {
+			setText(target, entry.value);
 			continue;
 		}
 
-		if (record.type === 'setAttr') {
-			setAttr(target, record.name, record.value);
+		if (entry.type === 'setAttr') {
+			setAttr(target, entry.name, entry.value);
 			continue;
 		}
 
-		if (record.type === 'setProp') {
-			setProp(target, record.name, record.value);
+		if (entry.type === 'setProp') {
+			setProp(target, entry.name, entry.value);
 			continue;
 		}
 
-		throw new TypeError(`Unsupported DOM journal record "${record.type}".`);
+		throw new TypeError(`Unsupported DOM journal entry "${entry.type}".`);
 	}
 }
 

@@ -71,7 +71,7 @@ describe('TSRX Rolldown plugin structure', () => {
 		);
 		expect(result.manifest.symbols).toContainEqual(
 			expect.objectContaining({
-				kind: 'dom-binding',
+				kind: 'dom-update',
 				virtualModuleId: expect.stringContaining('virtual:async-resumable:symbol:'),
 			}),
 		);
@@ -105,7 +105,7 @@ describe('TSRX Rolldown plugin structure', () => {
 		expect(symbolSources).toEqual(
 			expect.arrayContaining([
 				expect.stringContaining('context.graph.update({'),
-				expect.stringContaining('createBindingDomJournalRecord'),
+				expect.stringContaining('createDomUpdateEntry'),
 			]),
 		);
 	});

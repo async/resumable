@@ -79,11 +79,11 @@ test('createProtocolViewPayload links payload arena records to lazy symbol IDs',
 			}),
 		]),
 	);
-	expect(view.bindings).toEqual([
+	expect(view.domUpdates).toEqual([
 		{
 			hostNodeId: 'h2',
 			source: 'count',
-			bindingId: 'state:count',
+			graphNodeId: 'state:count',
 			path: [],
 			target: {
 				kind: 'text',
@@ -122,7 +122,7 @@ test('createProtocolViewPayload links async boundary reads to runner symbols', a
 			asyncReads: [
 				{
 					source: 'details.title',
-					bindingId: 'computed:details',
+					graphNodeId: 'computed:details',
 					path: ['title'],
 					runnerSymbolId: 'symbol:1',
 				},
@@ -150,11 +150,11 @@ export function App() @{
 
 	const view = createProtocolViewPayload({ payloadArena, symbolResolver });
 
-	expect(view.bindings).toEqual([
+	expect(view.domUpdates).toEqual([
 		{
 			hostNodeId: 'h0',
 			source: 'count',
-			bindingId: 'state:count',
+			graphNodeId: 'state:count',
 			path: [],
 			target: {
 				kind: 'attribute',
@@ -165,7 +165,7 @@ export function App() @{
 		{
 			hostNodeId: 'h0',
 			source: 'count',
-			bindingId: 'state:count',
+			graphNodeId: 'state:count',
 			path: [],
 			target: {
 				kind: 'text',

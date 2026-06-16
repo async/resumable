@@ -3,7 +3,7 @@ import { serializeGraphValue, type SerializationDiagnostic } from './value.ts';
 
 export type ProtocolStatePayloadInput = {
 	readonly cells: ReadonlyArray<{
-		readonly bindingId: string;
+		readonly graphNodeId: string;
 		readonly name: string;
 		readonly valueKind: 'scalar' | 'object' | 'array' | 'unknown';
 		readonly value: unknown;
@@ -12,7 +12,7 @@ export type ProtocolStatePayloadInput = {
 };
 
 export type ProtocolStateSerializationDiagnostic = SerializationDiagnostic & {
-	readonly bindingId: string;
+	readonly graphNodeId: string;
 	readonly cellName: string;
 };
 
@@ -30,7 +30,7 @@ export class ProtocolStateSerializationError
 	readonly why: SerializationDiagnostic['why'];
 	readonly suggestions: SerializationDiagnostic['suggestions'];
 	readonly docsUrl: SerializationDiagnostic['docsUrl'];
-	readonly bindingId: string;
+	readonly graphNodeId: string;
 	readonly cellName: string;
 
 	constructor(diagnostic: ProtocolStateSerializationDiagnostic) {
@@ -46,7 +46,7 @@ export class ProtocolStateSerializationError
 		this.why = diagnostic.why;
 		this.suggestions = diagnostic.suggestions;
 		this.docsUrl = diagnostic.docsUrl;
-		this.bindingId = diagnostic.bindingId;
+		this.graphNodeId = diagnostic.graphNodeId;
 		this.cellName = diagnostic.cellName;
 	}
 }
@@ -61,7 +61,7 @@ export function createProtocolStatePayload(input: ProtocolStatePayloadInput): Pr
 			}
 
 			return {
-				bindingId: cell.bindingId,
+				graphNodeId: cell.graphNodeId,
 				name: cell.name,
 				valueKind: cell.valueKind,
 				value: result.payload,
@@ -75,7 +75,7 @@ function protocolStateSerializationError(
 	cell: ProtocolStatePayloadInput['cells'][number],
 	diagnostic: SerializationDiagnostic | undefined,
 ): ProtocolStateSerializationError {
-	const cellPrefix = cell.name === '' ? cell.bindingId : cell.name;
+	const cellPrefix = cell.name === '' ? cell.graphNodeId : cell.name;
 	const base = diagnostic ?? {
 		code: 'AA_SERIALIZE_UNSUPPORTED_VALUE' as const,
 		severity: 'error' as const,
@@ -98,7 +98,7 @@ function protocolStateSerializationError(
 
 	return new ProtocolStateSerializationError({
 		...base,
-		bindingId: cell.bindingId,
+		graphNodeId: cell.graphNodeId,
 		cellName: cell.name,
 		statePath,
 		message: `Cannot serialize value at ${statePath} because ${base.valueKind} values are not durable graph state.`,

@@ -30,7 +30,7 @@ test('resume runtime loads element behaviors and runs cleanup on host disposal',
 				{ hostNodeId: 'h1', strategy: 'dom-order', index: 1, tagName: 'canvas' },
 			],
 			events: [],
-			bindings: [],
+			domUpdates: [],
 			behaviors: [
 				{ hostNodeId: 'h1', source: 'chart(config)', symbolId: 'symbol:chart' },
 				{ hostNodeId: 'h1', source: 'resizeCanvas', symbolId: 'symbol:resize' },

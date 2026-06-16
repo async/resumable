@@ -68,11 +68,11 @@ The initial render phase emits, alongside the HTML:
 3. **Shared instances** — shared definition IDs, request/container/page scope,
    version counters, and the plain state snapshot for each touched shared
    instance. Methods/actions are never serialized.
-4. **Subscription graph** — which symbol (binding, computed, async dependency
-   key) depends on which state path.
+4. **Subscription graph** — which symbol (DOM update, computed, async
+   dependency key) depends on which state path.
 5. **Wiring** — DOM element → event → optional sync event policy plus ordered
-   symbol list for listeners, and DOM element → binding-symbol map for dynamic
-   text/attributes/async boundaries.
+   symbol list for listeners, and DOM element → DOM update-symbol map for
+   dynamic text/attributes/async boundaries.
 6. **Element handles** — `element()` handle IDs mapped to DOM locators emitted by
    `el={handle}` bindings. The payload identifies where the element is; it never
    serializes the element object itself.
@@ -92,8 +92,8 @@ Payloads are specified as logical arenas, not as public object-shaped JSON:
 1. **State arena** — graph cells, typed roots, object/collection/class refs,
    async snapshots, shared snapshots, constants, backrefs, and forward refs.
 2. **View/wiring arena** — DOM locator stream, listener symbol IDs, sync event
-   policies, binding records, element handle locators, async boundary anchors,
-   and `use={...}` host metadata.
+   policies, DOM update records, element handle locators, async boundary
+   anchors, and `use={...}` host metadata.
 
 Production payloads should encode all arena data into compact private data
 scripts, rather than relying on verbose JSON objects or scattered per-node
@@ -137,7 +137,7 @@ async/view locator stream
 The resumer stores the result in internal side tables such as:
 
 ```ts
-WeakMap<Element, EventRecord | BindingRecord | BehaviorRecord>;
+WeakMap<Element, EventRecord | DomUpdateRecord | BehaviorRecord>;
 Map<number, Comment>;
 ```
 
@@ -155,5 +155,5 @@ directly.
 Development output must remain debuggable. Dev mode may emit a more readable
 encoding, but production compactness remains the contract. The runtime and tools
 must provide a decoded human-readable dump of the private payload so authors can
-inspect why state, listeners, sync policies, bindings, or element behaviors were
-included.
+inspect why state, listeners, sync policies, DOM updates, or element behaviors
+were included.

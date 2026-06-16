@@ -28,7 +28,7 @@ export type SemanticGraphBinding = {
 
 export type SemanticGraphDependency = {
 	readonly source: string;
-	readonly bindingId: string;
+	readonly graphNodeId: string;
 	readonly path: ReadonlyArray<string>;
 };
 
@@ -52,7 +52,7 @@ export type SemanticSyncPolicyCondition =
 	  }
 	| {
 			readonly type: 'graph-truthy';
-			readonly bindingId: string;
+			readonly graphNodeId: string;
 			readonly path: ReadonlyArray<string>;
 	  }
 	| {
@@ -211,13 +211,13 @@ export type StateLoweringDiagnostic = CompilerDiagnostic & {
 
 export type LoweredStateRead = {
 	readonly source: string;
-	readonly bindingId: string;
+	readonly graphNodeId: string;
 	readonly path: ReadonlyArray<string>;
 };
 
 export type LoweredStateWrite = {
 	readonly source: string;
-	readonly bindingId: string;
+	readonly graphNodeId: string;
 	readonly path: ReadonlyArray<string>;
 	readonly operation: SemanticStateWrite['operation'];
 	readonly assignmentOperator?: string;
@@ -253,7 +253,7 @@ export type PayloadAsyncBoundary = {
 	};
 	readonly asyncReads: ReadonlyArray<{
 		readonly source: string;
-		readonly bindingId: string;
+		readonly graphNodeId: string;
 		readonly path: ReadonlyArray<string>;
 	}>;
 };
@@ -262,12 +262,12 @@ export type PayloadArenaArtifact = {
 	readonly passId: 'payload-arena';
 	readonly state: {
 		readonly cells: ReadonlyArray<{
-			readonly bindingId: string;
+			readonly graphNodeId: string;
 			readonly name: string;
 			readonly valueKind: SemanticGraphBinding['valueKind'];
 		}>;
 		readonly computed: ReadonlyArray<{
-			readonly bindingId: string;
+			readonly graphNodeId: string;
 			readonly name: string;
 			readonly async: boolean;
 		}>;
@@ -280,10 +280,10 @@ export type PayloadArenaArtifact = {
 			readonly tagName: string;
 		}>;
 		readonly events: SemanticGraphArtifact['events'];
-		readonly bindings: ReadonlyArray<{
+		readonly domUpdates: ReadonlyArray<{
 			readonly hostNodeId: string;
 			readonly source: string;
-			readonly bindingId: string;
+			readonly graphNodeId: string;
 			readonly path: ReadonlyArray<string>;
 			readonly target: SemanticTemplateBindingTarget;
 		}>;
@@ -316,11 +316,11 @@ export type PlannedSymbol =
 	  }
 	| {
 			readonly id: string;
-			readonly kind: 'dom-binding';
+			readonly kind: 'dom-update';
 			readonly hostNodeId: string;
 			readonly source: string;
-			readonly bindingId: string;
-			readonly target: PayloadArenaArtifact['view']['bindings'][number]['target'];
+			readonly graphNodeId: string;
+			readonly target: PayloadArenaArtifact['view']['domUpdates'][number]['target'];
 	  }
 	| {
 			readonly id: string;
@@ -332,7 +332,7 @@ export type PlannedSymbol =
 	| {
 			readonly id: string;
 			readonly kind: 'async-computed-runner';
-			readonly bindingId: string;
+			readonly graphNodeId: string;
 			readonly name: string;
 	  };
 

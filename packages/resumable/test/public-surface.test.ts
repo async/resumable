@@ -8,7 +8,7 @@ import {
 	shared,
 	state,
 } from '../src/index.ts';
-import { createBindingDomJournalRecord } from '../src/runtime.ts';
+import { createDomUpdateEntry } from '../src/runtime.ts';
 import { resumable as viteResumable } from '../src/vite.ts';
 
 test('main package exposes the curated author and build surface', () => {
@@ -18,7 +18,7 @@ test('main package exposes the curated author and build surface', () => {
 	expect(typeof shared).toBe('function');
 	expect(typeof resumeFromPayloadDocument).toBe('function');
 	expect(typeof resumeFromPayloadScripts).toBe('function');
-	expect(typeof createBindingDomJournalRecord).toBe('function');
+	expect(typeof createDomUpdateEntry).toBe('function');
 	expect(typeof resumableClient).toBe('function');
 	expect(typeof viteResumable).toBe('function');
 });

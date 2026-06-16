@@ -15,7 +15,7 @@ export type ProtocolSyncPolicyCondition =
 	  }
 	| {
 			readonly type: 'graph-truthy';
-			readonly bindingId: string;
+			readonly graphNodeId: string;
 			readonly path?: ReadonlyArray<string>;
 	  }
 	| {
@@ -42,13 +42,13 @@ export type ProtocolSyncPolicy =
 export type ProtocolStatePayload = {
 	readonly version: typeof ASYNC_PROTOCOL_VERSION;
 	readonly cells: ReadonlyArray<{
-		readonly bindingId: string;
+		readonly graphNodeId: string;
 		readonly name: string;
 		readonly valueKind: 'scalar' | 'object' | 'array' | 'unknown';
 		readonly value?: unknown;
 	}>;
 	readonly computed: ReadonlyArray<{
-		readonly bindingId: string;
+		readonly graphNodeId: string;
 		readonly name: string;
 		readonly async: boolean;
 	}>;
@@ -68,10 +68,10 @@ export type ProtocolViewPayload = {
 		readonly syncPolicy?: ProtocolSyncPolicy;
 		readonly symbolIds: ReadonlyArray<string>;
 	}>;
-	readonly bindings: ReadonlyArray<{
+	readonly domUpdates: ReadonlyArray<{
 		readonly hostNodeId: string;
 		readonly source: string;
-		readonly bindingId: string;
+		readonly graphNodeId: string;
 		readonly path: ReadonlyArray<string>;
 		readonly target?:
 			| {
@@ -115,7 +115,7 @@ export type ProtocolViewPayload = {
 		};
 		readonly asyncReads: ReadonlyArray<{
 			readonly source: string;
-			readonly bindingId: string;
+			readonly graphNodeId: string;
 			readonly path: ReadonlyArray<string>;
 			readonly runnerSymbolId?: string;
 		}>;

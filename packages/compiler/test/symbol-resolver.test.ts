@@ -60,7 +60,7 @@ test('planSymbolResolver assigns lazy symbols while resolver owns import boundar
 				source: '() => count++',
 				writes: [
 					expect.objectContaining({
-						bindingId: 'state:count',
+						graphNodeId: 'state:count',
 						operation: 'update',
 						updateOperator: '++',
 					}),
@@ -72,14 +72,14 @@ test('planSymbolResolver assigns lazy symbols while resolver owns import boundar
 				order: 1,
 				source: "() => query = 'clicked'",
 			}),
-			expect.objectContaining({ kind: 'dom-binding', source: 'query' }),
-			expect.objectContaining({ kind: 'dom-binding', source: 'count' }),
-			expect.objectContaining({ kind: 'dom-binding', source: 'result.title' }),
+			expect.objectContaining({ kind: 'dom-update', source: 'query' }),
+			expect.objectContaining({ kind: 'dom-update', source: 'count' }),
+			expect.objectContaining({ kind: 'dom-update', source: 'result.title' }),
 			expect.objectContaining({ kind: 'behavior', source: 'chart(result)' }),
 			expect.objectContaining({ kind: 'behavior', source: 'resizeCanvas' }),
 			expect.objectContaining({
 				kind: 'async-computed-runner',
-				bindingId: 'computed:result',
+				graphNodeId: 'computed:result',
 			}),
 		]),
 	);

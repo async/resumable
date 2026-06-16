@@ -6,7 +6,7 @@ test('createProtocolStatePayload preserves structured serialization diagnostics 
 		createProtocolStatePayload({
 			cells: [
 				{
-					bindingId: 'state:session',
+					graphNodeId: 'state:session',
 					name: 'session',
 					valueKind: 'object',
 					value: {
@@ -23,7 +23,7 @@ test('createProtocolStatePayload preserves structured serialization diagnostics 
 		severity: 'error',
 		phase: 'serialization',
 		title: 'Cannot serialize graph state value',
-		bindingId: 'state:session',
+		graphNodeId: 'state:session',
 		cellName: 'session',
 		path: ['socket'],
 		statePath: 'session.socket',

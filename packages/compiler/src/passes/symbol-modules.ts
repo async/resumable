@@ -26,7 +26,7 @@ function emitSymbolModule(symbol: PlannedSymbol): GeneratedSymbolModule[] {
 		];
 	}
 
-	if (symbol.kind !== 'dom-binding') return [];
+	if (symbol.kind !== 'dom-update') return [];
 
 	return [
 		{
@@ -59,7 +59,7 @@ function emitEventWrite(write: LoweredStateWrite): string[] {
 		const operator = write.updateOperator;
 		return [
 			'	context.graph.update({',
-			`		bindingId: ${JSON.stringify(write.bindingId)},`,
+			`		graphNodeId: ${JSON.stringify(write.graphNodeId)},`,
 			`		path: ${JSON.stringify(write.path)},`,
 			'		returnValue: "next",',
 			'		update(value) {',
@@ -73,17 +73,17 @@ function emitEventWrite(write: LoweredStateWrite): string[] {
 }
 
 function emitDomBindingModule(
-	symbol: Extract<PlannedSymbol, { readonly kind: 'dom-binding' }>,
+	symbol: Extract<PlannedSymbol, { readonly kind: 'dom-update' }>,
 ): string {
 	const exportName = symbolExportName(symbol.id);
 
 	return [
-		"import { createBindingDomJournalRecord } from '@async/resumable/runtime';",
+		"import { createDomUpdateEntry } from '@async/resumable/runtime';",
 		'',
 		`export function ${exportName}(context) {`,
-		'	return createBindingDomJournalRecord({',
-		`		locator: context.binding?.hostNodeId ?? ${JSON.stringify(symbol.hostNodeId)},`,
-		`		target: context.binding?.target ?? ${JSON.stringify(symbol.target)},`,
+		'	return createDomUpdateEntry({',
+		`		locator: context.domUpdate?.hostNodeId ?? ${JSON.stringify(symbol.hostNodeId)},`,
+		`		target: context.domUpdate?.target ?? ${JSON.stringify(symbol.target)},`,
 		'		value: context.value,',
 		'	});',
 		'}',

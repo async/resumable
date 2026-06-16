@@ -1,9 +1,9 @@
 export {
-	applyDomJournalRecords,
-	createBindingDomJournalRecord,
+	applyDomJournalEntries,
+	createDomUpdateEntry,
 	resumeFromPayloadDocument,
 	resumeFromPayloadScripts,
-	type BindingDomJournalInput,
+	type DomUpdateEntryInput,
 	type DomJournalApplyOptions,
 	type DomJournalApplyTarget,
 	type ResumePayloadDocumentInput,

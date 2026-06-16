@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest';
 import {
-	createBindingDomJournalRecord,
+	createDomUpdateEntry,
 	createResumeRuntime,
 	createRuntimeGraph,
 } from '../src/index.ts';
@@ -19,11 +19,11 @@ function element(tagName: string, childNodes: FakeElement[] = []): FakeElement {
 	};
 }
 
-test('resume runtime registers async view bindings as graph subscriptions', async () => {
+test('resume runtime registers async view DOM updates as graph subscriptions', async () => {
 	const button = element('BUTTON');
 	const root = element('SECTION', [button]);
 	const graph = createRuntimeGraph({
-		cells: [{ bindingId: 'state:count', value: 0 }],
+		cells: [{ graphNodeId: 'state:count', value: 0 }],
 	});
 	const loadedSymbols: string[] = [];
 
@@ -36,13 +36,13 @@ test('resume runtime registers async view bindings as graph subscriptions', asyn
 				{ hostNodeId: 'h1', strategy: 'dom-order', index: 1, tagName: 'button' },
 			],
 			events: [],
-			bindings: [
+			domUpdates: [
 				{
 					hostNodeId: 'h1',
 					source: 'count',
-					bindingId: 'state:count',
+					graphNodeId: 'state:count',
 					path: [],
-					symbolId: 'symbol:binding',
+					symbolId: 'symbol:domUpdate',
 				},
 			],
 			behaviors: [],
@@ -59,20 +59,20 @@ test('resume runtime registers async view bindings as graph subscriptions', asyn
 		},
 	}).start();
 
-	graph.write({ bindingId: 'state:count', value: 1 });
+	graph.write({ graphNodeId: 'state:count', value: 1 });
 	await graph.flush();
 
-	expect(loadedSymbols).toEqual(['symbol:binding']);
+	expect(loadedSymbols).toEqual(['symbol:domUpdate']);
 	expect(graph.takeJournal()).toEqual([{ type: 'setText', locator: 'button:text', value: 1 }]);
 });
 
-test('resume runtime applies DOM journal records after scheduled graph flushes', async () => {
+test('resume runtime applies DOM journal entries after scheduled graph flushes', async () => {
 	const button = element('BUTTON');
 	const root = element('SECTION', [button]);
 	const graph = createRuntimeGraph({
-		cells: [{ bindingId: 'state:count', value: 0 }],
+		cells: [{ graphNodeId: 'state:count', value: 0 }],
 	});
-	const appliedRecords: unknown[] = [];
+	const appliedEntries: unknown[] = [];
 
 	await createResumeRuntime({
 		root,
@@ -83,13 +83,13 @@ test('resume runtime applies DOM journal records after scheduled graph flushes',
 				{ hostNodeId: 'h1', strategy: 'dom-order', index: 1, tagName: 'button' },
 			],
 			events: [],
-			bindings: [
+			domUpdates: [
 				{
 					hostNodeId: 'h1',
 					source: 'count',
-					bindingId: 'state:count',
+					graphNodeId: 'state:count',
 					path: [],
-					symbolId: 'symbol:binding',
+					symbolId: 'symbol:domUpdate',
 				},
 			],
 			behaviors: [],
@@ -103,26 +103,26 @@ test('resume runtime applies DOM journal records after scheduled graph flushes',
 				value: runtimeGraph.read('state:count'),
 			});
 		},
-		applyDomJournal(records) {
-			appliedRecords.push(...records);
+		applyDomJournal(entries) {
+			appliedEntries.push(...entries);
 		},
 	}).start();
 
-	graph.write({ bindingId: 'state:count', value: 1 });
+	graph.write({ graphNodeId: 'state:count', value: 1 });
 	await drainMicrotasks();
 
-	expect(appliedRecords).toEqual([{ type: 'setText', locator: 'button:text', value: 1 }]);
+	expect(appliedEntries).toEqual([{ type: 'setText', locator: 'button:text', value: 1 }]);
 	expect(graph.takeJournal()).toEqual([]);
 });
 
-test('resume runtime passes binding value and target metadata to lazy binding symbols', async () => {
+test('resume runtime passes DOM update value and target metadata to lazy DOM update symbols', async () => {
 	const input = element('INPUT');
 	const root = element('SECTION', [input]);
 	const graph = createRuntimeGraph({
-		cells: [{ bindingId: 'state:query', value: '' }],
+		cells: [{ graphNodeId: 'state:query', value: '' }],
 	});
-	const appliedRecords: unknown[] = [];
-	const bindingContexts: unknown[] = [];
+	const appliedEntries: unknown[] = [];
+	const domUpdateContexts: unknown[] = [];
 
 	await createResumeRuntime({
 		root,
@@ -133,14 +133,14 @@ test('resume runtime passes binding value and target metadata to lazy binding sy
 				{ hostNodeId: 'h1', strategy: 'dom-order', index: 1, tagName: 'input' },
 			],
 			events: [],
-			bindings: [
+			domUpdates: [
 				{
 					hostNodeId: 'h1',
 					source: 'query',
-					bindingId: 'state:query',
+					graphNodeId: 'state:query',
 					path: [],
 					target: { kind: 'property', name: 'value' },
-					symbolId: 'symbol:binding',
+					symbolId: 'symbol:domUpdate',
 				},
 			],
 			behaviors: [],
@@ -149,42 +149,42 @@ test('resume runtime passes binding value and target metadata to lazy binding sy
 		},
 		loadSymbol() {
 			return (context) => {
-				bindingContexts.push({
+				domUpdateContexts.push({
 					value: context.value,
-					binding: context.binding,
+					domUpdate: context.domUpdate,
 					elementTagName: context.element.tagName,
 				});
 
-				return createBindingDomJournalRecord({
+				return createDomUpdateEntry({
 					locator: 'input:value',
-					target: context.binding!.target!,
+					target: context.domUpdate!.target!,
 					value: context.value,
 				});
 			};
 		},
-		applyDomJournal(records) {
-			appliedRecords.push(...records);
+		applyDomJournal(entries) {
+			appliedEntries.push(...entries);
 		},
 	}).start();
 
-	graph.write({ bindingId: 'state:query', value: 'Search' });
+	graph.write({ graphNodeId: 'state:query', value: 'Search' });
 	await graph.flush();
 
-	expect(bindingContexts).toEqual([
+	expect(domUpdateContexts).toEqual([
 		{
 			value: 'Search',
-			binding: {
+			domUpdate: {
 				hostNodeId: 'h1',
 				source: 'query',
-				bindingId: 'state:query',
+				graphNodeId: 'state:query',
 				path: [],
 				target: { kind: 'property', name: 'value' },
-				symbolId: 'symbol:binding',
+				symbolId: 'symbol:domUpdate',
 			},
 			elementTagName: 'INPUT',
 		},
 	]);
-	expect(appliedRecords).toEqual([
+	expect(appliedEntries).toEqual([
 		{ type: 'setProp', locator: 'input:value', name: 'value', value: 'Search' },
 	]);
 	expect(graph.takeJournal()).toEqual([]);

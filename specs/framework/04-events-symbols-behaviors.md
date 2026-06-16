@@ -244,7 +244,7 @@ export function loadSymbol(id: number) {
 		case 7:
 			return import('/assets/menu.handlers.ab12.js').then((mod) => mod.onKeyDown_7);
 		case 8:
-			return import('/assets/menu.bindings.cd34.js').then((mod) => mod.textBinding_8);
+			return import('/assets/menu.domUpdates.cd34.js').then((mod) => mod.textBinding_8);
 		default:
 			return Promise.reject(new Error(`Unknown async symbol ${id}`));
 	}
@@ -256,7 +256,7 @@ build artifact. The browser receives only the resolver/table needed for
 the current build or page, plus enough build/protocol identity to fail closed if
 `async/view` references a symbol the resolver does not know.
 
-The same resolver path is used for event handlers, DOM binding symbols,
+The same resolver path is used for event handlers, DOM update symbols,
 `use={...}` behavior symbols, async computed run functions, and other lazy
 runtime behavior. Captures are materialized by the runtime from graph references,
 serializable constants, props/shared references, and element locators; they are

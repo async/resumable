@@ -15,7 +15,7 @@ test('protocol payloads share the current async protocol version', () => {
 		version: ASYNC_PROTOCOL_VERSION,
 		locators: [],
 		events: [],
-		bindings: [],
+		domUpdates: [],
 		behaviors: [],
 		elementHandles: [],
 		asyncBoundaries: [],

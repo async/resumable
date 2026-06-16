@@ -53,7 +53,7 @@ test('analyzeCaptures records extracted symbol sources without re-walking source
 				source: 'chart(menu)',
 			}),
 			expect.objectContaining({
-				kind: 'dom-binding',
+				kind: 'dom-update',
 				source: 'count',
 			}),
 		]),

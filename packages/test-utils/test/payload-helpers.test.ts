@@ -42,8 +42,8 @@ test('summarizeProtocolPayload counts protocol records for fixture assertions', 
 		summarizeProtocolPayload({
 			state: {
 				version: 1,
-				cells: [{ bindingId: 'state:count', name: 'count', valueKind: 'scalar', value: 1 }],
-				computed: [{ bindingId: 'computed:label', name: 'label', async: false }],
+				cells: [{ graphNodeId: 'state:count', name: 'count', valueKind: 'scalar', value: 1 }],
+				computed: [{ graphNodeId: 'computed:label', name: 'label', async: false }],
 			},
 			view: {
 				version: 1,
@@ -51,13 +51,13 @@ test('summarizeProtocolPayload counts protocol records for fixture assertions', 
 					{ hostNodeId: 'h0', strategy: 'dom-order', index: 0, tagName: 'button' },
 				],
 				events: [{ hostNodeId: 'h0', eventName: 'click', symbolIds: ['symbol:click'] }],
-				bindings: [
+				domUpdates: [
 					{
 						hostNodeId: 'h0',
 						source: 'count',
-						bindingId: 'state:count',
+						graphNodeId: 'state:count',
 						path: [],
-						symbolId: 'symbol:binding',
+						symbolId: 'symbol:domUpdate',
 					},
 				],
 				behaviors: [{ hostNodeId: 'h0', source: 'buttonBehavior', symbolId: 'symbol:use' }],
@@ -70,7 +70,7 @@ test('summarizeProtocolPayload counts protocol records for fixture assertions', 
 						asyncReads: [
 							{
 								source: 'profile',
-								bindingId: 'computed:profile',
+								graphNodeId: 'computed:profile',
 								path: [],
 								runnerSymbolId: 'symbol:profile',
 							},
@@ -84,7 +84,7 @@ test('summarizeProtocolPayload counts protocol records for fixture assertions', 
 		computed: 1,
 		locators: 1,
 		events: 1,
-		bindings: 1,
+		domUpdates: 1,
 		behaviors: 1,
 		elementHandles: 1,
 		asyncBoundaries: 1,
@@ -93,28 +93,28 @@ test('summarizeProtocolPayload counts protocol records for fixture assertions', 
 
 test('decodePayloadScriptPair parses canonical scripts for fixture assertions', () => {
 	const stateScript =
-		'<script type="async/state">{"version":1,"cells":[{"bindingId":"state:count","name":"count","valueKind":"scalar","value":1}],"computed":[{"bindingId":"computed:label","name":"label","async":false}]}</script>';
+		'<script type="async/state">{"version":1,"cells":[{"graphNodeId":"state:count","name":"count","valueKind":"scalar","value":1}],"computed":[{"graphNodeId":"computed:label","name":"label","async":false}]}</script>';
 	const viewScript =
-		'<script type="async/view">{"version":1,"locators":[{"hostNodeId":"h0","strategy":"dom-order","index":0,"tagName":"button"}],"events":[{"hostNodeId":"h0","eventName":"click","symbolIds":["symbol:click"]}],"bindings":[{"hostNodeId":"h0","source":"count","bindingId":"state:count","path":[],"target":{"kind":"text"},"symbolId":"symbol:binding"}],"behaviors":[{"hostNodeId":"h0","source":"buttonBehavior","symbolId":"symbol:use"}],"elementHandles":[{"hostNodeId":"h0","handleId":"element:button","name":"button"}],"asyncBoundaries":[{"id":"boundary:profile","startAnchor":{"strategy":"dom-order-comment","index":0},"endAnchor":{"strategy":"dom-order-comment","index":1},"asyncReads":[{"source":"profile","bindingId":"computed:profile","path":[],"runnerSymbolId":"symbol:profile"}]}]}</script>';
+		'<script type="async/view">{"version":1,"locators":[{"hostNodeId":"h0","strategy":"dom-order","index":0,"tagName":"button"}],"events":[{"hostNodeId":"h0","eventName":"click","symbolIds":["symbol:click"]}],"domUpdates":[{"hostNodeId":"h0","source":"count","graphNodeId":"state:count","path":[],"target":{"kind":"text"},"symbolId":"symbol:domUpdate"}],"behaviors":[{"hostNodeId":"h0","source":"buttonBehavior","symbolId":"symbol:use"}],"elementHandles":[{"hostNodeId":"h0","handleId":"element:button","name":"button"}],"asyncBoundaries":[{"id":"boundary:profile","startAnchor":{"strategy":"dom-order-comment","index":0},"endAnchor":{"strategy":"dom-order-comment","index":1},"asyncReads":[{"source":"profile","graphNodeId":"computed:profile","path":[],"runnerSymbolId":"symbol:profile"}]}]}</script>';
 
 	expect(decodePayloadScriptPair({ stateScript, viewScript })).toEqual({
 		state: {
 			version: 1,
-			cells: [{ bindingId: 'state:count', name: 'count', valueKind: 'scalar', value: 1 }],
-			computed: [{ bindingId: 'computed:label', name: 'label', async: false }],
+			cells: [{ graphNodeId: 'state:count', name: 'count', valueKind: 'scalar', value: 1 }],
+			computed: [{ graphNodeId: 'computed:label', name: 'label', async: false }],
 		},
 		view: {
 			version: 1,
 			locators: [{ hostNodeId: 'h0', strategy: 'dom-order', index: 0, tagName: 'button' }],
 			events: [{ hostNodeId: 'h0', eventName: 'click', symbolIds: ['symbol:click'] }],
-			bindings: [
+			domUpdates: [
 				{
 					hostNodeId: 'h0',
 					source: 'count',
-					bindingId: 'state:count',
+					graphNodeId: 'state:count',
 					path: [],
 					target: { kind: 'text' },
-					symbolId: 'symbol:binding',
+					symbolId: 'symbol:domUpdate',
 				},
 			],
 			behaviors: [{ hostNodeId: 'h0', source: 'buttonBehavior', symbolId: 'symbol:use' }],
@@ -127,7 +127,7 @@ test('decodePayloadScriptPair parses canonical scripts for fixture assertions', 
 					asyncReads: [
 						{
 							source: 'profile',
-							bindingId: 'computed:profile',
+							graphNodeId: 'computed:profile',
 							path: [],
 							runnerSymbolId: 'symbol:profile',
 						},
@@ -142,7 +142,7 @@ test('decodePayloadScriptPair parses canonical scripts for fixture assertions', 
 		computed: 1,
 		locators: 1,
 		events: 1,
-		bindings: 1,
+		domUpdates: 1,
 		behaviors: 1,
 		elementHandles: 1,
 		asyncBoundaries: 1,
@@ -151,9 +151,9 @@ test('decodePayloadScriptPair parses canonical scripts for fixture assertions', 
 
 test('createPayloadDebugDump returns a human-readable decoded payload shape', () => {
 	const stateScript =
-		'<script type="async/state">{"version":1,"cells":[{"bindingId":"state:count","name":"count","valueKind":"scalar","value":1}],"computed":[{"bindingId":"computed:label","name":"label","async":false}]}</script>';
+		'<script type="async/state">{"version":1,"cells":[{"graphNodeId":"state:count","name":"count","valueKind":"scalar","value":1}],"computed":[{"graphNodeId":"computed:label","name":"label","async":false}]}</script>';
 	const viewScript =
-		'<script type="async/view">{"version":1,"locators":[{"hostNodeId":"h0","strategy":"dom-order","index":0,"tagName":"button"}],"events":[{"hostNodeId":"h0","eventName":"click","symbolIds":["symbol:click"]}],"bindings":[{"hostNodeId":"h0","source":"count","bindingId":"state:count","path":[],"target":{"kind":"text"},"symbolId":"symbol:binding"}],"behaviors":[{"hostNodeId":"h0","source":"buttonBehavior","symbolId":"symbol:use"}],"elementHandles":[{"hostNodeId":"h0","handleId":"element:button","name":"button"}],"asyncBoundaries":[{"id":"boundary:profile","startAnchor":{"strategy":"dom-order-comment","index":0},"endAnchor":{"strategy":"dom-order-comment","index":1},"asyncReads":[{"source":"profile","bindingId":"computed:profile","path":[],"runnerSymbolId":"symbol:profile"}]}]}</script>';
+		'<script type="async/view">{"version":1,"locators":[{"hostNodeId":"h0","strategy":"dom-order","index":0,"tagName":"button"}],"events":[{"hostNodeId":"h0","eventName":"click","symbolIds":["symbol:click"]}],"domUpdates":[{"hostNodeId":"h0","source":"count","graphNodeId":"state:count","path":[],"target":{"kind":"text"},"symbolId":"symbol:domUpdate"}],"behaviors":[{"hostNodeId":"h0","source":"buttonBehavior","symbolId":"symbol:use"}],"elementHandles":[{"hostNodeId":"h0","handleId":"element:button","name":"button"}],"asyncBoundaries":[{"id":"boundary:profile","startAnchor":{"strategy":"dom-order-comment","index":0},"endAnchor":{"strategy":"dom-order-comment","index":1},"asyncReads":[{"source":"profile","graphNodeId":"computed:profile","path":[],"runnerSymbolId":"symbol:profile"}]}]}</script>';
 
 	expect(createPayloadDebugDump({ stateScript, viewScript })).toEqual({
 		summary: {
@@ -161,15 +161,15 @@ test('createPayloadDebugDump returns a human-readable decoded payload shape', ()
 			computed: 1,
 			locators: 1,
 			events: 1,
-			bindings: 1,
+			domUpdates: 1,
 			behaviors: 1,
 			elementHandles: 1,
 			asyncBoundaries: 1,
 		},
 		state: {
 			version: 1,
-			cells: [{ bindingId: 'state:count', name: 'count', valueKind: 'scalar' }],
-			computed: [{ bindingId: 'computed:label', name: 'label', async: false }],
+			cells: [{ graphNodeId: 'state:count', name: 'count', valueKind: 'scalar' }],
+			computed: [{ graphNodeId: 'computed:label', name: 'label', async: false }],
 		},
 		view: {
 			version: 1,
@@ -182,14 +182,14 @@ test('createPayloadDebugDump returns a human-readable decoded payload shape', ()
 					hasSyncPolicy: false,
 				},
 			],
-			bindings: [
+			domUpdates: [
 				{
 					hostNodeId: 'h0',
 					source: 'count',
-					bindingId: 'state:count',
+					graphNodeId: 'state:count',
 					path: [],
 					target: { kind: 'text' },
-					symbolId: 'symbol:binding',
+					symbolId: 'symbol:domUpdate',
 				},
 			],
 			behaviors: [{ hostNodeId: 'h0', source: 'buttonBehavior', symbolId: 'symbol:use' }],
@@ -202,7 +202,7 @@ test('createPayloadDebugDump returns a human-readable decoded payload shape', ()
 					asyncReads: [
 						{
 							source: 'profile',
-							bindingId: 'computed:profile',
+							graphNodeId: 'computed:profile',
 							path: [],
 							runnerSymbolId: 'symbol:profile',
 						},
@@ -213,17 +213,17 @@ test('createPayloadDebugDump returns a human-readable decoded payload shape', ()
 	});
 });
 
-test('createPayloadDebugDump preserves property binding targets', () => {
+test('createPayloadDebugDump preserves property DOM update targets', () => {
 	const stateScript =
-		'<script type="async/state">{"version":1,"cells":[{"bindingId":"state:title","name":"title","valueKind":"scalar","value":"Menu"}],"computed":[]}</script>';
+		'<script type="async/state">{"version":1,"cells":[{"graphNodeId":"state:title","name":"title","valueKind":"scalar","value":"Menu"}],"computed":[]}</script>';
 	const viewScript =
-		'<script type="async/view">{"version":1,"locators":[{"hostNodeId":"h0","strategy":"dom-order","index":0,"tagName":"input"}],"events":[],"bindings":[{"hostNodeId":"h0","source":"title","bindingId":"state:title","path":[],"target":{"kind":"property","name":"value"},"symbolId":"symbol:value"}],"behaviors":[],"elementHandles":[],"asyncBoundaries":[]}</script>';
+		'<script type="async/view">{"version":1,"locators":[{"hostNodeId":"h0","strategy":"dom-order","index":0,"tagName":"input"}],"events":[],"domUpdates":[{"hostNodeId":"h0","source":"title","graphNodeId":"state:title","path":[],"target":{"kind":"property","name":"value"},"symbolId":"symbol:value"}],"behaviors":[],"elementHandles":[],"asyncBoundaries":[]}</script>';
 
-	expect(createPayloadDebugDump({ stateScript, viewScript }).view.bindings).toEqual([
+	expect(createPayloadDebugDump({ stateScript, viewScript }).view.domUpdates).toEqual([
 		{
 			hostNodeId: 'h0',
 			source: 'title',
-			bindingId: 'state:title',
+			graphNodeId: 'state:title',
 			path: [],
 			target: {
 				kind: 'property',
@@ -234,17 +234,17 @@ test('createPayloadDebugDump preserves property binding targets', () => {
 	]);
 });
 
-test('createPayloadDebugDump preserves class and style binding targets', () => {
+test('createPayloadDebugDump preserves class and style DOM update targets', () => {
 	const stateScript =
-		'<script type="async/state">{"version":1,"cells":[{"bindingId":"state:activeClass","name":"activeClass","valueKind":"scalar","value":"is-active"},{"bindingId":"state:color","name":"color","valueKind":"scalar","value":"red"}],"computed":[]}</script>';
+		'<script type="async/state">{"version":1,"cells":[{"graphNodeId":"state:activeClass","name":"activeClass","valueKind":"scalar","value":"is-active"},{"graphNodeId":"state:color","name":"color","valueKind":"scalar","value":"red"}],"computed":[]}</script>';
 	const viewScript =
-		'<script type="async/view">{"version":1,"locators":[{"hostNodeId":"h0","strategy":"dom-order","index":0,"tagName":"div"}],"events":[],"bindings":[{"hostNodeId":"h0","source":"activeClass","bindingId":"state:activeClass","path":[],"target":{"kind":"class"},"symbolId":"symbol:class"},{"hostNodeId":"h0","source":"color","bindingId":"state:color","path":[],"target":{"kind":"style"},"symbolId":"symbol:style"}],"behaviors":[],"elementHandles":[],"asyncBoundaries":[]}</script>';
+		'<script type="async/view">{"version":1,"locators":[{"hostNodeId":"h0","strategy":"dom-order","index":0,"tagName":"div"}],"events":[],"domUpdates":[{"hostNodeId":"h0","source":"activeClass","graphNodeId":"state:activeClass","path":[],"target":{"kind":"class"},"symbolId":"symbol:class"},{"hostNodeId":"h0","source":"color","graphNodeId":"state:color","path":[],"target":{"kind":"style"},"symbolId":"symbol:style"}],"behaviors":[],"elementHandles":[],"asyncBoundaries":[]}</script>';
 
-	expect(createPayloadDebugDump({ stateScript, viewScript }).view.bindings).toEqual([
+	expect(createPayloadDebugDump({ stateScript, viewScript }).view.domUpdates).toEqual([
 		{
 			hostNodeId: 'h0',
 			source: 'activeClass',
-			bindingId: 'state:activeClass',
+			graphNodeId: 'state:activeClass',
 			path: [],
 			target: {
 				kind: 'class',
@@ -254,7 +254,7 @@ test('createPayloadDebugDump preserves class and style binding targets', () => {
 		{
 			hostNodeId: 'h0',
 			source: 'color',
-			bindingId: 'state:color',
+			graphNodeId: 'state:color',
 			path: [],
 			target: {
 				kind: 'style',

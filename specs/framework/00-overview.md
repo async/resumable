@@ -43,7 +43,8 @@ JSX/TSX is explicitly **not** supported.
    special destructuring syntax, no reactive collection subclasses
    (`RippleArray`-style). The reactive surface is plain values and plain mutation.
 3. **No VDOM, no re-renders.** Solid-style fine-grained architecture: templates
-   compile to real DOM operations; each dynamic binding is its own subscription.
+   compile to real DOM operations; each dynamic DOM update is its own
+   subscription.
    "Signal" is an implementation detail of compiled output, never API vocabulary.
 4. **TSRX-only.** State and reactivity are language features of `.tsrx` files,
    surfaced through compiler-rewritten imports from `@async/resumable`, not a
@@ -56,8 +57,8 @@ JSX/TSX is explicitly **not** supported.
 
 - TSX/JSX support, now or later.
 - Reactivity in plain `.ts` files. Plain TS receives values via function calls,
-  never live bindings. (This is the boundary that lets the compiler guarantee the
-  no-marker property.)
+  never live reactive references. (This is the boundary that lets the compiler
+  guarantee the no-marker property.)
 - Qwik-style serialization of arbitrary lexical scopes (see Capture Rule).
 
 ## Architecture Overview
@@ -74,7 +75,7 @@ Four implementation areas:
    backend may replace parser/lowering internals only behind the same pass
    artifacts and behavior tests.
 2. **Runtime** — a small fine-grained reactive core (graph state, object state,
-   async node state, cancellation/versioning, DOM binding helpers, initial render
+   async node state, cancellation/versioning, DOM update helpers, initial render
    entry, and browser resume entry). The in-memory graph shape is private and is
    not a VDOM. Never exposed as user vocabulary.
 3. **Serialization and render/resume protocol** — initial render runs component
@@ -83,8 +84,8 @@ Four implementation areas:
    subscription graph, listener→symbol map) into compact private data scripts.
    The browser resume entry attaches one global event listener (plus a shared
    IntersectionObserver for `onVisible`-wired elements), lazy-loads symbols on
-   first interaction or visibility, and re-attaches bindings on first relevant
-   state change. No hydration pass, no component execution.
+   first interaction or visibility, and re-attaches DOM update subscriptions on
+   first relevant state change. No hydration pass, no component execution.
 4. **Build integration** — a Rolldown plugin base exported by
    `@async/resumable`,
    with framework adapters such as Vite consuming that base plugin. Extracted
@@ -133,6 +134,11 @@ Initial internal production package map:
   Vite adapter dev/HMR/HTML integration.
 - `packages/test-utils` — fixture harnesses, artifact assertions,
   serializer/resume helpers, browser helpers, and witness integration helpers.
+- `packages/vitest-browser` — CSR-only Vitest browser-mode support for targeted
+  real-browser DOM/runtime mechanics. It should provide framework-specific
+  browser render helpers, cleanup, and Vitest browser `page` integration modeled
+  after the CSR surface of `/Users/jacksm5pro/dev/open-source/vitest-browser-qwik`.
+  It must not become the canonical SSR/resume proof harness.
 
 There is no `packages/server`.
 

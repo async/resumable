@@ -40,7 +40,7 @@ test('lowerStateAccess lowers delete writes to static graph paths', () => {
 	expect(lowered.writes).toEqual([
 		{
 			source: 'menu.open',
-			bindingId: 'state:menu',
+			graphNodeId: 'state:menu',
 			path: ['open'],
 			operation: 'delete',
 		},

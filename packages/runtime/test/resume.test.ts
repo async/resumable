@@ -85,13 +85,13 @@ test('resume runtime materializes view records and dispatches lazy symbols after
 	const input = element('INPUT');
 	const root = element('SECTION', [input]);
 	const graph = createRuntimeGraph({
-		cells: [{ bindingId: 'state:menu', value: { open: true, title: 'Menu' } }],
+		cells: [{ graphNodeId: 'state:menu', value: { open: true, title: 'Menu' } }],
 	});
 	const loadedSymbols: string[] = [];
 
 	graph.subscribe({
-		id: 'binding:open',
-		bindingId: 'state:menu',
+		id: 'dom-update:open',
+		graphNodeId: 'state:menu',
 		path: ['open'],
 		run(value) {
 			return { type: 'setAttr', locator: 'input:open', name: 'data-open', value };
@@ -114,7 +114,7 @@ test('resume runtime materializes view records and dispatches lazy symbols after
 						when: {
 							type: 'and',
 							conditions: [
-								{ type: 'graph-truthy', bindingId: 'state:menu', path: ['open'] },
+								{ type: 'graph-truthy', graphNodeId: 'state:menu', path: ['open'] },
 								{ type: 'event-equals', field: 'key', value: 'Escape' },
 							],
 						},
@@ -123,7 +123,7 @@ test('resume runtime materializes view records and dispatches lazy symbols after
 					symbolIds: ['symbol:key'],
 				},
 			],
-			bindings: [],
+			domUpdates: [],
 			behaviors: [],
 			elementHandles: [],
 			asyncBoundaries: [],
@@ -132,7 +132,7 @@ test('resume runtime materializes view records and dispatches lazy symbols after
 			loadedSymbols.push(symbolId);
 			return async ({ graph: runtimeGraph }) => {
 				runtimeGraph.write({
-					bindingId: 'state:menu',
+					graphNodeId: 'state:menu',
 					path: ['open'],
 					value: false,
 				});
@@ -164,17 +164,17 @@ test('resume runtime materializes view records and dispatches lazy symbols after
 	]);
 });
 
-test('resume runtime applies DOM journal records after dispatch-owned graph flushes', async () => {
+test('resume runtime applies DOM journal entries after dispatch-owned graph flushes', async () => {
 	const input = element('INPUT');
 	const root = element('SECTION', [input]);
 	const graph = createRuntimeGraph({
-		cells: [{ bindingId: 'state:menu', value: { open: true } }],
+		cells: [{ graphNodeId: 'state:menu', value: { open: true } }],
 	});
-	const appliedRecords: unknown[] = [];
+	const appliedEntries: unknown[] = [];
 
 	graph.subscribe({
-		id: 'binding:open',
-		bindingId: 'state:menu',
+		id: 'dom-update:open',
+		graphNodeId: 'state:menu',
 		path: ['open'],
 		run(value) {
 			return { type: 'setAttr', locator: 'input:open', name: 'data-open', value };
@@ -196,7 +196,7 @@ test('resume runtime applies DOM journal records after dispatch-owned graph flus
 					symbolIds: ['symbol:toggle'],
 				},
 			],
-			bindings: [],
+			domUpdates: [],
 			behaviors: [],
 			elementHandles: [],
 			asyncBoundaries: [],
@@ -204,21 +204,21 @@ test('resume runtime applies DOM journal records after dispatch-owned graph flus
 		loadSymbol() {
 			return ({ graph: runtimeGraph }) => {
 				runtimeGraph.write({
-					bindingId: 'state:menu',
+					graphNodeId: 'state:menu',
 					path: ['open'],
 					value: false,
 				});
 			};
 		},
-		applyDomJournal(records) {
-			appliedRecords.push(...records);
+		applyDomJournal(entries) {
+			appliedEntries.push(...entries);
 		},
 	});
 
 	await resume.start();
 	await root.listeners[0].listener(event('click', input, ''));
 
-	expect(appliedRecords).toEqual([
+	expect(appliedEntries).toEqual([
 		{ type: 'setAttr', locator: 'input:open', name: 'data-open', value: false },
 	]);
 	expect(graph.takeJournal()).toEqual([]);
@@ -253,7 +253,7 @@ test('resume runtime evaluates constant sync policy guards before lazy symbols',
 					symbolIds: ['symbol:key'],
 				},
 			],
-			bindings: [],
+			domUpdates: [],
 			behaviors: [],
 			elementHandles: [],
 			asyncBoundaries: [],
@@ -280,7 +280,7 @@ test('resume runtime evaluates sync policy branches independently before lazy sy
 	const resume = createResumeRuntime({
 		root,
 		graph: createRuntimeGraph({
-			cells: [{ bindingId: 'state:menu', value: { open: true, locked: true } }],
+			cells: [{ graphNodeId: 'state:menu', value: { open: true, locked: true } }],
 		}),
 		view: {
 			locators: [
@@ -299,7 +299,7 @@ test('resume runtime evaluates sync policy branches independently before lazy sy
 									conditions: [
 										{
 											type: 'graph-truthy',
-											bindingId: 'state:menu',
+											graphNodeId: 'state:menu',
 											path: ['open'],
 										},
 										{ type: 'event-equals', field: 'key', value: 'Escape' },
@@ -313,7 +313,7 @@ test('resume runtime evaluates sync policy branches independently before lazy sy
 									conditions: [
 										{
 											type: 'graph-truthy',
-											bindingId: 'state:menu',
+											graphNodeId: 'state:menu',
 											path: ['locked'],
 										},
 										{ type: 'event-equals', field: 'key', value: 'Enter' },
@@ -326,7 +326,7 @@ test('resume runtime evaluates sync policy branches independently before lazy sy
 					symbolIds: ['symbol:first', 'symbol:second'],
 				},
 			],
-			bindings: [],
+			domUpdates: [],
 			behaviors: [],
 			elementHandles: [],
 			asyncBoundaries: [],
@@ -363,7 +363,7 @@ test('resume runtime dispatches delegated events from nested targets to the owne
 	const button = element('BUTTON', [label]);
 	const root = element('SECTION', [button]);
 	const graph = createRuntimeGraph({
-		cells: [{ bindingId: 'state:count', value: 0 }],
+		cells: [{ graphNodeId: 'state:count', value: 0 }],
 	});
 	const handledElements: string[] = [];
 
@@ -383,7 +383,7 @@ test('resume runtime dispatches delegated events from nested targets to the owne
 					symbolIds: ['symbol:click'],
 				},
 			],
-			bindings: [],
+			domUpdates: [],
 			behaviors: [],
 			elementHandles: [],
 			asyncBoundaries: [],
@@ -392,7 +392,7 @@ test('resume runtime dispatches delegated events from nested targets to the owne
 			return ({ element: ownerElement, graph: runtimeGraph }) => {
 				handledElements.push(ownerElement.tagName);
 				runtimeGraph.update({
-					bindingId: 'state:count',
+					graphNodeId: 'state:count',
 					update: (value) => Number(value) + 1,
 				});
 			};
@@ -421,7 +421,7 @@ test('resume runtime reports structured errors for mismatched DOM-order locators
 					{ hostNodeId: 'h1', strategy: 'dom-order', index: 1, tagName: 'button' },
 				],
 				events: [],
-				bindings: [],
+				domUpdates: [],
 				behaviors: [],
 				elementHandles: [],
 				asyncBoundaries: [],
@@ -462,7 +462,7 @@ test('resume runtime reports structured errors for missing async boundary anchor
 					{ hostNodeId: 'h0', strategy: 'dom-order', index: 0, tagName: 'section' },
 				],
 				events: [],
-				bindings: [],
+				domUpdates: [],
 				behaviors: [],
 				elementHandles: [],
 				asyncBoundaries: [
@@ -521,7 +521,7 @@ test('resume runtime invalidates disposed host locators and delegated event reco
 					symbolIds: ['symbol:click'],
 				},
 			],
-			bindings: [],
+			domUpdates: [],
 			behaviors: [],
 			elementHandles: [],
 			asyncBoundaries: [],
@@ -566,7 +566,7 @@ test('resume runtime exposes element handles to lazy symbols by handle id and lo
 					symbolIds: ['symbol:focus'],
 				},
 			],
-			bindings: [],
+			domUpdates: [],
 			behaviors: [],
 			elementHandles: [
 				{ hostNodeId: 'h1', handleId: 'handle:search', name: 'searchInput' },
@@ -611,7 +611,7 @@ test('resume runtime returns undefined for element handles after host disposal',
 					symbolIds: ['symbol:focus'],
 				},
 			],
-			bindings: [],
+			domUpdates: [],
 			behaviors: [],
 			elementHandles: [{ hostNodeId: 'h1', handleId: 'handle:search', name: 'searchInput' }],
 			asyncBoundaries: [],
@@ -661,7 +661,7 @@ test('resume runtime wires onVisible through a shared observer and runs cleanup 
 					symbolIds: ['symbol:first', 'symbol:second'],
 				},
 			],
-			bindings: [],
+			domUpdates: [],
 			behaviors: [],
 			elementHandles: [],
 			asyncBoundaries: [],
@@ -777,7 +777,7 @@ test('resume runtime uses a global IntersectionObserver for visible events when 
 						symbolIds: ['symbol:visible'],
 					},
 				],
-				bindings: [],
+				domUpdates: [],
 				behaviors: [],
 				elementHandles: [],
 				asyncBoundaries: [],
@@ -832,7 +832,7 @@ test('resume runtime unobserves visible hosts disposed before first intersection
 					symbolIds: ['symbol:visible'],
 				},
 			],
-			bindings: [],
+			domUpdates: [],
 			behaviors: [],
 			elementHandles: [],
 			asyncBoundaries: [],
@@ -916,7 +916,7 @@ test('resume runtime dispatches handler arrays in order and flushes committed wr
 					symbolIds: ['symbol:first', 'symbol:second', 'symbol:third'],
 				},
 			],
-			bindings: [],
+			domUpdates: [],
 			behaviors: [],
 			elementHandles: [],
 			asyncBoundaries: [],
@@ -927,7 +927,7 @@ test('resume runtime dispatches handler arrays in order and flushes committed wr
 			if (symbolId === 'symbol:first') {
 				return ({ graph: runtimeGraph }) => {
 					runtimeGraph.write({
-						bindingId: 'state:count',
+						graphNodeId: 'state:count',
 						value: 1,
 					});
 					const ignored = { type: 'setText', locator: 'ignored', value: 'ignored' };
@@ -944,7 +944,7 @@ test('resume runtime dispatches handler arrays in order and flushes committed wr
 
 			return ({ graph: runtimeGraph }) => {
 				runtimeGraph.write({
-					bindingId: 'state:count',
+					graphNodeId: 'state:count',
 					value: 3,
 				});
 			};
@@ -957,8 +957,8 @@ test('resume runtime dispatches handler arrays in order and flushes committed wr
 	await expect(root.listeners[0].listener(event('click', button, ''))).rejects.toBe(failure);
 
 	expect(loadedSymbols).toEqual(['symbol:first', 'symbol:second']);
-	expect(writes).toEqual([{ bindingId: 'state:count', value: 1 }]);
-	expect(flushedWrites).toEqual([[{ bindingId: 'state:count', value: 1 }]]);
+	expect(writes).toEqual([{ graphNodeId: 'state:count', value: 1 }]);
+	expect(flushedWrites).toEqual([[{ graphNodeId: 'state:count', value: 1 }]]);
 	expect(ignoredReturns).toHaveLength(1);
 });
 
@@ -980,7 +980,7 @@ test('resume runtime materializes async boundary comment anchors', async () => {
 				{ hostNodeId: 'h1', strategy: 'dom-order', index: 1, tagName: 'p' },
 			],
 			events: [],
-			bindings: [],
+			domUpdates: [],
 			behaviors: [],
 			elementHandles: [],
 			asyncBoundaries: [
@@ -997,7 +997,7 @@ test('resume runtime materializes async boundary comment anchors', async () => {
 					asyncReads: [
 						{
 							source: 'details.title',
-							bindingId: 'computed:details',
+							graphNodeId: 'computed:details',
 							path: ['title'],
 							runnerSymbolId: 'symbol:details',
 						},
@@ -1019,7 +1019,7 @@ test('resume runtime materializes async boundary comment anchors', async () => {
 		asyncReads: [
 			{
 				source: 'details.title',
-				bindingId: 'computed:details',
+				graphNodeId: 'computed:details',
 				path: ['title'],
 				runnerSymbolId: 'symbol:details',
 			},
@@ -1036,11 +1036,11 @@ test('resume runtime demands async boundary reads and runs runner symbols on sta
 	const loadedSymbols: string[] = [];
 	const seenStatuses: string[] = [];
 	const graph = createRuntimeGraph({
-		cells: [{ bindingId: 'state:userId', value: 'a' }],
+		cells: [{ graphNodeId: 'state:userId', value: 'a' }],
 		asyncComputed: [
 			{
-				bindingId: 'computed:details',
-				dependencies: [{ bindingId: 'state:userId', path: [] }],
+				graphNodeId: 'computed:details',
+				dependencies: [{ graphNodeId: 'state:userId', path: [] }],
 				key: (read) => read('state:userId'),
 				run() {
 					return result.promise;
@@ -1058,7 +1058,7 @@ test('resume runtime demands async boundary reads and runs runner symbols on sta
 				{ hostNodeId: 'h1', strategy: 'dom-order', index: 1, tagName: 'p' },
 			],
 			events: [],
-			bindings: [],
+			domUpdates: [],
 			behaviors: [],
 			elementHandles: [],
 			asyncBoundaries: [
@@ -1075,7 +1075,7 @@ test('resume runtime demands async boundary reads and runs runner symbols on sta
 					asyncReads: [
 						{
 							source: 'details.title',
-							bindingId: 'computed:details',
+							graphNodeId: 'computed:details',
 							path: [],
 							runnerSymbolId: 'symbol:details-runner',
 						},
@@ -1086,7 +1086,7 @@ test('resume runtime demands async boundary reads and runs runner symbols on sta
 		loadSymbol(symbolId) {
 			loadedSymbols.push(symbolId);
 			return ({ asyncBoundary, asyncRead, graph: runtimeGraph }) => {
-				const snapshot = runtimeGraph.read(asyncRead!.bindingId) as {
+				const snapshot = runtimeGraph.read(asyncRead!.graphNodeId) as {
 					readonly status: string;
 				};
 				seenStatuses.push(`${asyncBoundary!.id}:${snapshot.status}`);
