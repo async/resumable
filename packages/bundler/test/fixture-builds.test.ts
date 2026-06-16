@@ -16,7 +16,8 @@ const fixtures = [
 		runtimeBudget: {
 			dist: 'packages/bundler/fixtures/vite-csr/dist',
 			maxRuntimeChunkGzipBytes: 8_100,
-			maxAsyncScriptsGzipBytes: 9_000,
+			maxAsyncScriptsGzipBytes: 8_650,
+			maxAsyncScriptCount: 3,
 			forbidVitePreloadHelper: true,
 		},
 	},
@@ -31,7 +32,8 @@ const fixtures = [
 		runtimeBudget: {
 			dist: 'packages/bundler/fixtures/vite-ssr/dist',
 			maxRuntimeChunkGzipBytes: 2_700,
-			maxAsyncScriptsGzipBytes: 4_000,
+			maxAsyncScriptsGzipBytes: 3_300,
+			maxAsyncScriptCount: 4,
 			forbidVitePreloadHelper: true,
 		},
 	},
@@ -42,7 +44,8 @@ const fixtures = [
 		runtimeBudget: {
 			dist: 'packages/bundler/fixtures/vite-plus/dist',
 			maxRuntimeChunkGzipBytes: 8_000,
-			maxAsyncScriptsGzipBytes: 8_500,
+			maxAsyncScriptsGzipBytes: 8_450,
+			maxAsyncScriptCount: 3,
 			forbidVitePreloadHelper: true,
 		},
 	},
@@ -92,6 +95,9 @@ describe('fixture builds', () => {
 				);
 				expect(report.asyncScripts.gzipBytes, report.summary).toBeLessThanOrEqual(
 					fixture.runtimeBudget.maxAsyncScriptsGzipBytes,
+				);
+				expect(report.asyncScripts.count, report.summary).toBeLessThanOrEqual(
+					fixture.runtimeBudget.maxAsyncScriptCount,
 				);
 				if (fixture.runtimeBudget.forbidVitePreloadHelper) {
 					const chunksWithVitePreloadHelper = report.runtimeChunks

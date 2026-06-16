@@ -13,7 +13,8 @@ const COUNTER = '[data-counter]';
 const REQUESTS = '/__async-resumable-fixture-requests';
 const WAIT = { timeoutMs: 10_000 };
 const MAX_INTERACTION_RUNTIME_CHUNK_GZIP_BYTES = 2_700;
-const MAX_INTERACTION_SCRIPTS_GZIP_BYTES = 4_000;
+const MAX_INTERACTION_SCRIPTS_GZIP_BYTES = 3_300;
+const MAX_INTERACTION_SCRIPT_COUNT = 3;
 
 export default box(
 	{
@@ -135,6 +136,11 @@ function assertRuntimeSizeBudget(report: RuntimeSizeReport): void {
 	if (report.asyncScripts.gzipBytes > MAX_INTERACTION_SCRIPTS_GZIP_BYTES) {
 		throw new Error(
 			`SSR interaction script gzip budget exceeded: ${report.asyncScripts.gzipBytes} > ${MAX_INTERACTION_SCRIPTS_GZIP_BYTES}\n${report.summary}`,
+		);
+	}
+	if (report.asyncScripts.count > MAX_INTERACTION_SCRIPT_COUNT) {
+		throw new Error(
+			`SSR interaction script count budget exceeded: ${report.asyncScripts.count} > ${MAX_INTERACTION_SCRIPT_COUNT}\n${report.summary}`,
 		);
 	}
 	const chunksWithVitePreloadHelper = report.runtimeChunks

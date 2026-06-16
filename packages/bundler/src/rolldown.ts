@@ -13,6 +13,7 @@ import {
 	injectManifest,
 } from './build/manifest.ts';
 import { stripEmptyVitePreloadWrappers } from './build/preload-cleanup.ts';
+import { rewriteGeneratedSymbolFacadeImports } from './build/symbol-facade-cleanup.ts';
 import { createResumableDevGraph } from './dev.ts';
 import { ASYNC_RESUMABLE_VIRTUAL_PREFIX, transformTsrxModule } from './transform.ts';
 import type {
@@ -204,9 +205,11 @@ export function createResumableRolldownPlugin(input: {
 				if (getEnvironment(this) !== 'client') return;
 
 				stripEmptyPreloadWrappersFromGeneratedChunks(bundle);
+				const removedSymbolFacades = rewriteGeneratedSymbolFacadeImports(bundle);
+				const manifestBundle = bundleWithoutRemovedChunks(bundle, removedSymbolFacades);
 
 				const clientManifest = createManifest(
-					bundle,
+					manifestBundle,
 					transformManifests.values(),
 					getRoot(),
 					{
@@ -237,6 +240,20 @@ export function createResumableRolldownPlugin(input: {
 	return plugin;
 }
 
+function bundleWithoutRemovedChunks(
+	bundle: Record<string, unknown>,
+	removedFileNames: ReadonlySet<string>,
+) {
+	if (removedFileNames.size === 0) return bundle;
+
+	const next: Record<string, unknown> = {};
+	for (const [key, output] of Object.entries(bundle)) {
+		if (isChunkFile(output) && removedFileNames.has(output.fileName)) continue;
+		next[key] = output;
+	}
+	return next;
+}
+
 function stripEmptyPreloadWrappersFromGeneratedChunks(bundle: Record<string, unknown>) {
 	for (const output of Object.values(bundle)) {
 		if (!isChunkWithGeneratedRuntime(output)) continue;
@@ -246,6 +263,18 @@ function stripEmptyPreloadWrappersFromGeneratedChunks(bundle: Record<string, unk
 			output.code = nextCode;
 		}
 	}
+}
+
+function isChunkFile(output: unknown): output is {
+	readonly type: 'chunk';
+	readonly fileName: string;
+} {
+	if (!output || typeof output !== 'object') return false;
+	const chunk = output as {
+		readonly type?: unknown;
+		readonly fileName?: unknown;
+	};
+	return chunk.type === 'chunk' && typeof chunk.fileName === 'string';
 }
 
 function isChunkWithGeneratedRuntime(output: unknown): output is {
