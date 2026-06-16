@@ -1,16 +1,16 @@
 import { asNodes, getIdentifierName, type AnyNode } from '../../ast/nodes.ts';
-import { sourceSpan } from '../../ast/source.ts';
-import type { SemanticGraphBinding, SemanticLocalBinding } from '../../artifacts.ts';
-import {
-	getFrameworkApiForCall,
-	getCallName,
-	isFrameworkApiName,
-} from './imports.ts';
+import { expressionSource, sourceSpan } from '../../ast/source.ts';
+import type { SemanticGraphBinding, SemanticLocalBinding, SourceSpan } from '../../artifacts.ts';
+import { getFrameworkApiForCall, getCallName, isFrameworkApiName } from './imports.ts';
 import { collectDestructuredAliases } from './collect-aliases.ts';
 import { collectAsyncComputedPostAwaitReads, collectGraphDependencies } from './collect-async.ts';
 import { collectExpressionReads } from './collect-expressions.ts';
-import { frameworkImportRequiredDiagnostic } from './diagnostics.ts';
+import {
+	frameworkImportRequiredDiagnostic,
+	stateElementHandleUnsupportedDiagnostic,
+} from './diagnostics.ts';
 import type { WalkState } from './types.ts';
+import { collectSharedInstance } from './collect-shared.ts';
 
 export function collectVariableDeclaration(node: AnyNode, state: WalkState): void {
 	const declarationKind = variableDeclarationKind(node);
@@ -34,6 +34,16 @@ export function collectVariableDeclaration(node: AnyNode, state: WalkState): voi
 				frameworkImportRequiredDiagnostic(callName, init, state.filename),
 			);
 			continue;
+		}
+
+		if (!frameworkApi) {
+			if (!state.currentSharedDefinitionId) {
+				collectSharedInstance({
+					localName: name,
+					init,
+					state,
+				});
+			}
 		}
 
 		const localBindingAlias = aliasedLocalBinding(init, state);
@@ -92,10 +102,22 @@ export function collectVariableDeclaration(node: AnyNode, state: WalkState): voi
 
 		if (frameworkApi === 'state') {
 			const initial = firstArgument(init);
+			const elementHandle = findElementHandleStateValue(initial, state);
+			if (elementHandle) {
+				state.graph.diagnostics.push(
+					stateElementHandleUnsupportedDiagnostic({
+						stateName: name,
+						handleName: elementHandle.name,
+						source: elementHandle.source,
+						sourceSpan: elementHandle.sourceSpan,
+					}),
+				);
+			}
 			state.graph.graphBindings.push({
-				id: `state:${name}`,
+				id: graphBindingId('state', name, state),
 				name,
 				kind: 'state',
+				...sharedScope(state),
 				declarationKind,
 				writable: true,
 				valueKind: initialValueKind(initial),
@@ -108,14 +130,16 @@ export function collectVariableDeclaration(node: AnyNode, state: WalkState): voi
 			const isAsync = body?.async === true;
 			const dependencies = collectGraphDependencies(body, state);
 			state.graph.graphBindings.push({
-				id: `computed:${name}`,
+				id: graphBindingId('computed', name, state),
 				name,
 				kind: 'computed',
+				...sharedScope(state),
 				declarationKind,
 				writable: false,
 				async: isAsync,
 				asyncCapable: isAsync,
 				dependencies,
+				functionSource: body ? expressionSource(body, state.source) : undefined,
 			});
 			collectExpressionReads(body, state);
 			if (isAsync) collectAsyncComputedPostAwaitReads(name, body, state);
@@ -123,14 +147,31 @@ export function collectVariableDeclaration(node: AnyNode, state: WalkState): voi
 
 		if (frameworkApi === 'element') {
 			state.graph.graphBindings.push({
-				id: `element:${name}`,
+				id: graphBindingId('element', name, state),
 				name,
 				kind: 'element',
+				...sharedScope(state),
 				declarationKind,
 				writable: false,
 			});
 		}
 	}
+}
+
+function graphBindingId(
+	kind: 'state' | 'computed' | 'element',
+	name: string,
+	state: WalkState,
+): string {
+	return state.currentSharedDefinitionId
+		? `${state.currentSharedDefinitionId}/${kind}:${name}`
+		: `${kind}:${name}`;
+}
+
+function sharedScope(state: WalkState): { readonly sharedDefinitionId?: string } {
+	return state.currentSharedDefinitionId
+		? { sharedDefinitionId: state.currentSharedDefinitionId }
+		: {};
 }
 
 function collectUnsupportedDestructuredLocalBindings(
@@ -417,6 +458,62 @@ function containsNonSerializableConstantValue(
 	if (isFunctionValue(node) || isClassInstanceValue(node) || isDomNodeValue(node)) return true;
 
 	return isNonSerializableConstantValue(node, state);
+}
+
+function findElementHandleStateValue(
+	node: AnyNode | undefined,
+	state: WalkState,
+): { readonly name: string; readonly source: string; readonly sourceSpan?: SourceSpan } | null {
+	if (!node) return null;
+	if (node.type === 'SpreadElement') {
+		return findElementHandleStateValue(node.argument as AnyNode | undefined, state);
+	}
+
+	const handleName = elementHandleName(node, state);
+	if (handleName) {
+		return {
+			name: handleName,
+			source: expressionSource(node, state.source),
+			sourceSpan: sourceSpan(node, state.filename),
+		};
+	}
+
+	if (node.type === 'ObjectExpression') {
+		for (const property of asNodes(node.properties)) {
+			if (property.type === 'SpreadElement') {
+				const spread = findElementHandleStateValue(
+					property.argument as AnyNode | undefined,
+					state,
+				);
+				if (spread) return spread;
+				continue;
+			}
+
+			if (property.type !== 'Property') continue;
+
+			const value = findElementHandleStateValue(property.value as AnyNode | undefined, state);
+			if (value) return value;
+		}
+	}
+
+	if (node.type === 'ArrayExpression') {
+		for (const element of asNodes(node.elements)) {
+			const value = findElementHandleStateValue(element, state);
+			if (value) return value;
+		}
+	}
+
+	return null;
+}
+
+function elementHandleName(node: AnyNode, state: WalkState): string | null {
+	const name = getIdentifierName(node);
+	if (!name) return null;
+
+	const binding = state.graph.graphBindings.find(
+		(binding) => binding.name === name && binding.kind === 'element',
+	);
+	return binding ? name : null;
 }
 
 function variableDeclarationKind(node: AnyNode): SemanticGraphBinding['declarationKind'] {

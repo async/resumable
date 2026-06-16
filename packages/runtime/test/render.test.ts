@@ -25,6 +25,11 @@ type FakeElement = {
 type FakeEvent = {
 	readonly type: string;
 	readonly target: FakeElement;
+	readonly key?: string;
+	defaultPrevented?: boolean;
+	propagationStopped?: boolean;
+	preventDefault?: () => void;
+	stopPropagation?: () => void;
 };
 
 function element(tagName: string, childNodes: FakeElement[] = []): FakeElement {
@@ -52,6 +57,28 @@ function viewWithClick(): ProtocolViewPayload {
 		version: ASYNC_PROTOCOL_VERSION,
 		locators: [{ hostNodeId: 'h0', strategy: 'dom-order', index: 0, tagName: 'button' }],
 		events: [{ hostNodeId: 'h0', eventName: 'click', symbolIds: ['symbol:click'] }],
+		domUpdates: [],
+		behaviors: [],
+		elementHandles: [],
+		asyncBoundaries: [],
+	};
+}
+
+function viewWithSyncPolicy(): ProtocolViewPayload {
+	return {
+		version: ASYNC_PROTOCOL_VERSION,
+		locators: [{ hostNodeId: 'h0', strategy: 'dom-order', index: 0, tagName: 'button' }],
+		events: [
+			{
+				hostNodeId: 'h0',
+				eventName: 'keydown',
+				syncPolicy: {
+					when: { type: 'event-equals', field: 'key', value: 'Escape' },
+					actions: ['preventDefault', 'stopPropagation'],
+				},
+				symbolIds: ['symbol:key'],
+			},
+		],
 		domUpdates: [],
 		behaviors: [],
 		elementHandles: [],
@@ -171,6 +198,8 @@ test('renderToString inline event resumer imports the resume module only after i
 	);
 	const view = JSON.parse(extractScriptText(html, 'async/view')) as ProtocolViewPayload;
 	const resumerSource = extractResumerSource(html);
+	expect(resumerSource).not.toContain('preventDefault');
+	expect(resumerSource).not.toContain('stopPropagation');
 	const button = element('BUTTON');
 	const root = element('DIV', [button]);
 	const listeners: Array<(event: FakeEvent) => Promise<void>> = [];
@@ -220,6 +249,13 @@ test('renderToString inline event resumer imports the resume module only after i
 			imports: 1,
 			events: ['click:DIV'],
 		});
+
+		await listeners[0](event('click', button));
+
+		expect(globalScope.__asyncResumerTest).toEqual({
+			imports: 1,
+			events: ['click:DIV', 'click:DIV'],
+		});
 	} finally {
 		if (previousDocument === undefined) {
 			delete globalScope.document;
@@ -230,6 +266,518 @@ test('renderToString inline event resumer imports the resume module only after i
 			delete globalScope.__asyncResumerTest;
 		} else {
 			globalScope.__asyncResumerTest = previousTestState;
+		}
+	}
+});
+
+test('renderToString inline event resumer steps aside after runtime startup', async () => {
+	const resumeModuleUrl = createResumeRuntimeStartedModuleUrl();
+	const html = renderToString(
+		() => ({
+			html: '<button type="button">Count 0</button>',
+			state: createProtocolStatePayload({ cells: [] }),
+			view: viewWithClick(),
+		}),
+		{ resumeModuleUrl },
+	);
+	const view = JSON.parse(extractScriptText(html, 'async/view')) as ProtocolViewPayload;
+	const resumerSource = extractResumerSource(html);
+	const button = element('BUTTON');
+	const root = element('DIV', [button]);
+	const listeners: Array<(event: FakeEvent) => Promise<void>> = [];
+	root.querySelector = (selector) =>
+		selector === 'script[type="async/view"]' ? { textContent: JSON.stringify(view) } : null;
+	root.addEventListener = (type, listener, options) => {
+		const capture =
+			options === true || (typeof options === 'object' && options.capture === true);
+		if (type === 'click' && capture) listeners.push(listener);
+	};
+	const document = {
+		currentScript: {
+			closest(selector: string) {
+				return selector === '[data-async-container]' ? root : null;
+			},
+		},
+		createTreeWalker() {
+			const nodes = [button];
+			return {
+				nextNode() {
+					return nodes.shift() ?? null;
+				},
+			};
+		},
+	};
+	const globalScope = globalThis as typeof globalThis & {
+		document?: unknown;
+		__asyncResumerTest?: {
+			imports: number;
+			events: string[];
+		};
+	};
+	const previousDocument = globalScope.document;
+	const previousTestState = globalScope.__asyncResumerTest;
+	globalScope.document = document;
+	globalScope.__asyncResumerTest = { imports: 0, events: [] };
+
+	try {
+		await import(`data:text/javascript,${encodeURIComponent(resumerSource)}`);
+
+		await listeners[0](event('click', button));
+		await listeners[0](event('click', button));
+
+		expect(globalScope.__asyncResumerTest).toEqual({
+			imports: 1,
+			events: ['click:DIV'],
+		});
+	} finally {
+		if (previousDocument === undefined) {
+			delete globalScope.document;
+		} else {
+			globalScope.document = previousDocument;
+		}
+		if (previousTestState === undefined) {
+			delete globalScope.__asyncResumerTest;
+		} else {
+			globalScope.__asyncResumerTest = previousTestState;
+		}
+	}
+});
+
+test('renderToString event-only inline resumer omits sync-policy feature code', () => {
+	const html = renderToString(
+		() => ({
+			html: '<button type="button">Count 0</button>',
+			state: createProtocolStatePayload({ cells: [] }),
+			view: viewWithClick(),
+		}),
+		{ resumeModuleUrl: '/async-resume.js' },
+	);
+	const resumerSource = extractResumerSource(html);
+
+	expect(resumerSource).not.toContain('preventDefault');
+	expect(resumerSource).not.toContain('stopPropagation');
+	expect(resumerSource).not.toContain('constant-truthy');
+	expect(resumerSource).not.toContain('event-equals');
+});
+
+test('renderToString inline event resumer runs sync policy before importing resume module', async () => {
+	const resumeModuleUrl = createResumeModuleUrl('sync-policy');
+	const html = renderToString(
+		() => ({
+			html: '<button type="button">Close</button>',
+			state: createProtocolStatePayload({ cells: [] }),
+			view: viewWithSyncPolicy(),
+		}),
+		{ resumeModuleUrl },
+	);
+	const view = JSON.parse(extractScriptText(html, 'async/view')) as ProtocolViewPayload;
+	const resumerSource = extractResumerSource(html);
+	const button = element('BUTTON');
+	const root = element('DIV', [button]);
+	const listeners: Array<(event: FakeEvent) => Promise<void>> = [];
+	root.querySelector = (selector) =>
+		selector === 'script[type="async/view"]' ? { textContent: JSON.stringify(view) } : null;
+	root.addEventListener = (type, listener, options) => {
+		const capture =
+			options === true || (typeof options === 'object' && options.capture === true);
+		if (type === 'keydown' && capture) listeners.push(listener);
+	};
+	const document = {
+		currentScript: {
+			closest(selector: string) {
+				return selector === '[data-async-container]' ? root : null;
+			},
+		},
+		createTreeWalker() {
+			const nodes = [button];
+			return {
+				nextNode() {
+					return nodes.shift() ?? null;
+				},
+			};
+		},
+	};
+	const globalScope = globalThis as typeof globalThis & {
+		document?: unknown;
+		__asyncResumerTest?: {
+			imports: number;
+			events: string[];
+		};
+	};
+	const previousDocument = globalScope.document;
+	const previousTestState = globalScope.__asyncResumerTest;
+	globalScope.document = document;
+	globalScope.__asyncResumerTest = { imports: 0, events: [] };
+
+	try {
+		await import(`data:text/javascript,${encodeURIComponent(resumerSource)}`);
+
+		expect(listeners).toHaveLength(1);
+
+		const keydown: FakeEvent = {
+			type: 'keydown',
+			target: button,
+			key: 'Escape',
+			defaultPrevented: false,
+			propagationStopped: false,
+			preventDefault() {
+				this.defaultPrevented = true;
+			},
+			stopPropagation() {
+				this.propagationStopped = true;
+			},
+		};
+		const dispatched = listeners[0](keydown);
+
+		expect(keydown.defaultPrevented).toBe(true);
+		expect(keydown.propagationStopped).toBe(true);
+		expect(globalScope.__asyncResumerTest).toEqual({ imports: 0, events: [] });
+
+		await dispatched;
+
+		expect(globalScope.__asyncResumerTest).toEqual({
+			imports: 1,
+			events: ['keydown:DIV'],
+		});
+	} finally {
+		if (previousDocument === undefined) {
+			delete globalScope.document;
+		} else {
+			globalScope.document = previousDocument;
+		}
+		if (previousTestState === undefined) {
+			delete globalScope.__asyncResumerTest;
+		} else {
+			globalScope.__asyncResumerTest = previousTestState;
+		}
+	}
+});
+
+test('renderToString inline event resumer evaluates sync policy before importing symbols', async () => {
+	const resumeModuleUrl = createSyncPolicyResumeModuleUrl();
+	const html = renderToString(
+		() => ({
+			html: '<button type="button">Save</button>',
+			state: createProtocolStatePayload({ cells: [] }),
+			view: {
+				...viewWithClick(),
+				events: [
+					{
+						hostNodeId: 'h0',
+						eventName: 'click',
+						syncPolicy: {
+							when: {
+								type: 'and',
+								conditions: [
+									{ type: 'constant-truthy', value: true },
+									{ type: 'event-equals', field: 'key', value: 'Enter' },
+								],
+							},
+							actions: ['preventDefault', 'stopPropagation'],
+						},
+						symbolIds: ['symbol:click'],
+					},
+				],
+			},
+		}),
+		{ resumeModuleUrl },
+	);
+	const view = JSON.parse(extractScriptText(html, 'async/view')) as ProtocolViewPayload;
+	const resumerSource = extractResumerSource(html);
+	const button = element('BUTTON');
+	const root = element('DIV', [button]);
+	const listeners: Array<(event: FakeEvent) => Promise<void>> = [];
+	root.querySelector = (selector) =>
+		selector === 'script[type="async/view"]' ? { textContent: JSON.stringify(view) } : null;
+	root.addEventListener = (type, listener, options) => {
+		const capture =
+			options === true || (typeof options === 'object' && options.capture === true);
+		if (type === 'click' && capture) listeners.push(listener);
+	};
+	const document = {
+		currentScript: {
+			closest(selector: string) {
+				return selector === '[data-async-container]' ? root : null;
+			},
+		},
+		createTreeWalker() {
+			const nodes = [button];
+			return {
+				nextNode() {
+					return nodes.shift() ?? null;
+				},
+			};
+		},
+	};
+	const globalScope = globalThis as typeof globalThis & {
+		document?: unknown;
+		__asyncResumerSyncPolicyTest?: {
+			order: string[];
+		};
+	};
+	const previousDocument = globalScope.document;
+	const previousTestState = globalScope.__asyncResumerSyncPolicyTest;
+	globalScope.document = document;
+	globalScope.__asyncResumerSyncPolicyTest = { order: [] };
+
+	try {
+		await import(`data:text/javascript,${encodeURIComponent(resumerSource)}`);
+
+		await listeners[0]({
+			type: 'click',
+			target: button,
+			key: 'Enter',
+			defaultPrevented: false,
+			propagationStopped: false,
+			preventDefault() {
+				globalScope.__asyncResumerSyncPolicyTest?.order.push('preventDefault');
+				this.defaultPrevented = true;
+			},
+			stopPropagation() {
+				globalScope.__asyncResumerSyncPolicyTest?.order.push('stopPropagation');
+				this.propagationStopped = true;
+			},
+		} as FakeEvent);
+
+		expect(globalScope.__asyncResumerSyncPolicyTest).toEqual({
+			order: ['preventDefault', 'stopPropagation', 'import', 'handler:true:true'],
+		});
+	} finally {
+		if (previousDocument === undefined) {
+			delete globalScope.document;
+		} else {
+			globalScope.document = previousDocument;
+		}
+		if (previousTestState === undefined) {
+			delete globalScope.__asyncResumerSyncPolicyTest;
+		} else {
+			globalScope.__asyncResumerSyncPolicyTest = previousTestState;
+		}
+	}
+});
+
+test('renderToString inline event resumer reads graph-backed sync policy before importing symbols', async () => {
+	const resumeModuleUrl = createSyncPolicyResumeModuleUrl('graph-policy');
+	const html = renderToString(
+		() => ({
+			html: '<button type="button">Close</button>',
+			state: createProtocolStatePayload({
+				cells: [
+					{
+						graphNodeId: 'state:menu',
+						name: 'menu',
+						valueKind: 'object',
+						value: { open: true },
+					},
+				],
+			}),
+			view: {
+				...viewWithClick(),
+				events: [
+					{
+						hostNodeId: 'h0',
+						eventName: 'click',
+						syncPolicy: {
+							when: {
+								type: 'graph-truthy',
+								graphNodeId: 'state:menu',
+								path: ['open'],
+							},
+							actions: ['preventDefault'],
+						},
+						symbolIds: ['symbol:click'],
+					},
+				],
+			},
+		}),
+		{ resumeModuleUrl },
+	);
+	const state = extractScriptText(html, 'async/state');
+	const view = JSON.parse(extractScriptText(html, 'async/view')) as ProtocolViewPayload;
+	const resumerSource = extractResumerSource(html);
+	const button = element('BUTTON');
+	const root = element('DIV', [button]);
+	const listeners: Array<(event: FakeEvent) => Promise<void>> = [];
+	root.querySelector = (selector) => {
+		if (selector === 'script[type="async/state"]') return { textContent: state };
+		if (selector === 'script[type="async/view"]') return { textContent: JSON.stringify(view) };
+		return null;
+	};
+	root.addEventListener = (type, listener, options) => {
+		const capture =
+			options === true || (typeof options === 'object' && options.capture === true);
+		if (type === 'click' && capture) listeners.push(listener);
+	};
+	const document = {
+		currentScript: {
+			closest(selector: string) {
+				return selector === '[data-async-container]' ? root : null;
+			},
+		},
+		createTreeWalker() {
+			const nodes = [button];
+			return {
+				nextNode() {
+					return nodes.shift() ?? null;
+				},
+			};
+		},
+	};
+	const globalScope = globalThis as typeof globalThis & {
+		document?: unknown;
+		__asyncResumerSyncPolicyTest?: {
+			order: string[];
+		};
+	};
+	const previousDocument = globalScope.document;
+	const previousTestState = globalScope.__asyncResumerSyncPolicyTest;
+	globalScope.document = document;
+	globalScope.__asyncResumerSyncPolicyTest = { order: [] };
+
+	try {
+		await import(`data:text/javascript,${encodeURIComponent(resumerSource)}`);
+
+		await listeners[0]({
+			type: 'click',
+			target: button,
+			defaultPrevented: false,
+			propagationStopped: false,
+			preventDefault() {
+				globalScope.__asyncResumerSyncPolicyTest?.order.push('preventDefault');
+				this.defaultPrevented = true;
+			},
+			stopPropagation() {
+				globalScope.__asyncResumerSyncPolicyTest?.order.push('stopPropagation');
+				this.propagationStopped = true;
+			},
+		} as FakeEvent);
+
+		expect(globalScope.__asyncResumerSyncPolicyTest).toEqual({
+			order: ['preventDefault', 'import', 'handler:true:false'],
+		});
+	} finally {
+		if (previousDocument === undefined) {
+			delete globalScope.document;
+		} else {
+			globalScope.document = previousDocument;
+		}
+		if (previousTestState === undefined) {
+			delete globalScope.__asyncResumerSyncPolicyTest;
+		} else {
+			globalScope.__asyncResumerSyncPolicyTest = previousTestState;
+		}
+	}
+});
+
+test('renderToString inline event resumer reads built-in graph values for sync policy', async () => {
+	const resumeModuleUrl = createSyncPolicyResumeModuleUrl('map-policy');
+	const html = renderToString(
+		() => ({
+			html: '<button type="button">Filter</button>',
+			state: createProtocolStatePayload({
+				cells: [
+					{
+						graphNodeId: 'state:filters',
+						name: 'filters',
+						valueKind: 'object',
+						value: new Map([['open', true]]),
+					},
+				],
+			}),
+			view: {
+				...viewWithClick(),
+				events: [
+					{
+						hostNodeId: 'h0',
+						eventName: 'click',
+						syncPolicy: {
+							when: {
+								type: 'graph-truthy',
+								graphNodeId: 'state:filters',
+								path: [],
+							},
+							actions: ['preventDefault'],
+						},
+						symbolIds: ['symbol:click'],
+					},
+				],
+			},
+		}),
+		{ resumeModuleUrl },
+	);
+	const state = extractScriptText(html, 'async/state');
+	const view = JSON.parse(extractScriptText(html, 'async/view')) as ProtocolViewPayload;
+	const resumerSource = extractResumerSource(html);
+	const button = element('BUTTON');
+	const root = element('DIV', [button]);
+	const listeners: Array<(event: FakeEvent) => Promise<void>> = [];
+	root.querySelector = (selector) => {
+		if (selector === 'script[type="async/state"]') return { textContent: state };
+		if (selector === 'script[type="async/view"]') return { textContent: JSON.stringify(view) };
+		return null;
+	};
+	root.addEventListener = (type, listener, options) => {
+		const capture =
+			options === true || (typeof options === 'object' && options.capture === true);
+		if (type === 'click' && capture) listeners.push(listener);
+	};
+	const document = {
+		currentScript: {
+			closest(selector: string) {
+				return selector === '[data-async-container]' ? root : null;
+			},
+		},
+		createTreeWalker() {
+			const nodes = [button];
+			return {
+				nextNode() {
+					return nodes.shift() ?? null;
+				},
+			};
+		},
+	};
+	const globalScope = globalThis as typeof globalThis & {
+		document?: unknown;
+		__asyncResumerSyncPolicyTest?: {
+			order: string[];
+		};
+	};
+	const previousDocument = globalScope.document;
+	const previousTestState = globalScope.__asyncResumerSyncPolicyTest;
+	globalScope.document = document;
+	globalScope.__asyncResumerSyncPolicyTest = { order: [] };
+
+	try {
+		await import(`data:text/javascript,${encodeURIComponent(resumerSource)}`);
+
+		await listeners[0]({
+			type: 'click',
+			target: button,
+			defaultPrevented: false,
+			propagationStopped: false,
+			preventDefault() {
+				globalScope.__asyncResumerSyncPolicyTest?.order.push('preventDefault');
+				this.defaultPrevented = true;
+			},
+			stopPropagation() {
+				globalScope.__asyncResumerSyncPolicyTest?.order.push('stopPropagation');
+				this.propagationStopped = true;
+			},
+		} as FakeEvent);
+
+		expect(globalScope.__asyncResumerSyncPolicyTest).toEqual({
+			order: ['preventDefault', 'import', 'handler:true:false'],
+		});
+	} finally {
+		if (previousDocument === undefined) {
+			delete globalScope.document;
+		} else {
+			globalScope.document = previousDocument;
+		}
+		if (previousTestState === undefined) {
+			delete globalScope.__asyncResumerSyncPolicyTest;
+		} else {
+			globalScope.__asyncResumerSyncPolicyTest = previousTestState;
 		}
 	}
 });
@@ -247,11 +795,37 @@ function extractResumerSource(html: string): string {
 	return match[1]!;
 }
 
-function createResumeModuleUrl(): string {
+function createResumeModuleUrl(cacheKey = 'default'): string {
 	const source = `
+// ${cacheKey}
 globalThis.__asyncResumerTest.imports++;
 export async function resumeContainerEvent({ root, event }) {
 	globalThis.__asyncResumerTest.events.push(event.type + ':' + root.tagName);
+}
+`;
+	return `data:text/javascript,${encodeURIComponent(source)}`;
+}
+
+function createResumeRuntimeStartedModuleUrl(cacheKey = 'runtime-started'): string {
+	const source = `
+// ${cacheKey}
+globalThis.__asyncResumerTest.imports++;
+export async function resumeContainerEvent({ root, event }) {
+	globalThis.__asyncResumerTest.events.push(event.type + ':' + root.tagName);
+	root.__asyncResumeRuntimeStarted = true;
+}
+`;
+	return `data:text/javascript,${encodeURIComponent(source)}`;
+}
+
+function createSyncPolicyResumeModuleUrl(cacheKey = 'default'): string {
+	const source = `
+// ${cacheKey}
+globalThis.__asyncResumerSyncPolicyTest.order.push('import');
+export async function resumeContainerEvent({ event }) {
+	globalThis.__asyncResumerSyncPolicyTest.order.push(
+		'handler:' + String(event.defaultPrevented) + ':' + String(event.propagationStopped),
+	);
 }
 `;
 	return `data:text/javascript,${encodeURIComponent(source)}`;

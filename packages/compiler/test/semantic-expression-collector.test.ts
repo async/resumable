@@ -380,6 +380,61 @@ test('expression collector lowers static computed collection method literals', (
 	);
 });
 
+test('expression collector lowers Date setter calls as graph writes', () => {
+	const source = 'currentDate.setTime(nextTime)';
+	const currentDateStart = source.indexOf('currentDate');
+	const nextTimeStart = source.indexOf('nextTime');
+	const graph = createMutableSemanticGraphArtifact('src/App.tsrx');
+	const state = createWalkState({
+		filename: 'src/App.tsrx',
+		source,
+		graph,
+	});
+	const dateSetterCall = {
+		type: 'CallExpression',
+		callee: {
+			type: 'MemberExpression',
+			object: {
+				type: 'Identifier',
+				start: currentDateStart,
+				end: currentDateStart + 'currentDate'.length,
+			},
+			property: {
+				type: 'Identifier',
+				name: 'setTime',
+			},
+		},
+		arguments: [
+			{
+				type: 'Identifier',
+				start: nextTimeStart,
+				end: nextTimeStart + 'nextTime'.length,
+			},
+		],
+	} satisfies AnyNode;
+
+	collectCollectionCall(dateSetterCall, state);
+	collectExpressionReads(dateSetterCall, state);
+
+	expect(graph.stateWrites).toEqual([
+		expect.objectContaining({
+			target: 'currentDate',
+			operation: 'call',
+			method: 'setTime',
+			argumentSources: ['nextTime'],
+		}),
+	]);
+	expect(graph.stateReads).toEqual(
+		expect.arrayContaining([
+			expect.objectContaining({ source: 'currentDate' }),
+			expect.objectContaining({ source: 'nextTime' }),
+		]),
+	);
+	expect(graph.stateReads).not.toEqual(
+		expect.arrayContaining([expect.objectContaining({ source: 'currentDate.setTime' })]),
+	);
+});
+
 test('expression collector marks optional collection calls', () => {
 	const source = 'items?.push(nextItem)';
 	const itemsStart = source.indexOf('items');

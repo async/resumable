@@ -1,3 +1,5 @@
+import type { ProtocolStatePayload } from '@async/resumable-protocol';
+
 export type RuntimeGraphCell = {
 	readonly graphNodeId: string;
 	readonly value: unknown;
@@ -42,6 +44,7 @@ export type RuntimeGraphAsyncSnapshot =
 export type RuntimeGraphAsyncComputed = {
 	readonly graphNodeId: string;
 	readonly dependencies: ReadonlyArray<RuntimeGraphComputedDependency>;
+	readonly initialSnapshot?: RuntimeGraphAsyncSnapshot;
 	readonly key: (read: RuntimeGraphRead) => unknown;
 	readonly run: (input: {
 		readonly key: unknown;
@@ -89,12 +92,33 @@ export type RuntimeGraphInput = {
 	readonly cells: ReadonlyArray<RuntimeGraphCell>;
 	readonly computed?: ReadonlyArray<RuntimeGraphComputed>;
 	readonly asyncComputed?: ReadonlyArray<RuntimeGraphAsyncComputed>;
+	readonly sharedDefinitions?: ProtocolStatePayload['sharedDefinitions'];
 };
 
 export type RuntimeGraphWrite = {
 	readonly graphNodeId: string;
 	readonly path?: ReadonlyArray<string>;
 	readonly value: unknown;
+};
+
+export type RuntimeGraphSharedWrite = {
+	readonly definitionId: string;
+	readonly propertyName: string;
+	readonly path?: ReadonlyArray<string>;
+	readonly value: unknown;
+};
+
+export type RuntimeGraphSharedPatchOperation = readonly [
+	operation: 'set',
+	path: ReadonlyArray<string>,
+	value: unknown,
+];
+
+export type RuntimeGraphSharedPatch = {
+	readonly id: string;
+	readonly scope?: RuntimeSharedDefinition['scope'];
+	readonly version: number;
+	readonly patch: ReadonlyArray<RuntimeGraphSharedPatchOperation>;
 };
 
 export type RuntimeGraphUpdate = {
@@ -125,6 +149,18 @@ export type RuntimeGraphSubscription = {
 
 export type RuntimeGraph = {
 	readonly read: (graphNodeId: string, path?: ReadonlyArray<string>) => unknown;
+	readonly readShared: (
+		definitionId: string,
+		propertyName: string,
+		path?: ReadonlyArray<string>,
+	) => unknown;
+	readonly writeShared: (write: RuntimeGraphSharedWrite) => boolean;
+	readonly getSharedDefinition: (
+		definitionId: string,
+	) => NonNullable<ProtocolStatePayload['sharedDefinitions']>[number] | undefined;
+	readonly listSharedDefinitions: () => NonNullable<ProtocolStatePayload['sharedDefinitions']>;
+	readonly takeSharedPatches: () => RuntimeGraphSharedPatch[];
+	readonly applySharedPatch: (patch: RuntimeGraphSharedPatch) => boolean;
 	readonly write: (write: RuntimeGraphWrite) => void;
 	readonly update: (update: RuntimeGraphUpdate) => unknown;
 	readonly call: (call: RuntimeGraphCall) => unknown;
@@ -149,14 +185,28 @@ type RuntimeAsyncComputedNode = RuntimeGraphAsyncComputed & {
 	controller?: AbortController;
 	demanded: boolean;
 	keyValue: unknown;
+	pendingSnapshotNeedsRunner: boolean;
 	snapshot: RuntimeGraphAsyncSnapshot;
 	version: number;
 };
+
+type ArraySlotSnapshot = {
+	readonly exists: boolean;
+	readonly value: unknown;
+};
+
+type RuntimeSharedDefinition = NonNullable<ProtocolStatePayload['sharedDefinitions']>[number];
+type RuntimeSharedReturnProperty = NonNullable<RuntimeSharedDefinition['returnProperties']>[number];
 
 type CollectionMutationSnapshot =
 	| {
 			readonly type: 'size';
 			readonly value: number;
+	  }
+	| {
+			readonly type: 'array';
+			readonly slots: ReadonlyArray<ArraySlotSnapshot>;
+			readonly target: ReadonlyArray<unknown>;
 	  }
 	| {
 			readonly type: 'set-add';
@@ -166,18 +216,26 @@ type CollectionMutationSnapshot =
 			readonly type: 'map-set';
 			readonly hadKey: boolean;
 			readonly valueChanged: boolean;
+	  }
+	| {
+			readonly type: 'date';
+			readonly time: number;
+			readonly target: Date;
 	  };
 
 export function createRuntimeGraph(input: RuntimeGraphInput): RuntimeGraph {
 	const cells = new Map<string, unknown>();
 	const computedNodes = new Map<string, RuntimeComputedNode>();
 	const asyncComputedNodes = new Map<string, RuntimeAsyncComputedNode>();
+	const sharedDefinitions = new Map<string, RuntimeSharedDefinition>();
+	const sharedPatches: RuntimeGraphSharedPatch[] = [];
 	const subscriptions: RuntimeGraphSubscription[] = [];
 	const journalListeners: DomJournalListener[] = [];
 	const dirtyPaths: DirtyPath[] = [];
 	const journal: DomJournalEntry[] = [];
 	let flushScheduled = false;
 	let flushing = false;
+	let activeFlush: Promise<void> | undefined;
 
 	for (const cell of input.cells) {
 		cells.set(cell.graphNodeId, cell.value);
@@ -192,13 +250,19 @@ export function createRuntimeGraph(input: RuntimeGraphInput): RuntimeGraph {
 	}
 
 	for (const asyncComputed of input.asyncComputed ?? []) {
+		const initialSnapshot = asyncComputed.initialSnapshot ?? { status: 'idle', version: 0 };
 		asyncComputedNodes.set(asyncComputed.graphNodeId, {
 			...asyncComputed,
-			demanded: false,
-			keyValue: undefined,
-			snapshot: { status: 'idle', version: 0 },
-			version: 0,
+			demanded: initialSnapshot.status !== 'idle',
+			keyValue: 'key' in initialSnapshot ? initialSnapshot.key : undefined,
+			pendingSnapshotNeedsRunner: initialSnapshot.status === 'pending',
+			snapshot: initialSnapshot,
+			version: initialSnapshot.version,
 		});
+	}
+
+	for (const definition of input.sharedDefinitions ?? []) {
+		sharedDefinitions.set(definition.id, definition);
 	}
 
 	const readGraph: RuntimeGraphRead = (graphNodeId, path = []) => {
@@ -219,6 +283,100 @@ export function createRuntimeGraph(input: RuntimeGraphInput): RuntimeGraph {
 		}
 
 		return readPath(cells.get(graphNodeId), path);
+	};
+
+	const readShared = (
+		definitionId: string,
+		propertyName: string,
+		path: ReadonlyArray<string> = [],
+	): unknown => {
+		const resolved = resolveSharedGraphPath(definitionId, propertyName, path);
+		if (!resolved) return undefined;
+
+		return readGraph(resolved.graphNodeId, resolved.graphPath);
+	};
+
+	const resolveSharedGraphPath = (
+		definitionId: string,
+		propertyName: string,
+		path: ReadonlyArray<string>,
+	):
+		| {
+				readonly definition: RuntimeSharedDefinition;
+				readonly graphNodeId: string;
+				readonly graphPath: ReadonlyArray<string>;
+				readonly exposedPath: ReadonlyArray<string>;
+		  }
+		| undefined => {
+		const definition = sharedDefinitions.get(definitionId);
+		if (!definition) return undefined;
+
+		const property = findLastSharedReturnProperty(definition.returnProperties, propertyName);
+		if (!property || property.kind !== 'graph') return undefined;
+
+		return {
+			definition,
+			graphNodeId: property.graphNodeId,
+			graphPath: [...property.path, ...path],
+			exposedPath: [property.name, ...path],
+		};
+	};
+
+	const setSharedDefinitionVersion = (
+		definition: RuntimeSharedDefinition,
+		version: number,
+	): RuntimeSharedDefinition => {
+		const nextDefinition = {
+			...definition,
+			version,
+		};
+		sharedDefinitions.set(definition.id, nextDefinition);
+		return nextDefinition;
+	};
+
+	const nextSharedDefinitionVersion = (
+		definition: RuntimeSharedDefinition,
+	): RuntimeSharedDefinition => setSharedDefinitionVersion(definition, definition.version + 1);
+
+	const applySharedPatch = (patch: RuntimeGraphSharedPatch): boolean => {
+		const definition = sharedDefinitions.get(patch.id);
+		if (!definition) return false;
+		if (patch.version <= definition.version) return false;
+		if (patch.scope && definition.scope && patch.scope !== definition.scope) return false;
+		if (patch.patch.length === 0) return false;
+
+		const resolvedPatches: Array<{
+			readonly graphNodeId: string;
+			readonly graphPath: ReadonlyArray<string>;
+			readonly value: unknown;
+		}> = [];
+
+		for (const [operation, exposedPath, value] of patch.patch) {
+			if (operation !== 'set') return false;
+			const [propertyName, ...path] = exposedPath;
+			if (!propertyName) return false;
+
+			const resolved = resolveSharedGraphPath(patch.id, propertyName, path);
+			if (!resolved) return false;
+			resolvedPatches.push({
+				graphNodeId: resolved.graphNodeId,
+				graphPath: resolved.graphPath,
+				value,
+			});
+		}
+
+		for (const resolved of resolvedPatches) {
+			const current = cells.get(resolved.graphNodeId);
+			cells.set(resolved.graphNodeId, writePath(current, resolved.graphPath, resolved.value));
+			markDirtyPath(
+				resolved.graphNodeId,
+				dirtyPathForGraphWrite(current, resolved.graphPath),
+			);
+		}
+
+		setSharedDefinitionVersion(definition, patch.version);
+		scheduleFlush();
+		return true;
 	};
 
 	const markComputedDirty = (graphNodeId: string, visited: Set<string>): void => {
@@ -277,6 +435,13 @@ export function createRuntimeGraph(input: RuntimeGraphInput): RuntimeGraph {
 	};
 
 	const demandAsyncComputed = (node: RuntimeAsyncComputedNode): void => {
+		if (node.pendingSnapshotNeedsRunner) {
+			node.pendingSnapshotNeedsRunner = false;
+			node.demanded = true;
+			startAsyncComputed(node, node.key(readGraph));
+			return;
+		}
+
 		if (node.snapshot.status !== 'idle') return;
 
 		node.demanded = true;
@@ -294,6 +459,7 @@ export function createRuntimeGraph(input: RuntimeGraphInput): RuntimeGraph {
 
 	const startAsyncComputed = (node: RuntimeAsyncComputedNode, key: unknown): void => {
 		node.controller?.abort();
+		node.pendingSnapshotNeedsRunner = false;
 
 		const controller = new AbortController();
 		const version = node.version + 1;
@@ -330,42 +496,51 @@ export function createRuntimeGraph(input: RuntimeGraphInput): RuntimeGraph {
 		scheduleFlush();
 	};
 
-	const flush = async (): Promise<void> => {
-		if (flushing) return;
+	const flush = (): Promise<void> => {
+		if (activeFlush) return activeFlush;
 
+		activeFlush = runFlush();
+		return activeFlush;
+	};
+
+	const runFlush = async (): Promise<void> => {
 		flushScheduled = false;
 		flushing = true;
 
 		try {
-			while (dirtyPaths.length > 0) {
-				const pending = dirtyPaths.splice(0);
-				const ranSubscriptions = new Set<string>();
+			try {
+				while (dirtyPaths.length > 0) {
+					const pending = dirtyPaths.splice(0);
+					const ranSubscriptions = new Set<string>();
 
-				for (const subscription of subscriptions) {
-					const subscriptionPath = subscription.path ?? [];
-					const dirty = pending.some(
-						(path) =>
-							path.graphNodeId === subscription.graphNodeId &&
-							pathsIntersect(path.path, subscriptionPath),
-					);
-					if (!dirty || ranSubscriptions.has(subscription.id)) continue;
+					for (const subscription of subscriptions) {
+						const subscriptionPath = subscription.path ?? [];
+						const dirty = pending.some(
+							(path) =>
+								path.graphNodeId === subscription.graphNodeId &&
+								pathsIntersect(path.path, subscriptionPath),
+						);
+						if (!dirty || ranSubscriptions.has(subscription.id)) continue;
 
-					ranSubscriptions.add(subscription.id);
-					const entries = await subscription.run(
-						readGraph(subscription.graphNodeId, subscriptionPath),
-					);
-					appendJournalResult(journal, entries);
+						ranSubscriptions.add(subscription.id);
+						const entries = await subscription.run(
+							readGraph(subscription.graphNodeId, subscriptionPath),
+						);
+						appendJournalResult(journal, entries);
+					}
 				}
+			} finally {
+				flushing = false;
 			}
+
+			await notifyJournalListeners();
 		} finally {
-			flushing = false;
+			activeFlush = undefined;
 
 			if (dirtyPaths.length > 0) {
 				scheduleFlush();
 			}
 		}
-
-		await notifyJournalListeners();
 	};
 
 	const notifyJournalListeners = async (): Promise<void> => {
@@ -379,11 +554,43 @@ export function createRuntimeGraph(input: RuntimeGraphInput): RuntimeGraph {
 
 	return {
 		read: readGraph,
+		readShared,
+		writeShared(write) {
+			const target = resolveSharedGraphPath(
+				write.definitionId,
+				write.propertyName,
+				write.path ?? [],
+			);
+			if (!target) return false;
+
+			const current = cells.get(target.graphNodeId);
+			cells.set(target.graphNodeId, writePath(current, target.graphPath, write.value));
+			const nextDefinition = nextSharedDefinitionVersion(target.definition);
+			sharedPatches.push({
+				id: nextDefinition.id,
+				...(nextDefinition.scope ? { scope: nextDefinition.scope } : {}),
+				version: nextDefinition.version,
+				patch: [['set', target.exposedPath, write.value]],
+			});
+			markDirtyPath(target.graphNodeId, dirtyPathForGraphWrite(current, target.graphPath));
+			scheduleFlush();
+			return true;
+		},
+		getSharedDefinition(definitionId) {
+			return sharedDefinitions.get(definitionId);
+		},
+		listSharedDefinitions() {
+			return [...sharedDefinitions.values()];
+		},
+		takeSharedPatches() {
+			return sharedPatches.splice(0);
+		},
+		applySharedPatch,
 		write(write) {
 			const path = write.path ?? [];
 			const current = cells.get(write.graphNodeId);
 			cells.set(write.graphNodeId, writePath(current, path, write.value));
-			markDirtyPath(write.graphNodeId, path);
+			markDirtyPath(write.graphNodeId, dirtyPathForGraphWrite(current, path));
 			scheduleFlush();
 		},
 		update(update) {
@@ -392,7 +599,7 @@ export function createRuntimeGraph(input: RuntimeGraphInput): RuntimeGraph {
 			const nextValue = update.update(currentValue);
 			const current = cells.get(update.graphNodeId);
 			cells.set(update.graphNodeId, writePath(current, path, nextValue));
-			markDirtyPath(update.graphNodeId, path);
+			markDirtyPath(update.graphNodeId, dirtyPathForGraphWrite(current, path));
 			scheduleFlush();
 			if (update.returnValue === 'previous') return currentValue;
 			if (update.returnValue === 'next') return nextValue;
@@ -436,6 +643,20 @@ export function createRuntimeGraph(input: RuntimeGraphInput): RuntimeGraph {
 	};
 }
 
+function findLastSharedReturnProperty(
+	properties: NonNullable<RuntimeSharedDefinition['returnProperties']> | undefined,
+	propertyName: string,
+): RuntimeSharedReturnProperty | undefined {
+	if (!properties) return undefined;
+
+	for (let index = properties.length - 1; index >= 0; index--) {
+		const property = properties[index];
+		if (property?.name === propertyName) return property;
+	}
+
+	return undefined;
+}
+
 function appendJournalResult(journal: DomJournalEntry[], result: DomJournalResult | void): void {
 	if (!result) return;
 	if (Array.isArray(result)) {
@@ -473,6 +694,19 @@ function writePath(value: unknown, path: ReadonlyArray<string>, nextValue: unkno
 
 	current[path[path.length - 1]] = nextValue;
 	return root;
+}
+
+function dirtyPathForGraphWrite(
+	value: unknown,
+	path: ReadonlyArray<string>,
+): ReadonlyArray<string> {
+	if (path[path.length - 1] !== 'length') return path;
+
+	const parentPath = path.slice(0, -1);
+	const parent = readPath(value, parentPath);
+	if (!Array.isArray(parent)) return path;
+
+	return parentPath;
 }
 
 function deletePath(
@@ -518,7 +752,7 @@ function applyCollectionCall(
 ): unknown {
 	if (!isSupportedCollectionTarget(target)) {
 		throw new TypeError(
-			`Cannot call collection method "${method}" because the graph path is not an Array, Map, or Set.`,
+			`Cannot call collection method "${method}" because the graph path is not an Array, Map, Set, or Date.`,
 		);
 	}
 
@@ -552,6 +786,12 @@ function collectionCallMutated(
 	if (method === 'push' || method === 'unshift') {
 		return beforeMutation?.type !== 'size' || result !== beforeMutation.value;
 	}
+	if (arrayContentMutationMethod(method)) {
+		return (
+			beforeMutation?.type !== 'array' ||
+			!arraySlotsEqual(beforeMutation.slots, beforeMutation.target)
+		);
+	}
 	if (method === 'add') {
 		return beforeMutation?.type !== 'set-add' || !beforeMutation.hadValue;
 	}
@@ -560,6 +800,12 @@ function collectionCallMutated(
 			beforeMutation?.type !== 'map-set' ||
 			!beforeMutation.hadKey ||
 			beforeMutation.valueChanged
+		);
+	}
+	if (dateMutationMethod(method)) {
+		return (
+			beforeMutation?.type !== 'date' ||
+			!Object.is(beforeMutation.time, beforeMutation.target.getTime())
 		);
 	}
 
@@ -582,6 +828,11 @@ function collectionMutationSnapshot(
 			valueChanged: !hadKey || !Object.is(target.get(args[0]), args[1]),
 		};
 	}
+	if (target instanceof Date && dateMutationMethod(method)) {
+		return { type: 'date', time: target.getTime(), target };
+	}
+	if (arrayContentMutationMethod(method) && Array.isArray(target))
+		return { type: 'array', slots: arraySlotSnapshot(target), target };
 
 	if (Array.isArray(target)) return { type: 'size', value: target.length };
 	if (target instanceof Map || target instanceof Set) return { type: 'size', value: target.size };
@@ -603,14 +854,68 @@ function isSupportedCollectionMethod(name: string): boolean {
 		name === 'shift' ||
 		name === 'sort' ||
 		name === 'splice' ||
-		name === 'unshift'
+		name === 'unshift' ||
+		dateMutationMethod(name)
 	);
 }
 
 function isSupportedCollectionTarget(
 	target: unknown,
-): target is unknown[] | Map<unknown, unknown> | Set<unknown> {
-	return Array.isArray(target) || target instanceof Map || target instanceof Set;
+): target is unknown[] | Map<unknown, unknown> | Set<unknown> | Date {
+	return (
+		Array.isArray(target) ||
+		target instanceof Map ||
+		target instanceof Set ||
+		target instanceof Date
+	);
+}
+
+function arrayContentMutationMethod(method: string): boolean {
+	return (
+		method === 'copyWithin' ||
+		method === 'fill' ||
+		method === 'reverse' ||
+		method === 'sort' ||
+		method === 'splice'
+	);
+}
+
+function dateMutationMethod(method: string): boolean {
+	return (
+		method === 'setDate' ||
+		method === 'setFullYear' ||
+		method === 'setHours' ||
+		method === 'setMilliseconds' ||
+		method === 'setMinutes' ||
+		method === 'setMonth' ||
+		method === 'setSeconds' ||
+		method === 'setTime' ||
+		method === 'setUTCDate' ||
+		method === 'setUTCFullYear' ||
+		method === 'setUTCHours' ||
+		method === 'setUTCMilliseconds' ||
+		method === 'setUTCMinutes' ||
+		method === 'setUTCMonth' ||
+		method === 'setUTCSeconds' ||
+		method === 'setYear'
+	);
+}
+
+function arraySlotSnapshot(target: ReadonlyArray<unknown>): ArraySlotSnapshot[] {
+	return Array.from({ length: target.length }, (_, index) => ({
+		exists: Object.prototype.hasOwnProperty.call(target, index),
+		value: target[index],
+	}));
+}
+
+function arraySlotsEqual(before: ReadonlyArray<ArraySlotSnapshot>, after: unknown): boolean {
+	if (!Array.isArray(after)) return false;
+	if (before.length !== after.length) return false;
+
+	return before.every((slot, index) => {
+		const exists = Object.prototype.hasOwnProperty.call(after, index);
+		return slot.exists === exists && (!slot.exists || Object.is(slot.value, after[index]));
+	});
 }
 
 function pathsIntersect(a: ReadonlyArray<string>, b: ReadonlyArray<string>): boolean {

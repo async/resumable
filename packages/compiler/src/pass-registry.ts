@@ -22,7 +22,7 @@ export const defaultCompilerPasses: ReadonlyArray<CompilerPassDefinition> = [
 	{
 		passId: 'symbol-resolver',
 		description: 'Plan lazy symbols and sync policy records for the generated resolver.',
-		consumes: ['semanticGraph', 'payloadArena'],
+		consumes: ['semanticGraph', 'stateLowering', 'payloadArena'],
 		produces: ['symbolResolver'],
 	},
 	{
@@ -58,7 +58,7 @@ export const defaultCompilerPasses: ReadonlyArray<CompilerPassDefinition> = [
 	{
 		passId: 'symbol-resolver-module',
 		description: 'Emit the generated symbol resolver module that owns dynamic imports.',
-		consumes: ['symbols'],
+		consumes: ['symbolResolverModuleInput'],
 		produces: ['symbolResolverModule', 'symbolResolverModuleManifest'],
 	},
 ];

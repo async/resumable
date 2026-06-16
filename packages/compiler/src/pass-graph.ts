@@ -4,7 +4,9 @@ export type CompilerPassGraphErrorReason =
 	| 'duplicate-pass-id'
 	| 'duplicate-artifact-producer'
 	| 'missing-artifact'
-	| 'dependency-cycle';
+	| 'dependency-cycle'
+	| 'missing-pass-output'
+	| 'undeclared-pass-output';
 
 export type CompilerPassGraphDiagnostic = {
 	readonly code: 'AA_COMPILER_PASS_GRAPH_INVALID';

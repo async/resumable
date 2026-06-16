@@ -6,7 +6,7 @@ import {
 	collectAsyncBoundaryDiagnostics,
 	propagateAsyncComputedCapability,
 } from './collect-async.ts';
-import { collectImports } from './imports.ts';
+import { collectImports, collectModuleImports } from './imports.ts';
 import { getComponent, collectComponentProps } from './collect-components.ts';
 import {
 	collectElement,
@@ -21,6 +21,10 @@ import {
 	collectUpdate,
 } from './collect-expressions.ts';
 import { collectModuleScopeGraphCreation } from './collect-module-scope.ts';
+import {
+	collectSharedDefinitionDependencies,
+	collectSharedFactoryGraph,
+} from './collect-shared.ts';
 import { collectVariableDeclaration } from './collect-state.ts';
 import { createMutableSemanticGraphArtifact, createWalkState, type WalkState } from './types.ts';
 
@@ -28,8 +32,10 @@ export async function buildSemanticGraph(
 	input: SemanticGraphInput,
 ): Promise<SemanticGraphArtifact> {
 	const ast = parseModule(input.source, input.filename) as AnyNode;
+	const statements = asNodes(ast.body);
 	const graph = createMutableSemanticGraphArtifact(input.filename);
-	const frameworkApiImports = collectImports(asNodes(ast.body));
+	graph.moduleImports.push(...collectModuleImports(statements));
+	const frameworkApiImports = collectImports(statements);
 	const state = createWalkState({
 		filename: input.filename,
 		source: input.source,
@@ -37,9 +43,14 @@ export async function buildSemanticGraph(
 		frameworkApiImports,
 	});
 
-	for (const statement of asNodes(ast.body)) {
+	for (const statement of statements) {
 		collectModuleScopeGraphCreation(statement, state);
+	}
 
+	collectSharedDefinitionDependencies(statements, state);
+	collectSharedFactoryGraph(statements, state, walk);
+
+	for (const statement of statements) {
 		const component = getComponent(statement);
 		const name = getIdentifierName(component?.id);
 

@@ -6,12 +6,15 @@ export function collectAssignment(node: AnyNode, state: WalkState): void {
 	const target = node.left as AnyNode | undefined;
 	if (!target) return;
 	const operator = typeof node.operator === 'string' ? node.operator : '=';
+	const value = node.right as AnyNode | undefined;
 
 	state.graph.stateWrites.push({
 		target: expressionSource(target, state.source),
+		...sharedScope(state),
 		targetSpan: sourceSpan(target, state.filename),
 		operation: 'assign',
 		assignmentOperator: operator === '=' ? undefined : operator,
+		valueSource: value ? expressionSource(value, state.source) : undefined,
 	});
 }
 
@@ -21,6 +24,7 @@ export function collectUpdate(node: AnyNode, state: WalkState): void {
 
 	state.graph.stateWrites.push({
 		target: expressionSource(target, state.source),
+		...sharedScope(state),
 		targetSpan: sourceSpan(target, state.filename),
 		operation: 'update',
 		prefix: node.prefix === true,
@@ -40,6 +44,7 @@ export function collectCollectionCall(node: AnyNode, state: WalkState): void {
 
 	state.graph.stateWrites.push({
 		target: expressionSource(target, state.source),
+		...sharedScope(state),
 		targetSpan: sourceSpan(target, state.filename),
 		operation: 'call',
 		method,
@@ -58,6 +63,7 @@ export function collectDelete(node: AnyNode, state: WalkState): void {
 
 	state.graph.stateWrites.push({
 		target: expressionSource(target, state.source),
+		...sharedScope(state),
 		targetSpan: sourceSpan(target, state.filename),
 		operation: 'delete',
 		optional: target.optional === true,
@@ -141,8 +147,15 @@ function addStateRead(node: AnyNode, state: WalkState): void {
 
 	state.graph.stateReads.push({
 		source,
+		...sharedScope(state),
 		sourceSpan: sourceSpan(node, state.filename),
 	});
+}
+
+function sharedScope(state: WalkState): { readonly sharedDefinitionId?: string } {
+	return state.currentSharedDefinitionId
+		? { sharedDefinitionId: state.currentSharedDefinitionId }
+		: {};
 }
 
 function getStaticMemberPropertyName(member: AnyNode): string | null {
@@ -179,6 +192,28 @@ function isMutatingCollectionMethod(name: string): boolean {
 		name === 'shift' ||
 		name === 'sort' ||
 		name === 'splice' ||
-		name === 'unshift'
+		name === 'unshift' ||
+		isMutatingDateMethod(name)
+	);
+}
+
+function isMutatingDateMethod(name: string): boolean {
+	return (
+		name === 'setDate' ||
+		name === 'setFullYear' ||
+		name === 'setHours' ||
+		name === 'setMilliseconds' ||
+		name === 'setMinutes' ||
+		name === 'setMonth' ||
+		name === 'setSeconds' ||
+		name === 'setTime' ||
+		name === 'setUTCDate' ||
+		name === 'setUTCFullYear' ||
+		name === 'setUTCHours' ||
+		name === 'setUTCMilliseconds' ||
+		name === 'setUTCMinutes' ||
+		name === 'setUTCMonth' ||
+		name === 'setUTCSeconds' ||
+		name === 'setYear'
 	);
 }

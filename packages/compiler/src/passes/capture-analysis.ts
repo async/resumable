@@ -590,7 +590,7 @@ function symbolSource(symbol: PlannedSymbol): string {
 	if (symbol.kind === 'event-handler') return symbol.source;
 	if (symbol.kind === 'dom-update') return symbol.source;
 	if (symbol.kind === 'behavior') return symbol.source;
-	if (symbol.kind === 'async-computed-runner') return symbol.name;
+	if (symbol.kind === 'async-computed-runner') return symbol.source;
 
 	return '';
 }

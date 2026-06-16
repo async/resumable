@@ -92,8 +92,29 @@ test('createProtocolViewPayload links payload arena records to lazy symbol IDs',
 		},
 	]);
 	expect(view.behaviors).toEqual([
-		{ hostNodeId: 'h3', source: 'chart(menu)', symbolId: 'symbol:4' },
-		{ hostNodeId: 'h3', source: 'resizeCanvas', symbolId: 'symbol:5' },
+		{
+			hostNodeId: 'h3',
+			source: 'chart(menu)',
+			functionSource: 'chart',
+			inputSources: ['menu'],
+			inputValues: [{ open: true }],
+			inputGraphReads: [
+				{
+					inputIndex: 0,
+					source: 'menu',
+					graphNodeId: 'state:menu',
+					path: [],
+				},
+			],
+			symbolId: 'symbol:4',
+		},
+		{
+			hostNodeId: 'h3',
+			source: 'resizeCanvas',
+			functionSource: 'resizeCanvas',
+			inputSources: [],
+			symbolId: 'symbol:5',
+		},
 	]);
 });
 

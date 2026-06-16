@@ -7,6 +7,7 @@ import {
 	semanticAliasMap,
 } from '../../artifact-helpers/graph-paths.ts';
 import type { SemanticGraphBinding } from '../../artifacts.ts';
+import { graphDestructureDefaultUnsupportedDiagnostic } from './diagnostics.ts';
 import type { WalkState } from './types.ts';
 
 export function collectDestructuredAliases(
@@ -19,8 +20,8 @@ export function collectDestructuredAliases(
 
 	const resolved = resolveGraphPath(
 		expressionSource(init, state.source),
-		graphBindingMap(state.graph),
-		semanticAliasMap(state.graph),
+		graphBindingMap(state.graph, currentGraphScope(state)),
+		semanticAliasMap(state.graph, currentGraphScope(state)),
 	);
 	if (!resolved) return;
 
@@ -49,6 +50,7 @@ export function collectObjectPatternAliases(
 			state.graph.aliases.push({
 				name: local.name,
 				target: targetBase,
+				...sharedScope(state),
 				excludedPaths,
 				declarationKind,
 				sourceSpan: sourceSpan(local, state.filename),
@@ -63,6 +65,11 @@ export function collectObjectPatternAliases(
 
 		const target = `${targetBase}.${key}`;
 		const value = property.value as AnyNode | undefined;
+		if (value?.type === 'AssignmentPattern') {
+			diagnoseDefaultAlias(value, target, state);
+			continue;
+		}
+
 		const nested = nestedDestructuringPattern(value);
 		if (nested?.type === 'ObjectPattern') {
 			collectObjectPatternAliases(nested, target, declarationKind, state);
@@ -79,6 +86,7 @@ export function collectObjectPatternAliases(
 		state.graph.aliases.push({
 			name: local.name,
 			target,
+			...sharedScope(state),
 			declarationKind,
 			sourceSpan: sourceSpan(local, state.filename),
 		});
@@ -98,6 +106,11 @@ export function collectArrayPatternAliases(
 		if (element.type === 'RestElement') return;
 
 		const target = `${targetBase}.${index}`;
+		if (element.type === 'AssignmentPattern') {
+			diagnoseDefaultAlias(element, target, state);
+			return;
+		}
+
 		const nested = nestedDestructuringPattern(element);
 		if (nested?.type === 'ObjectPattern') {
 			collectObjectPatternAliases(nested, target, declarationKind, state);
@@ -114,10 +127,35 @@ export function collectArrayPatternAliases(
 		state.graph.aliases.push({
 			name: local.name,
 			target,
+			...sharedScope(state),
 			declarationKind,
 			sourceSpan: sourceSpan(local, state.filename),
 		});
 	});
+}
+
+function currentGraphScope(state: WalkState): string | null {
+	return state.currentSharedDefinitionId ?? null;
+}
+
+function sharedScope(state: WalkState): { readonly sharedDefinitionId?: string } {
+	return state.currentSharedDefinitionId
+		? { sharedDefinitionId: state.currentSharedDefinitionId }
+		: {};
+}
+
+function diagnoseDefaultAlias(node: AnyNode, target: string, state: WalkState): void {
+	const local = localAliasIdentifier(node);
+	if (!local) return;
+
+	state.graph.diagnostics.push(
+		graphDestructureDefaultUnsupportedDiagnostic({
+			localName: local.name,
+			target,
+			source: expressionSource(node, state.source),
+			sourceSpan: sourceSpan(node, state.filename),
+		}),
+	);
 }
 
 function objectPatternExcludedPaths(pattern: AnyNode): ReadonlyArray<ReadonlyArray<string>> {

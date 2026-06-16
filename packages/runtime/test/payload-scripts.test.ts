@@ -15,7 +15,7 @@ import type { ProtocolViewPayload } from '@async/resumable-protocol';
 type FakeElement = {
 	readonly nodeType: 1;
 	readonly tagName: string;
-	readonly childNodes: FakeElement[];
+	readonly childNodes: FakeNode[];
 	textContent?: string | null;
 	readonly listeners: Array<{
 		readonly type: string;
@@ -28,6 +28,13 @@ type FakeElement = {
 		options?: { readonly capture?: boolean },
 	): void;
 };
+
+type FakeComment = {
+	readonly nodeType: 8;
+	readonly data: string;
+};
+
+type FakeNode = FakeElement | FakeComment;
 
 type FakeEvent = {
 	readonly type: string;
@@ -46,7 +53,7 @@ type FakePayloadDocument = {
 	querySelector(selector: string): FakePayloadScript | null;
 };
 
-function element(tagName: string, childNodes: FakeElement[] = []): FakeElement {
+function element(tagName: string, childNodes: FakeNode[] = []): FakeElement {
 	return {
 		nodeType: 1,
 		tagName,
@@ -55,6 +62,13 @@ function element(tagName: string, childNodes: FakeElement[] = []): FakeElement {
 		addEventListener(type, listener, options) {
 			this.listeners.push({ type, listener, options });
 		},
+	};
+}
+
+function comment(data: string): FakeComment {
+	return {
+		nodeType: 8,
+		data,
 	};
 }
 
@@ -72,6 +86,12 @@ function payloadDocument(stateScript: string, viewScript: string): FakePayloadDo
 
 function scriptContent(script: string): string {
 	return script.replace(/^<script type="async\/(?:state|view)">/, '').replace('</script>', '');
+}
+
+async function settleMicrotasks(count = 4): Promise<void> {
+	for (let index = 0; index < count; index++) {
+		await Promise.resolve();
+	}
 }
 
 test('runtime decodes async payload scripts into graph state and resume view records', async () => {
@@ -182,6 +202,288 @@ test('runtime decodes async payload scripts from a document-like script lookup',
 	});
 });
 
+test('runtime decodes shared definition metadata from async state payload scripts', () => {
+	const state = createProtocolStatePayload({
+		cells: [
+			{
+				graphNodeId: 'shared:src/session.tsrx#session/state:data',
+				name: 'data',
+				valueKind: 'object',
+				value: {
+					status: 'anonymous',
+					user: {
+						name: 'Ada',
+					},
+				},
+			},
+		],
+		sharedDefinitions: [
+			{
+				id: 'shared:src/session.tsrx#session',
+				name: 'session',
+				exportedName: 'session',
+				scope: 'page',
+				version: 0,
+				graphNodeIds: ['shared:src/session.tsrx#session/state:data'],
+				returnProperties: [
+					{
+						kind: 'graph',
+						name: 'status',
+						graphNodeId: 'shared:src/session.tsrx#session/state:data',
+						path: ['status'],
+					},
+					{
+						kind: 'graph',
+						name: 'user',
+						graphNodeId: 'shared:src/session.tsrx#session/state:data',
+						path: ['user'],
+					},
+					{
+						kind: 'method',
+						name: 'logout',
+					},
+				],
+			},
+		],
+	});
+	const view: ProtocolViewPayload = {
+		version: 1,
+		locators: [],
+		events: [],
+		domUpdates: [],
+		behaviors: [],
+		elementHandles: [],
+		asyncBoundaries: [],
+	};
+	const scripts = renderPayloadScripts({ state, view });
+	const decoded = decodePayloadScripts(scripts);
+	const graph = createRuntimeGraphFromStatePayload(decoded.state);
+
+	expect(decoded.state.sharedDefinitions).toEqual([
+		{
+			id: 'shared:src/session.tsrx#session',
+			name: 'session',
+			exportedName: 'session',
+			scope: 'page',
+			version: 0,
+			graphNodeIds: ['shared:src/session.tsrx#session/state:data'],
+			returnProperties: [
+				{
+					kind: 'graph',
+					name: 'status',
+					graphNodeId: 'shared:src/session.tsrx#session/state:data',
+					path: ['status'],
+				},
+				{
+					kind: 'graph',
+					name: 'user',
+					graphNodeId: 'shared:src/session.tsrx#session/state:data',
+					path: ['user'],
+				},
+				{
+					kind: 'method',
+					name: 'logout',
+				},
+			],
+		},
+	]);
+	expect(graph.getSharedDefinition('shared:src/session.tsrx#session')).toEqual(
+		expect.objectContaining({
+			id: 'shared:src/session.tsrx#session',
+			name: 'session',
+			version: 0,
+		}),
+	);
+	expect(graph.readShared('shared:src/session.tsrx#session', 'status')).toBe('anonymous');
+	expect(graph.takeSharedPatches()).toEqual([]);
+	expect(
+		graph.writeShared({
+			definitionId: 'shared:src/session.tsrx#session',
+			propertyName: 'status',
+			value: 'ready',
+		}),
+	).toBe(true);
+	expect(graph.getSharedDefinition('shared:src/session.tsrx#session')).toEqual(
+		expect.objectContaining({
+			version: 1,
+		}),
+	);
+	expect(graph.takeSharedPatches()).toEqual([
+		{
+			id: 'shared:src/session.tsrx#session',
+			scope: 'page',
+			version: 1,
+			patch: [['set', ['status'], 'ready']],
+		},
+	]);
+	expect(graph.takeSharedPatches()).toEqual([]);
+	expect(graph.readShared('shared:src/session.tsrx#session', 'status')).toBe('ready');
+	expect(graph.read('shared:src/session.tsrx#session/state:data', ['status'])).toBe('ready');
+	expect(
+		graph.writeShared({
+			definitionId: 'shared:src/session.tsrx#session',
+			propertyName: 'user',
+			path: ['name'],
+			value: 'Grace',
+		}),
+	).toBe(true);
+	expect(graph.getSharedDefinition('shared:src/session.tsrx#session')).toEqual(
+		expect.objectContaining({
+			version: 2,
+		}),
+	);
+	expect(graph.takeSharedPatches()).toEqual([
+		{
+			id: 'shared:src/session.tsrx#session',
+			scope: 'page',
+			version: 2,
+			patch: [['set', ['user', 'name'], 'Grace']],
+		},
+	]);
+	expect(graph.readShared('shared:src/session.tsrx#session', 'user', ['name'])).toBe('Grace');
+	expect(graph.read('shared:src/session.tsrx#session/state:data', ['user', 'name'])).toBe(
+		'Grace',
+	);
+	expect(
+		graph.writeShared({
+			definitionId: 'shared:src/session.tsrx#session',
+			propertyName: 'logout',
+			value: 'ignored',
+		}),
+	).toBe(false);
+	expect(graph.takeSharedPatches()).toEqual([]);
+});
+
+test('runtime folds received shared patch records into decoded graph state', () => {
+	const state = createProtocolStatePayload({
+		cells: [
+			{
+				graphNodeId: 'shared:src/session.tsrx#session/state:data',
+				name: 'data',
+				valueKind: 'object',
+				value: {
+					status: 'anonymous',
+					user: {
+						name: 'Ada',
+					},
+				},
+			},
+		],
+		sharedDefinitions: [
+			{
+				id: 'shared:src/session.tsrx#session',
+				name: 'session',
+				exportedName: 'session',
+				scope: 'page',
+				version: 0,
+				graphNodeIds: ['shared:src/session.tsrx#session/state:data'],
+				returnProperties: [
+					{
+						kind: 'graph',
+						name: 'status',
+						graphNodeId: 'shared:src/session.tsrx#session/state:data',
+						path: ['status'],
+					},
+					{
+						kind: 'graph',
+						name: 'user',
+						graphNodeId: 'shared:src/session.tsrx#session/state:data',
+						path: ['user'],
+					},
+				],
+			},
+		],
+	});
+	const view: ProtocolViewPayload = {
+		version: 1,
+		locators: [],
+		events: [],
+		domUpdates: [],
+		behaviors: [],
+		elementHandles: [],
+		asyncBoundaries: [],
+	};
+	const decoded = decodePayloadScripts(renderPayloadScripts({ state, view }));
+	const sourceGraph = createRuntimeGraphFromStatePayload(decoded.state);
+	const receiverGraph = createRuntimeGraphFromStatePayload(decoded.state);
+
+	sourceGraph.writeShared({
+		definitionId: 'shared:src/session.tsrx#session',
+		propertyName: 'user',
+		path: ['name'],
+		value: 'Grace',
+	});
+	const [patch] = sourceGraph.takeSharedPatches();
+
+	expect(receiverGraph.applySharedPatch(patch!)).toBe(true);
+	expect(receiverGraph.readShared('shared:src/session.tsrx#session', 'user', ['name'])).toBe(
+		'Grace',
+	);
+	expect(receiverGraph.getSharedDefinition('shared:src/session.tsrx#session')).toEqual(
+		expect.objectContaining({
+			version: 1,
+		}),
+	);
+	expect(receiverGraph.takeSharedPatches()).toEqual([]);
+	expect(receiverGraph.applySharedPatch(patch!)).toBe(false);
+	expect(receiverGraph.applySharedPatch({ ...patch!, version: 2, patch: [] })).toBe(false);
+	expect(receiverGraph.getSharedDefinition('shared:src/session.tsrx#session')).toEqual(
+		expect.objectContaining({
+			version: 1,
+		}),
+	);
+});
+
+test('runtime decodes serialized behavior input values from async/view scripts', () => {
+	const state = createProtocolStatePayload({ cells: [] });
+	const view: ProtocolViewPayload = {
+		version: 1,
+		locators: [{ hostNodeId: 'h0', strategy: 'dom-order', index: 0, tagName: 'canvas' }],
+		events: [],
+		domUpdates: [],
+		behaviors: [
+			{
+				hostNodeId: 'h0',
+				source: 'chart(config)',
+				functionSource: 'chart',
+				inputSources: ['config'],
+				inputValues: [{ color: 'red' }],
+				inputGraphReads: [
+					{
+						inputIndex: 0,
+						source: 'config',
+						graphNodeId: 'state:config',
+						path: [],
+					},
+				],
+				symbolId: 'symbol:chart',
+			},
+		],
+		elementHandles: [],
+		asyncBoundaries: [],
+	};
+	const scripts = renderPayloadScripts({ state, view });
+
+	expect(decodePayloadScripts(scripts).view.behaviors).toEqual([
+		{
+			hostNodeId: 'h0',
+			source: 'chart(config)',
+			functionSource: 'chart',
+			inputSources: ['config'],
+			inputValues: [{ color: 'red' }],
+			inputGraphReads: [
+				{
+					inputIndex: 0,
+					source: 'config',
+					graphNodeId: 'state:config',
+					path: [],
+				},
+			],
+			symbolId: 'symbol:chart',
+		},
+	]);
+});
+
 test('payload document resume applies DOM journal entries through async/view locators by default', async () => {
 	const button = element('BUTTON');
 	const root = element('SECTION', [button]);
@@ -230,8 +532,292 @@ test('payload document resume applies DOM journal entries through async/view loc
 	expect(resumed.graph.takeJournal()).toEqual([]);
 });
 
+test('payload script resume loads async computed runner symbols only when demanded', async () => {
+	const start = comment('async:boundary:0:start');
+	const paragraph = element('P');
+	const end = comment('async:boundary:0:end');
+	const root = element('SECTION', [start, paragraph, end]);
+	const loadedSymbols: string[] = [];
+	const runnerInputs: Array<{
+		readonly key: unknown;
+		readonly signal: AbortSignal | undefined;
+		readonly readValue: unknown;
+	}> = [];
+	const state = createProtocolStatePayload({
+		cells: [
+			{
+				graphNodeId: 'state:userId',
+				name: 'userId',
+				valueKind: 'scalar',
+				value: 'ada',
+			},
+		],
+		computed: [
+			{
+				graphNodeId: 'computed:details',
+				name: 'details',
+				async: true,
+				dependencies: [{ graphNodeId: 'state:userId', path: [] }],
+			},
+		],
+	});
+	const view: ProtocolViewPayload = {
+		version: 1,
+		locators: [
+			{ hostNodeId: 'h0', strategy: 'dom-order', index: 0, tagName: 'section' },
+			{ hostNodeId: 'h1', strategy: 'dom-order', index: 1, tagName: 'p' },
+		],
+		events: [],
+		domUpdates: [],
+		behaviors: [],
+		elementHandles: [],
+		asyncBoundaries: [
+			{
+				id: 'boundary:0',
+				startAnchor: { strategy: 'dom-order-comment', index: 0 },
+				endAnchor: { strategy: 'dom-order-comment', index: 1 },
+				asyncReads: [
+					{
+						source: 'details.title',
+						graphNodeId: 'computed:details',
+						path: [],
+						runnerSymbolId: 'symbol:details-runner',
+					},
+				],
+			},
+		],
+	};
+	const scripts = renderPayloadScripts({ state, view });
+	const resumed = await resumeFromPayloadScripts({
+		root,
+		stateScript: scripts.stateScript,
+		viewScript: scripts.viewScript,
+		loadSymbol(symbolId) {
+			loadedSymbols.push(symbolId);
+			return async (context) => {
+				const readValue = context.read?.('state:userId', []);
+				runnerInputs.push({
+					key: context.key,
+					signal: context.signal,
+					readValue,
+				});
+				return { title: `User ${String(readValue)}` };
+			};
+		},
+	});
+
+	expect(loadedSymbols).toEqual([]);
+
+	expect(resumed.graph.read('computed:details')).toEqual({
+		status: 'pending',
+		version: 1,
+		key: 'ada',
+	});
+	expect(loadedSymbols).toEqual(['symbol:details-runner']);
+
+	await settleMicrotasks();
+	await resumed.graph.flush();
+
+	expect(runnerInputs).toEqual([
+		expect.objectContaining({
+			key: 'ada',
+			readValue: 'ada',
+		}),
+	]);
+	expect(runnerInputs[0]?.signal).toBeInstanceOf(AbortSignal);
+	expect(resumed.graph.read('computed:details')).toEqual({
+		status: 'fulfilled',
+		version: 1,
+		key: 'ada',
+		value: { title: 'User ada' },
+	});
+	expect(resumed.graph.takeJournal()).toEqual([]);
+});
+
+test('payload script resume restores fulfilled async computed snapshots before revalidation', async () => {
+	const start = comment('async:boundary:0:start');
+	const paragraph = element('P');
+	const end = comment('async:boundary:0:end');
+	const root = element('SECTION', [start, paragraph, end]);
+	const loadedSymbols: string[] = [];
+	const state = createProtocolStatePayload({
+		cells: [
+			{
+				graphNodeId: 'state:userId',
+				name: 'userId',
+				valueKind: 'scalar',
+				value: 'ada',
+			},
+		],
+		computed: [
+			{
+				graphNodeId: 'computed:details',
+				name: 'details',
+				async: true,
+				dependencies: [{ graphNodeId: 'state:userId', path: [] }],
+				snapshot: {
+					status: 'fulfilled',
+					version: 1,
+					key: 'ada',
+					value: { title: 'User ada' },
+				},
+			},
+		],
+	});
+	const view: ProtocolViewPayload = {
+		version: 1,
+		locators: [
+			{ hostNodeId: 'h0', strategy: 'dom-order', index: 0, tagName: 'section' },
+			{ hostNodeId: 'h1', strategy: 'dom-order', index: 1, tagName: 'p' },
+		],
+		events: [],
+		domUpdates: [],
+		behaviors: [],
+		elementHandles: [],
+		asyncBoundaries: [
+			{
+				id: 'boundary:0',
+				startAnchor: { strategy: 'dom-order-comment', index: 0 },
+				endAnchor: { strategy: 'dom-order-comment', index: 1 },
+				asyncReads: [
+					{
+						source: 'details',
+						graphNodeId: 'computed:details',
+						path: [],
+						runnerSymbolId: 'symbol:details-runner',
+					},
+				],
+			},
+		],
+	};
+	const scripts = renderPayloadScripts({ state, view });
+	const resumed = await resumeFromPayloadScripts({
+		root,
+		stateScript: scripts.stateScript,
+		viewScript: scripts.viewScript,
+		loadSymbol(symbolId) {
+			loadedSymbols.push(symbolId);
+			return async (context) => ({ title: `User ${String(context.key)}` });
+		},
+	});
+
+	expect(resumed.graph.read('computed:details')).toEqual({
+		status: 'fulfilled',
+		version: 1,
+		key: 'ada',
+		value: { title: 'User ada' },
+	});
+	expect(loadedSymbols).toEqual([]);
+
+	resumed.graph.write({ graphNodeId: 'state:userId', value: 'grace' });
+	await resumed.graph.flush();
+
+	expect(loadedSymbols).toEqual(['symbol:details-runner']);
+
+	await settleMicrotasks();
+	await resumed.graph.flush();
+
+	expect(resumed.graph.read('computed:details')).toEqual({
+		status: 'fulfilled',
+		version: 2,
+		key: 'grace',
+		value: { title: 'User grace' },
+	});
+});
+
+test('payload script resume restarts pending async computed snapshots on demand', async () => {
+	const start = comment('async:boundary:0:start');
+	const paragraph = element('P');
+	const end = comment('async:boundary:0:end');
+	const root = element('SECTION', [start, paragraph, end]);
+	const loadedSymbols: string[] = [];
+	const runnerInputs: Array<{ readonly key: unknown; readonly readValue: unknown }> = [];
+	const state = createProtocolStatePayload({
+		cells: [
+			{
+				graphNodeId: 'state:userId',
+				name: 'userId',
+				valueKind: 'scalar',
+				value: 'ada',
+			},
+		],
+		computed: [
+			{
+				graphNodeId: 'computed:details',
+				name: 'details',
+				async: true,
+				dependencies: [{ graphNodeId: 'state:userId', path: [] }],
+				snapshot: {
+					status: 'pending',
+					version: 3,
+					key: 'ada',
+				},
+			},
+		],
+	});
+	const view: ProtocolViewPayload = {
+		version: 1,
+		locators: [
+			{ hostNodeId: 'h0', strategy: 'dom-order', index: 0, tagName: 'section' },
+			{ hostNodeId: 'h1', strategy: 'dom-order', index: 1, tagName: 'p' },
+		],
+		events: [],
+		domUpdates: [],
+		behaviors: [],
+		elementHandles: [],
+		asyncBoundaries: [
+			{
+				id: 'boundary:0',
+				startAnchor: { strategy: 'dom-order-comment', index: 0 },
+				endAnchor: { strategy: 'dom-order-comment', index: 1 },
+				asyncReads: [
+					{
+						source: 'details',
+						graphNodeId: 'computed:details',
+						path: [],
+						runnerSymbolId: 'symbol:details-runner',
+					},
+				],
+			},
+		],
+	};
+	const scripts = renderPayloadScripts({ state, view });
+	const resumed = await resumeFromPayloadScripts({
+		root,
+		stateScript: scripts.stateScript,
+		viewScript: scripts.viewScript,
+		loadSymbol(symbolId) {
+			loadedSymbols.push(symbolId);
+			return async (context) => {
+				const readValue = context.read?.('state:userId', []);
+				runnerInputs.push({ key: context.key, readValue });
+				return { title: `User ${String(readValue)}` };
+			};
+		},
+	});
+
+	expect(loadedSymbols).toEqual([]);
+	expect(resumed.graph.read('computed:details')).toEqual({
+		status: 'pending',
+		version: 4,
+		key: 'ada',
+	});
+	expect(loadedSymbols).toEqual(['symbol:details-runner']);
+
+	await settleMicrotasks();
+	await resumed.graph.flush();
+
+	expect(runnerInputs).toEqual([{ key: 'ada', readValue: 'ada' }]);
+	expect(resumed.graph.read('computed:details')).toEqual({
+		status: 'fulfilled',
+		version: 4,
+		key: 'ada',
+		value: { title: 'User ada' },
+	});
+});
+
 test('runtime rejects payload scripts missing required state or view fields', () => {
-	const validState = '<script type="async/state">{"version":1,"cells":[]}</script>';
+	const validState = '<script type="async/state">{"version":1,"cells":[],"computed":[]}</script>';
 	const validView =
 		'<script type="async/view">{"version":1,"locators":[],"events":[],"domUpdates":[],"behaviors":[],"elementHandles":[],"asyncBoundaries":[]}</script>';
 
@@ -244,14 +830,178 @@ test('runtime rejects payload scripts missing required state or view fields', ()
 
 	expect(() =>
 		decodePayloadScripts({
+			stateScript: '<script type="async/state">{"version":1,"cells":[]}</script>',
+			viewScript: validView,
+		}),
+	).toThrow('Invalid async/state payload: expected computed array.');
+
+	expect(() =>
+		decodePayloadScripts({
 			stateScript: validState,
 			viewScript: '<script type="async/view">{"version":1,"locators":[]}</script>',
 		}),
 	).toThrow('Invalid async/view payload: expected events array.');
 });
 
+test('runtime rejects payload scripts with malformed serialized state values', () => {
+	const validView =
+		'<script type="async/view">{"version":1,"locators":[],"events":[],"domUpdates":[],"behaviors":[],"elementHandles":[],"asyncBoundaries":[]}</script>';
+
+	expect(() =>
+		decodePayloadScripts({
+			stateScript:
+				'<script type="async/state">{"version":1,"cells":[],"computed":[],"sharedDefinitions":[{"id":"shared:src/session.tsrx#session","name":"session","exportedName":"session","version":-1,"graphNodeIds":[]}]}</script>',
+			viewScript: validView,
+		}),
+	).toThrow('Invalid async/state sharedDefinitions[0]: expected version non-negative integer.');
+
+	expect(() =>
+		decodePayloadScripts({
+			stateScript:
+				'<script type="async/state">{"version":1,"cells":[{"graphNodeId":"state:count","name":"count","valueKind":"scalar","value":{"version":1,"root":0}}],"computed":[]}</script>',
+			viewScript: validView,
+		}),
+	).toThrow('Invalid async/state cell[0].value: expected records array.');
+
+	expect(() =>
+		decodePayloadScripts({
+			stateScript:
+				'<script type="async/state">{"version":1,"cells":[{"graphNodeId":"state:user","name":"user","valueKind":"object","value":{"version":1,"root":{"$type":"unknown"},"records":[]}}],"computed":[]}</script>',
+			viewScript: validView,
+		}),
+	).toThrow('Invalid async/state cell[0].value.root: expected serialized slot.');
+
+	expect(() =>
+		decodePayloadScripts({
+			stateScript:
+				'<script type="async/state">{"version":1,"cells":[{"graphNodeId":"state:count","name":"count","valueKind":"scalar","value":{"version":1,"root":{"$type":"bigint","value":"not-a-bigint"},"records":[]}}],"computed":[]}</script>',
+			viewScript: validView,
+		}),
+	).toThrow('Invalid async/state cell[0].value.root: expected bigint string.');
+
+	expect(() =>
+		decodePayloadScripts({
+			stateScript:
+				'<script type="async/state">{"version":1,"cells":[{"graphNodeId":"state:pattern","name":"pattern","valueKind":"object","value":{"version":1,"root":{"$ref":0},"records":[{"id":0,"type":"regexp","source":"[","flags":""}]}}],"computed":[]}</script>',
+			viewScript: validView,
+		}),
+	).toThrow(
+		'Invalid async/state cell[0].value.records[0]: expected valid regexp pattern and flags.',
+	);
+
+	expect(() =>
+		decodePayloadScripts({
+			stateScript:
+				'<script type="async/state">{"version":1,"cells":[],"computed":[{"graphNodeId":"computed:details","name":"details","async":true,"snapshot":{"status":"fulfilled","version":1,"key":{"version":1,"root":"ada","records":[]},"value":{"version":1,"records":[]}}}]}</script>',
+			viewScript: validView,
+		}),
+	).toThrow('Invalid async/state computed[0].snapshot.value: expected root.');
+
+	expect(() =>
+		decodePayloadScripts({
+			stateScript:
+				'<script type="async/state">{"version":1,"cells":[],"computed":[{"graphNodeId":"computed:details","name":"details","async":true,"snapshot":{"status":"pending","version":1.5,"key":{"version":1,"root":"ada","records":[]}}}]}</script>',
+			viewScript: validView,
+		}),
+	).toThrow('Invalid async/state computed[0].snapshot: expected version non-negative integer.');
+
+	expect(() =>
+		decodePayloadScripts({
+			stateScript:
+				'<script type="async/state">{"version":1,"cells":[],"computed":[{"graphNodeId":"computed:details","name":"details","async":true,"snapshot":{"status":"pending","version":-1,"key":{"version":1,"root":"ada","records":[]}}}]}</script>',
+			viewScript: validView,
+		}),
+	).toThrow('Invalid async/state computed[0].snapshot: expected version non-negative integer.');
+
+	expect(() =>
+		decodePayloadScripts({
+			stateScript:
+				'<script type="async/state">{"version":1,"cells":[{"graphNodeId":"state:bytes","name":"bytes","valueKind":"object","value":{"version":1,"root":{"$ref":0},"records":[{"id":0,"type":"typed-array","arrayType":"UnknownArray","buffer":{"$ref":1},"byteOffset":0,"length":1},{"id":1,"type":"array-buffer","bytes":[1]}]}}],"computed":[]}</script>',
+			viewScript: validView,
+		}),
+	).toThrow('Invalid async/state cell[0].value.records[0]: expected supported typed array type.');
+
+	expect(() =>
+		decodePayloadScripts({
+			stateScript:
+				'<script type="async/state">{"version":1,"cells":[{"graphNodeId":"state:user","name":"user","valueKind":"object","value":{"version":1,"root":{"$ref":0},"records":[{"id":0,"type":"object","fields":[]},{"id":0,"type":"object","fields":[]}]}}],"computed":[]}</script>',
+			viewScript: validView,
+		}),
+	).toThrow('Invalid async/state cell[0].value.records[1]: duplicate record id 0.');
+
+	expect(() =>
+		decodePayloadScripts({
+			stateScript:
+				'<script type="async/state">{"version":1,"cells":[{"graphNodeId":"state:user","name":"user","valueKind":"object","value":{"version":1,"root":{"$ref":1},"records":[{"id":0,"type":"object","fields":[]}]}}],"computed":[]}</script>',
+			viewScript: validView,
+		}),
+	).toThrow('Invalid async/state cell[0].value.root: unknown record ref 1.');
+
+	expect(() =>
+		decodePayloadScripts({
+			stateScript:
+				'<script type="async/state">{"version":1,"cells":[{"graphNodeId":"state:user","name":"user","valueKind":"object","value":{"version":1,"root":{"$ref":0},"records":[{"id":0.5,"type":"object","fields":[]}]}}],"computed":[]}</script>',
+			viewScript: validView,
+		}),
+	).toThrow('Invalid async/state cell[0].value.records[0]: expected id non-negative integer.');
+
+	expect(() =>
+		decodePayloadScripts({
+			stateScript:
+				'<script type="async/state">{"version":1,"cells":[{"graphNodeId":"state:bytes","name":"bytes","valueKind":"object","value":{"version":1,"root":{"$ref":0},"records":[{"id":0,"type":"array-buffer","bytes":[256]}]}}],"computed":[]}</script>',
+			viewScript: validView,
+		}),
+	).toThrow('Invalid async/state cell[0].value.records[0]: expected bytes byte array.');
+
+	expect(() =>
+		decodePayloadScripts({
+			stateScript:
+				'<script type="async/state">{"version":1,"cells":[{"graphNodeId":"state:bytes","name":"bytes","valueKind":"object","value":{"version":1,"root":{"$ref":0},"records":[{"id":0,"type":"typed-array","arrayType":"Uint8Array","buffer":null,"byteOffset":0,"length":1}]}}],"computed":[]}</script>',
+			viewScript: validView,
+		}),
+	).toThrow('Invalid async/state cell[0].value.records[0]: expected buffer array-buffer ref.');
+
+	expect(() =>
+		decodePayloadScripts({
+			stateScript:
+				'<script type="async/state">{"version":1,"cells":[{"graphNodeId":"state:bytes","name":"bytes","valueKind":"object","value":{"version":1,"root":{"$ref":0},"records":[{"id":0,"type":"typed-array","arrayType":"Uint16Array","buffer":{"$ref":1},"byteOffset":1,"length":1},{"id":1,"type":"array-buffer","bytes":[0,1,2,3]}]}}],"computed":[]}</script>',
+			viewScript: validView,
+		}),
+	).toThrow(
+		'Invalid async/state cell[0].value.records[0]: typed-array byteOffset must align to element byte length.',
+	);
+
+	expect(() =>
+		decodePayloadScripts({
+			stateScript:
+				'<script type="async/state">{"version":1,"cells":[{"graphNodeId":"state:bytes","name":"bytes","valueKind":"object","value":{"version":1,"root":{"$ref":0},"records":[{"id":0,"type":"typed-array","arrayType":"Uint16Array","buffer":{"$ref":1},"byteOffset":0,"length":2},{"id":1,"type":"array-buffer","bytes":[0,1]}]}}],"computed":[]}</script>',
+			viewScript: validView,
+		}),
+	).toThrow(
+		'Invalid async/state cell[0].value.records[0]: typed-array byte range exceeds referenced array-buffer.',
+	);
+
+	expect(() =>
+		decodePayloadScripts({
+			stateScript:
+				'<script type="async/state">{"version":1,"cells":[{"graphNodeId":"state:bytes","name":"bytes","valueKind":"object","value":{"version":1,"root":{"$ref":0},"records":[{"id":0,"type":"data-view","buffer":{"$ref":1},"byteOffset":1,"byteLength":2},{"id":1,"type":"array-buffer","bytes":[0,1]}]}}],"computed":[]}</script>',
+			viewScript: validView,
+		}),
+	).toThrow(
+		'Invalid async/state cell[0].value.records[0]: data-view byte range exceeds referenced array-buffer.',
+	);
+
+	expect(() =>
+		decodePayloadScripts({
+			stateScript:
+				'<script type="async/state">{"version":1,"cells":[{"graphNodeId":"state:user","name":"user","valueKind":"object","value":{"version":1,"root":{"$ref":-1},"records":[]}}],"computed":[]}</script>',
+			viewScript: validView,
+		}),
+	).toThrow('Invalid async/state cell[0].value.root: expected $ref non-negative integer.');
+});
+
 test('runtime rejects payload scripts with malformed nested view records', () => {
-	const validState = '<script type="async/state">{"version":1,"cells":[]}</script>';
+	const validState = '<script type="async/state">{"version":1,"cells":[],"computed":[]}</script>';
 
 	expect(() =>
 		decodePayloadScripts({
@@ -260,6 +1010,14 @@ test('runtime rejects payload scripts with malformed nested view records', () =>
 				'<script type="async/view">{"version":1,"locators":[{"strategy":"dom-order","index":0,"tagName":"section"}],"events":[],"domUpdates":[],"behaviors":[],"elementHandles":[],"asyncBoundaries":[]}</script>',
 		}),
 	).toThrow('Invalid async/view locator[0]: expected hostNodeId string.');
+
+	expect(() =>
+		decodePayloadScripts({
+			stateScript: validState,
+			viewScript:
+				'<script type="async/view">{"version":1,"locators":[{"hostNodeId":"h0","strategy":"dom-order","index":-1,"tagName":"section"}],"events":[],"domUpdates":[],"behaviors":[],"elementHandles":[],"asyncBoundaries":[]}</script>',
+		}),
+	).toThrow('Invalid async/view locator[0]: expected index non-negative integer.');
 
 	expect(() =>
 		decodePayloadScripts({
@@ -300,10 +1058,56 @@ test('runtime rejects payload scripts with malformed nested view records', () =>
 				'<script type="async/view">{"version":1,"locators":[],"events":[],"domUpdates":[{"hostNodeId":"h1","source":"count","graphNodeId":"state:count","path":[],"target":{"kind":"style"}}],"behaviors":[],"elementHandles":[],"asyncBoundaries":[]}</script>',
 		}),
 	).not.toThrow();
+
+	expect(() =>
+		decodePayloadScripts({
+			stateScript: validState,
+			viewScript:
+				'<script type="async/view">{"version":1,"locators":[],"events":[],"domUpdates":[],"behaviors":[{"hostNodeId":"h1","source":"chart(config)","inputSources":["config"]}],"elementHandles":[],"asyncBoundaries":[]}</script>',
+		}),
+	).toThrow('Invalid async/view behavior[0]: expected functionSource string.');
+
+	expect(() =>
+		decodePayloadScripts({
+			stateScript: validState,
+			viewScript:
+				'<script type="async/view">{"version":1,"locators":[],"events":[],"domUpdates":[],"behaviors":[{"hostNodeId":"h1","source":"chart(config)","functionSource":"chart","inputSources":["config"],"inputValues":{"color":"red"}}],"elementHandles":[],"asyncBoundaries":[]}</script>',
+		}),
+	).toThrow('Invalid async/view behavior[0]: expected inputValues array.');
+
+	expect(() =>
+		decodePayloadScripts({
+			stateScript: validState,
+			viewScript:
+				'<script type="async/view">{"version":1,"locators":[],"events":[],"domUpdates":[],"behaviors":[{"hostNodeId":"h1","source":"chart(config)","functionSource":"chart","inputSources":["config"],"inputGraphReads":[{"inputIndex":"0","source":"config","graphNodeId":"state:config","path":[]}]}],"elementHandles":[],"asyncBoundaries":[]}</script>',
+		}),
+	).toThrow(
+		'Invalid async/view behavior[0].inputGraphReads[0]: expected inputIndex non-negative integer.',
+	);
+
+	expect(() =>
+		decodePayloadScripts({
+			stateScript: validState,
+			viewScript:
+				'<script type="async/view">{"version":1,"locators":[],"events":[],"domUpdates":[],"behaviors":[{"hostNodeId":"h1","source":"chart(config)","functionSource":"chart","inputSources":["config"],"inputGraphReads":[{"inputIndex":0.5,"source":"config","graphNodeId":"state:config","path":[]}]}],"elementHandles":[],"asyncBoundaries":[]}</script>',
+		}),
+	).toThrow(
+		'Invalid async/view behavior[0].inputGraphReads[0]: expected inputIndex non-negative integer.',
+	);
+
+	expect(() =>
+		decodePayloadScripts({
+			stateScript: validState,
+			viewScript:
+				'<script type="async/view">{"version":1,"locators":[],"events":[],"domUpdates":[],"behaviors":[],"elementHandles":[],"asyncBoundaries":[{"id":"boundary:0","startAnchor":{"strategy":"dom-order-comment","index":0.5},"endAnchor":{"strategy":"dom-order-comment","index":1},"asyncReads":[]}]}</script>',
+		}),
+	).toThrow(
+		'Invalid async/view asyncBoundary[0].startAnchor: expected index non-negative integer.',
+	);
 });
 
 test('runtime rejects payload scripts with malformed sync policy records', () => {
-	const validState = '<script type="async/state">{"version":1,"cells":[]}</script>';
+	const validState = '<script type="async/state">{"version":1,"cells":[],"computed":[]}</script>';
 
 	expect(() =>
 		decodePayloadScripts({
@@ -358,7 +1162,8 @@ test('runtime protocol version mismatch errors expose expected and actual versio
 		'<script type="async/view">{"version":1,"locators":[],"events":[],"domUpdates":[],"behaviors":[],"elementHandles":[],"asyncBoundaries":[]}</script>';
 	const error = captureThrown(() =>
 		decodePayloadScripts({
-			stateScript: '<script type="async/state">{"version":2,"cells":[]}</script>',
+			stateScript:
+				'<script type="async/state">{"version":2,"cells":[],"computed":[]}</script>',
 			viewScript: validView,
 		}),
 	);

@@ -6,7 +6,7 @@ export default defineConfig({
 	},
 	pack: {
 		deps: {
-			neverBundle: ['rolldown', 'vite'],
+			neverBundle: ['rolldown', 'vite', 'vitest', 'vitest/browser'],
 		},
 		entry: {
 			'core/index': './packages/core/src/index.ts',
@@ -21,6 +21,8 @@ export default defineConfig({
 			'resumable/runtime': './packages/resumable/src/runtime.ts',
 			'resumable/vite': './packages/resumable/src/vite.ts',
 			'test-utils/index': './packages/test-utils/src/index.ts',
+			'vitest-browser/index': './packages/vitest-browser/src/index.ts',
+			'vitest-browser/vitest': './packages/vitest-browser/src/vitest.ts',
 		},
 		format: ['esm'],
 		dts: true,

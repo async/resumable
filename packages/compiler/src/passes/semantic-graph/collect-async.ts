@@ -68,8 +68,8 @@ export function propagateAsyncComputedCapability(graph: MutableSemanticGraphArti
 }
 
 export function collectAsyncBoundaryDiagnostics(graph: MutableSemanticGraphArtifact): void {
-	const bindings = graphBindingMap(graph);
-	const aliases = semanticAliasMap(graph);
+	const bindings = graphBindingMap(graph, null);
+	const aliases = semanticAliasMap(graph, null);
 
 	for (const read of graph.templateReads) {
 		if (read.asyncBoundaryId) continue;
@@ -88,8 +88,8 @@ export function collectGraphDependencies(
 	state: WalkState,
 ): ReadonlyArray<SemanticGraphDependency> {
 	const dependencies: SemanticGraphDependency[] = [];
-	const bindings = graphBindingMap(state.graph);
-	const aliases = semanticAliasMap(state.graph);
+	const bindings = graphBindingMap(state.graph, currentGraphScope(state));
+	const aliases = semanticAliasMap(state.graph, currentGraphScope(state));
 
 	const visit = (candidate: AnyNode | undefined): void => {
 		if (!candidate) return;
@@ -142,7 +142,8 @@ export function collectGraphDependencies(
 
 	return uniqueBy(
 		dependencies,
-		(dependency) => `${dependency.graphNodeId}:${dependency.path.join('.')}:${dependency.source}`,
+		(dependency) =>
+			`${dependency.graphNodeId}:${dependency.path.join('.')}:${dependency.source}`,
 	);
 }
 
@@ -199,8 +200,8 @@ function postAwaitGraphReads(
 	state: WalkState,
 ): SemanticStateRead[] {
 	const reads: SemanticStateRead[] = [];
-	const bindings = graphBindingMap(state.graph);
-	const aliases = semanticAliasMap(state.graph);
+	const bindings = graphBindingMap(state.graph, currentGraphScope(state));
+	const aliases = semanticAliasMap(state.graph, currentGraphScope(state));
 
 	const visit = (candidate: AnyNode | undefined): void => {
 		if (!candidate) return;
@@ -249,6 +250,13 @@ function postAwaitRead(
 
 	return {
 		source,
+		...(state.currentSharedDefinitionId
+			? { sharedDefinitionId: state.currentSharedDefinitionId }
+			: {}),
 		sourceSpan: span,
 	};
+}
+
+function currentGraphScope(state: WalkState): string | null {
+	return state.currentSharedDefinitionId ?? null;
 }

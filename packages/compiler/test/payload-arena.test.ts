@@ -39,6 +39,30 @@ export function App() @{
 }
 `;
 
+const sharedSource = `
+import { shared, state, computed } from '@async/resumable';
+
+export const session = shared(() => {
+	const data = state({ user: null, status: 'anonymous' });
+	const signedIn = computed(() => data.user !== null);
+
+	return {
+		...data,
+		signedIn,
+		logout() {
+			data.user = null;
+			data.status = 'anonymous';
+		},
+	};
+}, { scope: 'page' });
+
+export function Header() @{
+	const currentSession = session();
+
+	<button>{currentSession.status}</button>
+}
+`;
+
 test('planPayloadArena separates graph state from view wiring metadata', async () => {
 	const semanticGraph = await buildSemanticGraph({
 		filename: 'src/App.tsrx',
@@ -71,6 +95,14 @@ test('planPayloadArena separates graph state from view wiring metadata', async (
 			graphNodeId: 'computed:details',
 			name: 'details',
 			async: true,
+			functionSource: expect.stringContaining("await fetch('/api/details/' + title"),
+			dependencies: [
+				{
+					source: 'menu.title',
+					graphNodeId: 'state:menu',
+					path: ['title'],
+				},
+			],
 		},
 	]);
 
@@ -134,6 +166,16 @@ test('planPayloadArena separates graph state from view wiring metadata', async (
 		{
 			hostNodeId: 'h3',
 			source: 'chart(details)',
+			functionSource: 'chart',
+			inputSources: ['details'],
+			inputGraphReads: [
+				{
+					inputIndex: 0,
+					source: 'details',
+					graphNodeId: 'computed:details',
+					path: [],
+				},
+			],
 		},
 	]);
 	expect(payload.view.elementHandles).toEqual([
@@ -209,6 +251,63 @@ export function App() @{
 	]);
 });
 
+test('planPayloadArena serializes known behavior input values without running behavior code', async () => {
+	const semanticGraph = await buildSemanticGraph({
+		filename: 'src/BehaviorInputs.tsrx',
+		source: `
+import { state, computed } from '@async/resumable';
+
+export function App() @{
+	const menu = state({ open: true, options: { color: 'red' } });
+	const details = computed(() => menu.options.color);
+
+	<section>
+		<canvas use={chart(menu.options.color, 'line', 3, false, null)} />
+		<div use={tooltip(details)} />
+	</section>
+}
+`,
+	});
+	const stateLowering = lowerStateAccess({ semanticGraph });
+
+	const payload = planPayloadArena({
+		semanticGraph,
+		stateLowering,
+	});
+
+	expect(payload.view.behaviors).toEqual([
+		{
+			hostNodeId: 'h1',
+			source: "chart(menu.options.color, 'line', 3, false, null)",
+			functionSource: 'chart',
+			inputSources: ['menu.options.color', "'line'", '3', 'false', 'null'],
+			inputValues: ['red', 'line', 3, false, null],
+			inputGraphReads: [
+				{
+					inputIndex: 0,
+					source: 'menu.options.color',
+					graphNodeId: 'state:menu',
+					path: ['options', 'color'],
+				},
+			],
+		},
+		{
+			hostNodeId: 'h2',
+			source: 'tooltip(details)',
+			functionSource: 'tooltip',
+			inputSources: ['details'],
+			inputGraphReads: [
+				{
+					inputIndex: 0,
+					source: 'details',
+					graphNodeId: 'computed:details',
+					path: [],
+				},
+			],
+		},
+	]);
+});
+
 test('planPayloadArena classifies class and style binding targets', async () => {
 	const semanticGraph = await buildSemanticGraph({
 		filename: 'src/ClassStyleTargets.tsrx',
@@ -259,4 +358,63 @@ export function App() @{
 			},
 		},
 	]);
+});
+
+test('planPayloadArena records shared definition state planning metadata', async () => {
+	const semanticGraph = await buildSemanticGraph({
+		filename: 'src/session.tsrx',
+		source: sharedSource,
+	});
+	const stateLowering = lowerStateAccess({ semanticGraph });
+
+	const payload = planPayloadArena({
+		semanticGraph,
+		stateLowering,
+	});
+
+	expect(payload.state.sharedDefinitions).toEqual([
+		{
+			id: 'shared:src/session.tsrx#session',
+			name: 'session',
+			exportedName: 'session',
+			scope: 'page',
+			graphNodeIds: [
+				'shared:src/session.tsrx#session/state:data',
+				'shared:src/session.tsrx#session/computed:signedIn',
+			],
+			returnProperties: expect.arrayContaining([
+				expect.objectContaining({
+					kind: 'graph',
+					name: 'user',
+					graphNodeId: 'shared:src/session.tsrx#session/state:data',
+					path: ['user'],
+				}),
+				expect.objectContaining({
+					kind: 'graph',
+					name: 'status',
+					graphNodeId: 'shared:src/session.tsrx#session/state:data',
+					path: ['status'],
+				}),
+				expect.objectContaining({
+					kind: 'graph',
+					name: 'signedIn',
+					graphNodeId: 'shared:src/session.tsrx#session/computed:signedIn',
+					path: [],
+				}),
+				expect.objectContaining({
+					kind: 'method',
+					name: 'logout',
+				}),
+			]),
+		},
+	]);
+	expect(payload.state.cells).toEqual(
+		expect.arrayContaining([
+			{
+				graphNodeId: 'shared:src/session.tsrx#session/state:data',
+				name: 'data',
+				valueKind: 'object',
+			},
+		]),
+	);
 });

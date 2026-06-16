@@ -13,10 +13,18 @@ export type SemanticComponent = {
 	readonly name: string;
 };
 
+export type SemanticModuleImport = {
+	readonly localName: string;
+	readonly source: string;
+	readonly kind: 'default' | 'named' | 'namespace';
+	readonly importedName?: string;
+};
+
 export type SemanticGraphBinding = {
 	readonly id: string;
 	readonly name: string;
 	readonly kind: 'state' | 'computed' | 'element' | 'prop';
+	readonly sharedDefinitionId?: string;
 	readonly declarationKind?: 'const' | 'let' | 'var';
 	readonly writable: boolean;
 	readonly valueKind?: 'scalar' | 'object' | 'array' | 'unknown';
@@ -24,6 +32,51 @@ export type SemanticGraphBinding = {
 	readonly async?: boolean;
 	readonly asyncCapable?: boolean;
 	readonly dependencies?: ReadonlyArray<SemanticGraphDependency>;
+	readonly functionSource?: string;
+};
+
+export type SemanticSharedScope = 'request' | 'container' | 'page';
+
+export type SemanticSharedDependency = {
+	readonly definitionId: string;
+	readonly definitionName: string;
+	readonly source: string;
+	readonly sourceSpan?: SourceSpan;
+};
+
+export type SemanticSharedReturnProperty =
+	| {
+			readonly kind: 'graph';
+			readonly name: string;
+			readonly source: string;
+			readonly graphNodeId: string;
+			readonly path: ReadonlyArray<string>;
+			readonly sourceSpan?: SourceSpan;
+	  }
+	| {
+			readonly kind: 'method';
+			readonly name: string;
+			readonly source: string;
+			readonly sourceSpan?: SourceSpan;
+	  };
+
+export type SemanticSharedDefinition = {
+	readonly id: string;
+	readonly name: string;
+	readonly exportedName: string;
+	readonly scope?: SemanticSharedScope;
+	readonly factorySource: string;
+	readonly dependencies?: ReadonlyArray<SemanticSharedDependency>;
+	readonly returnProperties?: ReadonlyArray<SemanticSharedReturnProperty>;
+	readonly sourceSpan?: SourceSpan;
+};
+
+export type SemanticSharedInstance = {
+	readonly definitionId: string;
+	readonly definitionName: string;
+	readonly localName: string;
+	readonly source: string;
+	readonly sourceSpan?: SourceSpan;
 };
 
 export type SemanticGraphDependency = {
@@ -84,6 +137,7 @@ export type SemanticEvent = {
 	readonly eventName: string;
 	readonly handlerCount: number;
 	readonly handlerSources: ReadonlyArray<string>;
+	readonly handlerParameters: ReadonlyArray<ReadonlyArray<string>>;
 	readonly hasSyncPolicyCandidate: boolean;
 	readonly syncPolicy?: SemanticSyncPolicy;
 };
@@ -94,6 +148,9 @@ export type SemanticGraphDiagnostic = CompilerDiagnostic & {
 		| 'AA_STATE_MODULE_SCOPE'
 		| 'AA_ASYNC_POST_AWAIT_READ'
 		| 'AA_ASYNC_BOUNDARY_REQUIRED'
+		| 'AA_STATE_DESTRUCTURE_DEFAULT_UNSUPPORTED'
+		| 'AA_STATE_ELEMENT_HANDLE_UNSERIALIZABLE'
+		| 'AA_SHARED_DEFINITION_CYCLE'
 		| 'AA_ELEMENT_HANDLE_REQUIRED'
 		| 'AA_ELEMENT_HANDLE_DUPLICATE'
 		| 'AA_USE_HOST_ELEMENT_REQUIRED'
@@ -104,9 +161,11 @@ export type SemanticGraphDiagnostic = CompilerDiagnostic & {
 
 export type SemanticStateWrite = {
 	readonly target: string;
+	readonly sharedDefinitionId?: string;
 	readonly targetSpan?: SourceSpan;
 	readonly operation: 'assign' | 'update' | 'call' | 'delete';
 	readonly assignmentOperator?: string;
+	readonly valueSource?: string;
 	readonly optional?: boolean;
 	readonly prefix?: boolean;
 	readonly updateOperator?: '++' | '--';
@@ -116,6 +175,7 @@ export type SemanticStateWrite = {
 
 export type SemanticStateRead = {
 	readonly source: string;
+	readonly sharedDefinitionId?: string;
 	readonly sourceSpan?: SourceSpan;
 };
 
@@ -141,6 +201,7 @@ export type SemanticTemplateBindingTarget =
 export type SemanticGraphAlias = {
 	readonly name: string;
 	readonly target: string;
+	readonly sharedDefinitionId?: string;
 	readonly excludedPaths?: ReadonlyArray<ReadonlyArray<string>>;
 	readonly declarationKind?: SemanticGraphBinding['declarationKind'];
 	readonly sourceSpan?: SourceSpan;
@@ -160,6 +221,13 @@ export type SemanticElementHandleBinding = {
 	readonly sourceSpan?: SourceSpan;
 };
 
+export type SemanticBehavior = {
+	readonly hostNodeId: string;
+	readonly source: string;
+	readonly functionSource: string;
+	readonly inputSources: ReadonlyArray<string>;
+};
+
 export type SemanticLocalBinding = {
 	readonly name: string;
 	readonly kind: 'function' | 'class-instance' | 'dom-node' | 'non-serializable-constant';
@@ -176,11 +244,14 @@ export type SemanticGraphArtifact = {
 	readonly passId: 'tsrx-semantic-graph';
 	readonly filename: string;
 	readonly components: ReadonlyArray<SemanticComponent>;
+	readonly moduleImports: ReadonlyArray<SemanticModuleImport>;
 	readonly graphBindings: ReadonlyArray<SemanticGraphBinding>;
+	readonly sharedDefinitions: ReadonlyArray<SemanticSharedDefinition>;
+	readonly sharedInstances: ReadonlyArray<SemanticSharedInstance>;
 	readonly hostNodes: ReadonlyArray<SemanticHostNode>;
 	readonly events: ReadonlyArray<SemanticEvent>;
 	readonly syncPolicyConstants?: ReadonlyArray<SemanticSyncPolicyConstant>;
-	readonly behaviors: ReadonlyArray<{ readonly hostNodeId: string; readonly source: string }>;
+	readonly behaviors: ReadonlyArray<SemanticBehavior>;
 	readonly elementHandleBindings: ReadonlyArray<SemanticElementHandleBinding>;
 	readonly localBindings: ReadonlyArray<SemanticLocalBinding>;
 	readonly aliases: ReadonlyArray<SemanticGraphAlias>;
@@ -221,6 +292,7 @@ export type LoweredStateWrite = {
 	readonly path: ReadonlyArray<string>;
 	readonly operation: SemanticStateWrite['operation'];
 	readonly assignmentOperator?: string;
+	readonly valueSource?: string;
 	readonly prefix?: boolean;
 	readonly updateOperator?: SemanticStateWrite['updateOperator'];
 	readonly method?: string;
@@ -258,6 +330,16 @@ export type PayloadAsyncBoundary = {
 	}>;
 };
 
+export type PayloadBehavior = SemanticBehavior & {
+	readonly inputValues?: ReadonlyArray<unknown>;
+	readonly inputGraphReads?: ReadonlyArray<{
+		readonly inputIndex: number;
+		readonly source: string;
+		readonly graphNodeId: string;
+		readonly path: ReadonlyArray<string>;
+	}>;
+};
+
 export type PayloadArenaArtifact = {
 	readonly passId: 'payload-arena';
 	readonly state: {
@@ -270,6 +352,17 @@ export type PayloadArenaArtifact = {
 			readonly graphNodeId: string;
 			readonly name: string;
 			readonly async: boolean;
+			readonly functionSource?: string;
+			readonly dependencies?: ReadonlyArray<SemanticGraphDependency>;
+		}>;
+		readonly sharedDefinitions: ReadonlyArray<{
+			readonly id: string;
+			readonly name: string;
+			readonly exportedName: string;
+			readonly scope?: SemanticSharedScope;
+			readonly dependencies?: ReadonlyArray<SemanticSharedDependency>;
+			readonly returnProperties?: ReadonlyArray<SemanticSharedReturnProperty>;
+			readonly graphNodeIds: ReadonlyArray<string>;
 		}>;
 	};
 	readonly view: {
@@ -287,7 +380,7 @@ export type PayloadArenaArtifact = {
 			readonly path: ReadonlyArray<string>;
 			readonly target: SemanticTemplateBindingTarget;
 		}>;
-		readonly behaviors: SemanticGraphArtifact['behaviors'];
+		readonly behaviors: ReadonlyArray<PayloadBehavior>;
 		readonly elementHandles: ReadonlyArray<{
 			readonly hostNodeId: string;
 			readonly handleId: string;
@@ -311,7 +404,10 @@ export type PlannedSymbol =
 			readonly hostNodeId: string;
 			readonly eventName: string;
 			readonly source: string;
+			readonly parameters: ReadonlyArray<string>;
+			readonly moduleImports?: ReadonlyArray<SemanticModuleImport>;
 			readonly order: number;
+			readonly reads?: ReadonlyArray<LoweredStateRead>;
 			readonly writes?: ReadonlyArray<LoweredStateWrite>;
 	  }
 	| {
@@ -327,6 +423,9 @@ export type PlannedSymbol =
 			readonly kind: 'behavior';
 			readonly hostNodeId: string;
 			readonly source: string;
+			readonly functionSource: string;
+			readonly inputSources: ReadonlyArray<string>;
+			readonly moduleImport?: SemanticModuleImport;
 			readonly order: number;
 	  }
 	| {
@@ -334,6 +433,9 @@ export type PlannedSymbol =
 			readonly kind: 'async-computed-runner';
 			readonly graphNodeId: string;
 			readonly name: string;
+			readonly source: string;
+			readonly dependencies?: ReadonlyArray<SemanticGraphDependency>;
+			readonly moduleImports?: ReadonlyArray<SemanticModuleImport>;
 	  };
 
 export type SymbolResolverPlan = {
@@ -434,6 +536,43 @@ export type CompilerPassDefinition = {
 	readonly description: string;
 	readonly consumes: ReadonlyArray<string>;
 	readonly produces: ReadonlyArray<string>;
+};
+
+export type CompilerArtifactMap = Readonly<Record<string, unknown>>;
+
+export type CompilerPassRunContext = {
+	readonly passId: string;
+	readonly inputs: CompilerArtifactMap;
+};
+
+export type RunnableCompilerPassDefinition = CompilerPassDefinition & {
+	readonly run: (
+		context: CompilerPassRunContext,
+	) => CompilerArtifactMap | Promise<CompilerArtifactMap>;
+};
+
+export type CompilerArtifactDump = {
+	readonly passId: string;
+	readonly artifactKey: string;
+	readonly dump: string;
+};
+
+export type CompilerArtifactDumper = (input: {
+	readonly passId: string;
+	readonly artifactKey: string;
+	readonly value: unknown;
+}) => string;
+
+export type RunCompilerPassPipelineInput = {
+	readonly passes: ReadonlyArray<RunnableCompilerPassDefinition>;
+	readonly initialArtifacts: CompilerArtifactMap;
+	readonly dumpArtifact?: CompilerArtifactDumper;
+};
+
+export type RunCompilerPassPipelineResult = {
+	readonly passGraph: CompilerPassGraph;
+	readonly artifacts: CompilerArtifactMap;
+	readonly artifactDumps: ReadonlyArray<CompilerArtifactDump>;
 };
 
 export type CompilerPassGraph = {

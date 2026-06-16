@@ -51,6 +51,8 @@ describe('fixture framework boundaries', () => {
 		expect(vitePlusEntry).not.toContain('resumeFromPayloadScripts');
 		expect(ssrEntry).toContain('resumeFromPayloadDocument');
 		expect(ssrEntry).toContain('export async function resumeContainerEvent');
+		expect(ssrEntry).toContain('__asyncResumeRuntimeStarted');
+		expect(ssrEntry).toContain('syncPolicyAlreadyApplied: true');
 		expect(ssrEntry).not.toContain('await resumeFromPayloadDocument');
 	});
 

@@ -58,8 +58,10 @@ export function element<T extends Element = Element>(): ElementHandle<T> {
 	return frameworkApi<ElementHandle<T>>('element');
 }
 
-export function shared<T>(id: string, create: () => T, options: SharedOptions): T {
-	return frameworkApi<T>('shared', id, create, options);
+export type SharedDefinition<T> = () => T;
+
+export function shared<T>(create: () => T, options?: SharedOptions): SharedDefinition<T> {
+	return frameworkApi<SharedDefinition<T>>('shared', create, options);
 }
 
 function frameworkApi<T>(name: string, ..._args: unknown[]): T {

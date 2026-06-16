@@ -6,19 +6,25 @@ type ResumeContainerEventInput = {
 	readonly event: Event;
 };
 
+type ResumedRoot = Element & {
+	__asyncResumeRuntimeStarted?: boolean;
+};
+
 const resumedContainers = new WeakMap<Element, ReturnType<typeof resumeFromPayloadDocument>>();
 
 export async function resumeContainerEvent(input: ResumeContainerEventInput): Promise<void> {
-	let resumed = resumedContainers.get(input.root);
+	const root = input.root as ResumedRoot;
+	let resumed = resumedContainers.get(root);
 	if (!resumed) {
 		resumed = resumeFromPayloadDocument({
-			document: input.root as never,
-			root: input.root as never,
+			document: root as never,
+			root: root as never,
 			loadSymbol,
 		});
-		resumedContainers.set(input.root, resumed);
+		resumedContainers.set(root, resumed);
 	}
 
 	const container = await resumed;
-	await container.runtime.dispatch(input.event as never);
+	root.__asyncResumeRuntimeStarted = true;
+	await container.runtime.dispatch(input.event as never, { syncPolicyAlreadyApplied: true });
 }

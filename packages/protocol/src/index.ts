@@ -51,6 +51,56 @@ export type ProtocolStatePayload = {
 		readonly graphNodeId: string;
 		readonly name: string;
 		readonly async: boolean;
+		readonly dependencies?: ReadonlyArray<{
+			readonly graphNodeId: string;
+			readonly path: ReadonlyArray<string>;
+		}>;
+		readonly snapshot?:
+			| {
+					readonly status: 'idle';
+					readonly version: 0;
+			  }
+			| {
+					readonly status: 'pending';
+					readonly version: number;
+					readonly key: unknown;
+			  }
+			| {
+					readonly status: 'fulfilled';
+					readonly version: number;
+					readonly key: unknown;
+					readonly value: unknown;
+			  }
+			| {
+					readonly status: 'rejected';
+					readonly version: number;
+					readonly key: unknown;
+					readonly error: unknown;
+			  };
+	}>;
+	readonly sharedDefinitions?: ReadonlyArray<{
+		readonly id: string;
+		readonly name: string;
+		readonly exportedName: string;
+		readonly scope?: 'request' | 'container' | 'page';
+		readonly version: number;
+		readonly graphNodeIds: ReadonlyArray<string>;
+		readonly dependencies?: ReadonlyArray<{
+			readonly definitionId: string;
+			readonly definitionName: string;
+		}>;
+		readonly returnProperties?: ReadonlyArray<
+			| {
+					readonly kind: 'graph';
+					readonly name: string;
+					readonly graphNodeId: string;
+					readonly path: ReadonlyArray<string>;
+			  }
+			| {
+					readonly kind: 'method';
+					readonly name: string;
+			  }
+		>;
 	}>;
 };
 
@@ -96,6 +146,15 @@ export type ProtocolViewPayload = {
 	readonly behaviors: ReadonlyArray<{
 		readonly hostNodeId: string;
 		readonly source: string;
+		readonly functionSource: string;
+		readonly inputSources: ReadonlyArray<string>;
+		readonly inputValues?: ReadonlyArray<unknown>;
+		readonly inputGraphReads?: ReadonlyArray<{
+			readonly inputIndex: number;
+			readonly source: string;
+			readonly graphNodeId: string;
+			readonly path: ReadonlyArray<string>;
+		}>;
 		readonly symbolId?: string;
 	}>;
 	readonly elementHandles: ReadonlyArray<{

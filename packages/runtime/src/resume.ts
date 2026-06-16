@@ -1,5 +1,10 @@
 import type { ProtocolViewPayload } from '@async/resumable-protocol';
-import type { DomJournalEntry, DomJournalResult, RuntimeGraph } from './graph.ts';
+import type {
+	DomJournalEntry,
+	DomJournalResult,
+	RuntimeGraph,
+	RuntimeGraphSharedPatch,
+} from './graph.ts';
 
 export type ResumeDomNode = {
 	readonly nodeType: number;
@@ -16,6 +21,15 @@ export type ResumeDomElement = ResumeDomNode & {
 		listener: (event: ResumeDomEvent) => Promise<void>,
 		options?: { readonly capture?: boolean },
 	) => void;
+	readonly dispatchEvent?: (event: ResumeSharedPatchEvent) => boolean;
+};
+
+export type ResumeSharedPatchEvent = {
+	readonly type: 'async:shared-patch';
+	readonly detail: RuntimeGraphSharedPatch;
+	readonly bubbles: true;
+	readonly cancelable: false;
+	readonly composed: true;
 };
 
 export type ResumeDomComment = ResumeDomNode & {
@@ -50,6 +64,26 @@ export type ResumeVisibilityObserverFactory = (
 type ResumeVisibilityObserverConstructor = new (
 	callback: (entries: ReadonlyArray<ResumeVisibilityEntry>) => void,
 ) => ResumeVisibilityObserver;
+
+export type ResumeRemovalRecord = {
+	readonly removedNodes: Iterable<ResumeDomNode>;
+};
+
+export type ResumeRemovalObserver = {
+	readonly observe: (
+		element: ResumeDomElement,
+		options?: { readonly childList?: boolean; readonly subtree?: boolean },
+	) => void;
+	readonly disconnect?: () => void;
+};
+
+export type ResumeRemovalObserverFactory = (
+	callback: (records: ReadonlyArray<ResumeRemovalRecord>) => void,
+) => ResumeRemovalObserver;
+
+type ResumeRemovalObserverConstructor = new (
+	callback: (records: ReadonlyArray<ResumeRemovalRecord>) => void,
+) => ResumeRemovalObserver;
 
 export type ResumeSyncPolicyCondition =
 	| {
@@ -107,6 +141,8 @@ export type ResumeAsyncBoundaryRecord = {
 export type ResumeAsyncBoundaryRead =
 	ProtocolViewPayload['asyncBoundaries'][number]['asyncReads'][number];
 
+export type ResumeBehaviorRecord = ProtocolViewPayload['behaviors'][number];
+
 export type ResumeViewRecord = {
 	readonly locators: ReadonlyArray<{
 		readonly hostNodeId: string;
@@ -123,9 +159,13 @@ export type ResumeViewRecord = {
 
 export type ResumeSymbolContext = {
 	readonly graph: RuntimeGraph;
+	readonly read?: RuntimeGraph['read'];
+	readonly key?: unknown;
+	readonly signal?: AbortSignal;
 	readonly event?: ResumeDomEvent;
 	readonly element: ResumeDomElement;
 	readonly getElementHandle: (handleIdOrName: string) => ResumeDomElement | undefined;
+	readonly behaviorInputs?: ReadonlyArray<unknown>;
 	readonly domUpdate?: ProtocolViewPayload['domUpdates'][number];
 	readonly value?: unknown;
 	readonly asyncBoundary?: ResumeAsyncBoundaryRecord;
@@ -137,10 +177,27 @@ export type ResumeBehaviorCleanup = () => void;
 export type ResumeSymbol = (
 	context: ResumeSymbolContext,
 ) =>
+	| unknown
 	| void
 	| DomJournalResult
 	| ResumeBehaviorCleanup
-	| Promise<void | DomJournalResult | ResumeBehaviorCleanup>;
+	| Promise<unknown | void | DomJournalResult | ResumeBehaviorCleanup>;
+
+export type ResumeRuntimeErrorContext = {
+	readonly phase: 'event';
+	readonly hostNodeId: string;
+	readonly eventName: string;
+	readonly symbolId?: string;
+	readonly event: ResumeDomEvent;
+	readonly element: ResumeDomElement;
+};
+
+export type ResumeRuntimeErrorHook = (
+	error: unknown,
+	context: ResumeRuntimeErrorContext,
+) => void | Promise<void>;
+
+export type ResumeSharedPatchDispatcher = (patch: RuntimeGraphSharedPatch) => void | Promise<void>;
 
 export type ResumeRuntimeInput = {
 	readonly root: ResumeDomElement;
@@ -148,12 +205,20 @@ export type ResumeRuntimeInput = {
 	readonly view: ResumeViewRecord;
 	readonly loadSymbol: (symbolId: string) => ResumeSymbol | Promise<ResumeSymbol>;
 	readonly createVisibilityObserver?: ResumeVisibilityObserverFactory;
+	readonly createRemovalObserver?: ResumeRemovalObserverFactory;
 	readonly applyDomJournal?: (entries: ReadonlyArray<DomJournalEntry>) => void | Promise<void>;
+	readonly dispatchSharedPatch?: ResumeSharedPatchDispatcher;
+	readonly onError?: ResumeRuntimeErrorHook;
+};
+
+export type ResumeDispatchOptions = {
+	readonly syncPolicyAlreadyApplied?: boolean;
 };
 
 export type ResumeRuntime = {
 	readonly start: () => Promise<void>;
-	readonly dispatch: (event: ResumeDomEvent) => Promise<void>;
+	readonly dispatch: (event: ResumeDomEvent, options?: ResumeDispatchOptions) => Promise<void>;
+	readonly activateBehaviors: (hostNodeId: string) => Promise<void>;
 	readonly getElement: (hostNodeId: string) => ResumeDomElement | undefined;
 	readonly getAsyncBoundary: (boundaryId: string) => ResumeAsyncBoundaryRecord | undefined;
 	readonly disposeHost: (hostNodeId: string) => void;
@@ -209,6 +274,15 @@ export class RuntimeResumeError extends Error implements RuntimeResumeDiagnostic
 	}
 }
 
+type ResumeCleanupKind = 'visibility' | 'behavior';
+
+type ResumeHostCleanup = {
+	readonly kind: ResumeCleanupKind;
+	readonly cleanup: ResumeBehaviorCleanup;
+};
+
+const SHARED_PATCH_EVENT_TYPE = 'async:shared-patch';
+
 export function createResumeRuntime(input: ResumeRuntimeInput): ResumeRuntime {
 	const elementsByHostId = materializeDomLocators(input.root, input.view.locators);
 	const asyncBoundariesById = materializeAsyncBoundaryLocators(
@@ -225,12 +299,21 @@ export function createResumeRuntime(input: ResumeRuntimeInput): ResumeRuntime {
 	const activeVisibleElements = new Set<ResumeDomElement>();
 	const disposedHosts = new Set<string>();
 	const eventTypes = new Set<string>();
-	const elementHandles = materializeElementHandles(elementsByHostId, input.view.elementHandles);
-	const hostCleanups = new Map<string, ResumeBehaviorCleanup[]>();
+	const elementHandles = materializeElementHandles(
+		input.root,
+		elementsByHostId,
+		input.view.elementHandles,
+	);
+	const hostCleanups = new Map<string, ResumeHostCleanup[]>();
+	const behaviorRecordsByHostId = groupBehaviorRecords(input.view.behaviors);
+	const activeBehaviorHosts = new Set<string>();
+	const dispatchSharedPatch =
+		input.dispatchSharedPatch ?? defaultSharedPatchDispatcher(input.root);
 	if (input.applyDomJournal) {
 		input.graph.subscribeJournal(input.applyDomJournal);
 	}
 	let visibilityObserver: ResumeVisibilityObserver | undefined;
+	let removalObserver: ResumeRemovalObserver | undefined;
 
 	for (const eventRecord of input.view.events) {
 		const element = elementsByHostId.get(eventRecord.hostNodeId);
@@ -264,40 +347,49 @@ export function createResumeRuntime(input: ResumeRuntimeInput): ResumeRuntime {
 			path: domUpdate.path,
 			async run(value) {
 				const symbol = await input.loadSymbol(domUpdate.symbolId!);
-				return await symbol({
+				return (await symbol({
 					graph: input.graph,
 					element,
 					getElementHandle: elementHandles.get,
 					domUpdate,
 					value,
-				});
+				})) as DomJournalResult | void;
 			},
 		});
 	}
 
-	for (const boundary of asyncBoundariesById.values()) {
-		for (const asyncRead of boundary.asyncReads) {
-			if (!asyncRead.runnerSymbolId) continue;
-
+	for (const asyncBoundary of asyncBoundariesById.values()) {
+		for (const asyncRead of asyncBoundary.asyncReads) {
 			input.graph.subscribe({
-				id: `async-boundary:${boundary.id}:${asyncRead.graphNodeId}:${asyncRead.path.join('.')}`,
+				id: `async-boundary:${asyncBoundary.id}:${asyncRead.graphNodeId}:${asyncRead.path.join('.')}`,
 				graphNodeId: asyncRead.graphNodeId,
-				path: asyncRead.path,
-				async run() {
-					const symbol = await input.loadSymbol(asyncRead.runnerSymbolId!);
-					return await symbol({
-						graph: input.graph,
-						element: input.root,
-						getElementHandle: elementHandles.get,
-						asyncBoundary: boundary,
-						asyncRead,
-					});
+				path: [],
+				run(snapshot) {
+					return createAsyncBoundaryJournalEntries(asyncBoundary, asyncRead, snapshot);
 				},
 			});
 		}
 	}
 
-	async function dispatch(event: ResumeDomEvent): Promise<void> {
+	for (const behaviorRecord of input.view.behaviors) {
+		for (const inputGraphRead of behaviorRecord.inputGraphReads ?? []) {
+			input.graph.subscribe({
+				id: `behavior-input:${behaviorRecord.hostNodeId}:${inputGraphRead.inputIndex}:${inputGraphRead.graphNodeId}:${inputGraphRead.path.join('.')}`,
+				graphNodeId: inputGraphRead.graphNodeId,
+				path: inputGraphRead.path,
+				async run() {
+					if (!activeBehaviorHosts.has(behaviorRecord.hostNodeId)) return;
+
+					await activateBehaviors(behaviorRecord.hostNodeId, { flush: false });
+				},
+			});
+		}
+	}
+
+	async function dispatch(
+		event: ResumeDomEvent,
+		options: ResumeDispatchOptions = {},
+	): Promise<void> {
 		const target = event.target;
 		if (!target) return;
 
@@ -306,28 +398,142 @@ export function createResumeRuntime(input: ResumeRuntimeInput): ResumeRuntime {
 
 		const { element, eventRecord } = matched;
 
-		if (eventRecord.syncPolicy)
+		if (eventRecord.syncPolicy && !options.syncPolicyAlreadyApplied)
 			runSyncPolicyActions(eventRecord.syncPolicy, input.graph, event);
 
+		let activeSymbolId: string | undefined;
 		try {
+			const behaviorActivation = activateBehaviorsFromTrigger(eventRecord.hostNodeId);
+			if (behaviorActivation) await behaviorActivation;
+
 			for (const symbolId of eventRecord.symbolIds) {
-				const symbol = await input.loadSymbol(symbolId);
-				await symbol({
+				activeSymbolId = symbolId;
+				const loadedSymbol = input.loadSymbol(symbolId);
+				const symbol = isPromiseLike(loadedSymbol) ? await loadedSymbol : loadedSymbol;
+				const result = symbol({
 					graph: input.graph,
 					event,
 					element,
 					getElementHandle: elementHandles.get,
 				});
+				if (isPromiseLike(result)) await result;
 			}
+		} catch (error) {
+			await reportRuntimeError(error, {
+				phase: 'event',
+				hostNodeId: eventRecord.hostNodeId,
+				eventName: eventRecord.eventName,
+				symbolId: activeSymbolId,
+				event,
+				element,
+			});
+			throw error;
 		} finally {
-			await input.graph.flush();
+			await flushRuntimeGraph();
 		}
 	}
 
-	function storeHostCleanup(hostNodeId: string, cleanup: ResumeBehaviorCleanup): void {
+	async function reportRuntimeError(
+		error: unknown,
+		context: ResumeRuntimeErrorContext,
+	): Promise<void> {
+		if (!input.onError) return;
+
+		try {
+			const result = input.onError(error, context);
+			if (isPromiseLike(result)) await result;
+		} catch {
+			// Preserve the original runtime failure that triggered the hook.
+		}
+	}
+
+	async function flushRuntimeGraph(): Promise<void> {
+		await input.graph.flush();
+		if (!dispatchSharedPatch) return;
+
+		for (const patch of input.graph.takeSharedPatches()) {
+			const result = dispatchSharedPatch(patch);
+			if (isPromiseLike(result)) await result;
+		}
+	}
+
+	async function receiveSharedPatch(
+		event: ResumeDomEvent | ResumeSharedPatchEvent,
+	): Promise<void> {
+		if (!isResumeSharedPatchEvent(event)) return;
+		if (input.graph.applySharedPatch(event.detail)) await flushRuntimeGraph();
+	}
+
+	function activateBehaviorsFromTrigger(hostNodeId: string): Promise<void> | undefined {
+		if (activeBehaviorHosts.has(hostNodeId)) return undefined;
+		if ((behaviorRecordsByHostId.get(hostNodeId) ?? []).length === 0) return undefined;
+
+		return activateBehaviors(hostNodeId, { flush: false });
+	}
+
+	function storeHostCleanup(
+		hostNodeId: string,
+		kind: ResumeCleanupKind,
+		cleanup: ResumeBehaviorCleanup,
+	): void {
 		const cleanups = hostCleanups.get(hostNodeId) ?? [];
-		cleanups.push(cleanup);
+		cleanups.push({ kind, cleanup });
 		hostCleanups.set(hostNodeId, cleanups);
+	}
+
+	function runHostCleanups(hostNodeId: string, kind?: ResumeCleanupKind): void {
+		const cleanups = hostCleanups.get(hostNodeId) ?? [];
+		const remaining = kind ? cleanups.filter((entry) => entry.kind !== kind) : [];
+
+		for (const entry of [...cleanups].reverse()) {
+			if (!kind || entry.kind === kind) {
+				entry.cleanup();
+			}
+		}
+
+		if (remaining.length > 0) {
+			hostCleanups.set(hostNodeId, remaining);
+		} else {
+			hostCleanups.delete(hostNodeId);
+		}
+	}
+
+	async function activateBehaviors(
+		hostNodeId: string,
+		options: { readonly flush?: boolean } = {},
+	): Promise<void> {
+		if (disposedHosts.has(hostNodeId)) return;
+
+		const element = connectedElement(input.root, elementsByHostId.get(hostNodeId));
+		if (!element) return;
+
+		const behaviorRecords = behaviorRecordsByHostId.get(hostNodeId) ?? [];
+		if (behaviorRecords.length === 0) return;
+
+		activeBehaviorHosts.add(hostNodeId);
+		runHostCleanups(hostNodeId, 'behavior');
+
+		try {
+			for (const behaviorRecord of behaviorRecords) {
+				if (!behaviorRecord.symbolId) continue;
+
+				const loadedSymbol = input.loadSymbol(behaviorRecord.symbolId);
+				const symbol = isPromiseLike(loadedSymbol) ? await loadedSymbol : loadedSymbol;
+				const maybeResult = symbol({
+					graph: input.graph,
+					element,
+					getElementHandle: elementHandles.get,
+					behaviorInputs: behaviorInputs(behaviorRecord, input.graph),
+				});
+				const result = isPromiseLike(maybeResult) ? await maybeResult : maybeResult;
+
+				if (typeof result === 'function') {
+					storeHostCleanup(hostNodeId, 'behavior', result);
+				}
+			}
+		} finally {
+			if (options.flush !== false) await flushRuntimeGraph();
+		}
 	}
 
 	async function runVisibleEvent(
@@ -335,20 +541,26 @@ export function createResumeRuntime(input: ResumeRuntimeInput): ResumeRuntime {
 		eventRecord: ResumeEventRecord,
 	): Promise<void> {
 		try {
+			const behaviorActivation = activateBehaviorsFromTrigger(eventRecord.hostNodeId);
+			if (behaviorActivation) await behaviorActivation;
+
 			for (const symbolId of eventRecord.symbolIds) {
-				const symbol = await input.loadSymbol(symbolId);
-				const result = await symbol({
+				const loadedSymbol = input.loadSymbol(symbolId);
+				const symbol = isPromiseLike(loadedSymbol) ? await loadedSymbol : loadedSymbol;
+				const maybeResult = symbol({
 					graph: input.graph,
+					read: input.graph.read,
 					element,
 					getElementHandle: elementHandles.get,
 				});
+				const result = isPromiseLike(maybeResult) ? await maybeResult : maybeResult;
 
 				if (typeof result === 'function') {
-					storeHostCleanup(eventRecord.hostNodeId, result);
+					storeHostCleanup(eventRecord.hostNodeId, 'visibility', result);
 				}
 			}
 		} finally {
-			await input.graph.flush();
+			await flushRuntimeGraph();
 		}
 	}
 
@@ -383,46 +595,146 @@ export function createResumeRuntime(input: ResumeRuntimeInput): ResumeRuntime {
 		}
 	}
 
+	function installRemovalObserver(): void {
+		const createObserver = input.createRemovalObserver ?? defaultRemovalObserverFactory();
+		if (!createObserver || input.view.locators.length === 0) return;
+
+		removalObserver = createObserver((records) => {
+			const removedElements = new Set<ResumeDomElement>();
+			for (const record of records) {
+				for (const node of record.removedNodes) {
+					collectRemovedElements(node, removedElements);
+				}
+			}
+			if (removedElements.size === 0) return;
+
+			for (const hostNodeId of hostIdsInsideRemovedElements(
+				elementsByHostId,
+				removedElements,
+			)) {
+				disposeHost(hostNodeId);
+			}
+		});
+		removalObserver.observe(input.root, { childList: true, subtree: true });
+	}
+
+	function disposeHost(hostNodeId: string): void {
+		disposedHosts.add(hostNodeId);
+		const element = elementsByHostId.get(hostNodeId);
+		const visibleElement = visibleElementsByHostId.get(hostNodeId) ?? element;
+		if (element) {
+			eventRecords.delete(element);
+			elementsByHostId.delete(hostNodeId);
+		}
+		if (visibleElement) {
+			visibleRecords.delete(visibleElement);
+			if (activeVisibleElements.has(visibleElement)) {
+				visibilityObserver?.unobserve?.(visibleElement);
+				activeVisibleElements.delete(visibleElement);
+			}
+		}
+		visibleElementsByHostId.delete(hostNodeId);
+		elementHandles.deleteHost(hostNodeId);
+		activeBehaviorHosts.delete(hostNodeId);
+
+		runHostCleanups(hostNodeId);
+
+		if (elementsByHostId.size === 0) {
+			removalObserver?.disconnect?.();
+			removalObserver = undefined;
+		}
+	}
+
 	return {
 		async start() {
 			for (const eventType of eventTypes) {
 				input.root.addEventListener?.(eventType, dispatch, { capture: true });
 			}
+			if (input.graph.listSharedDefinitions().length > 0) {
+				input.root.addEventListener?.(
+					SHARED_PATCH_EVENT_TYPE,
+					receiveSharedPatch as (event: ResumeDomEvent) => Promise<void>,
+					{ capture: true },
+				);
+			}
 
 			installVisibilityObserver();
+			installRemovalObserver();
 		},
 		dispatch,
+		activateBehaviors,
 		getElement(hostNodeId) {
-			return elementsByHostId.get(hostNodeId);
+			return connectedElement(input.root, elementsByHostId.get(hostNodeId));
 		},
 		getAsyncBoundary(boundaryId) {
 			return asyncBoundariesById.get(boundaryId);
 		},
-		disposeHost(hostNodeId) {
-			disposedHosts.add(hostNodeId);
-			const element = elementsByHostId.get(hostNodeId);
-			const visibleElement = visibleElementsByHostId.get(hostNodeId) ?? element;
-			if (element) {
-				eventRecords.delete(element);
-				elementsByHostId.delete(hostNodeId);
-			}
-			if (visibleElement) {
-				visibleRecords.delete(visibleElement);
-				if (activeVisibleElements.has(visibleElement)) {
-					visibilityObserver?.unobserve?.(visibleElement);
-					activeVisibleElements.delete(visibleElement);
-				}
-			}
-			visibleElementsByHostId.delete(hostNodeId);
-			elementHandles.deleteHost(hostNodeId);
-
-			const cleanups = hostCleanups.get(hostNodeId) ?? [];
-			for (const cleanup of [...cleanups].reverse()) {
-				cleanup();
-			}
-			hostCleanups.delete(hostNodeId);
-		},
+		disposeHost,
 	};
+}
+
+function createAsyncBoundaryJournalEntries(
+	boundary: ResumeAsyncBoundaryRecord,
+	asyncRead: ResumeAsyncBoundaryRead,
+	snapshot: unknown,
+): DomJournalEntry[] {
+	return [
+		{ type: 'removeRange', locator: asyncBoundaryRangeLocator(boundary.id) },
+		{
+			type: 'insertRange',
+			locator: asyncBoundaryStartLocator(boundary.id),
+			fragment: {
+				type: 'async-boundary-snapshot',
+				boundaryId: boundary.id,
+				graphNodeId: asyncRead.graphNodeId,
+				path: asyncRead.path,
+				snapshot,
+			},
+		},
+	];
+}
+
+function asyncBoundaryRangeLocator(boundaryId: string): string {
+	return `async-boundary:${boundaryId}`;
+}
+
+function asyncBoundaryStartLocator(boundaryId: string): string {
+	return `async-boundary:${boundaryId}:start`;
+}
+
+function behaviorInputs(
+	behaviorRecord: ResumeBehaviorRecord,
+	graph: RuntimeGraph,
+): ReadonlyArray<unknown> {
+	const graphReads = behaviorRecord.inputGraphReads ?? [];
+	const inputCount = Math.max(
+		behaviorRecord.inputSources.length,
+		...graphReads.map((read) => read.inputIndex + 1),
+	);
+	const inputs =
+		behaviorRecord.inputValues !== undefined
+			? [...behaviorRecord.inputValues]
+			: Array.from({ length: inputCount }, () => undefined);
+
+	for (const graphRead of graphReads) {
+		inputs[graphRead.inputIndex] = graph.read(graphRead.graphNodeId, graphRead.path);
+	}
+
+	return inputs;
+}
+
+function groupBehaviorRecords(
+	behaviors: ResumeViewRecord['behaviors'],
+): Map<string, ResumeBehaviorRecord[]> {
+	const byHostId = new Map<string, ResumeBehaviorRecord[]>();
+
+	for (const behavior of behaviors) {
+		const records = byHostId.get(behavior.hostNodeId) ?? [];
+		records.push(behavior);
+		byHostId.set(behavior.hostNodeId, records);
+	}
+
+	return byHostId;
 }
 
 function isVisibleEntry(entry: ResumeVisibilityEntry): boolean {
@@ -440,7 +752,127 @@ function defaultVisibilityObserverFactory(): ResumeVisibilityObserverFactory | u
 	return (callback) => new observer(callback);
 }
 
+function defaultRemovalObserverFactory(): ResumeRemovalObserverFactory | undefined {
+	const observer = (
+		globalThis as {
+			readonly MutationObserver?: ResumeRemovalObserverConstructor;
+		}
+	).MutationObserver;
+	if (!observer) return undefined;
+
+	return (callback) => new observer(callback);
+}
+
+function defaultSharedPatchDispatcher(
+	root: ResumeDomElement,
+): ResumeSharedPatchDispatcher | undefined {
+	if (!root.dispatchEvent) return undefined;
+
+	return (patch) => {
+		root.dispatchEvent?.(createSharedPatchEvent(patch));
+	};
+}
+
+type ResumeCustomEventConstructor = new (
+	type: typeof SHARED_PATCH_EVENT_TYPE,
+	init: {
+		readonly detail: RuntimeGraphSharedPatch;
+		readonly bubbles: true;
+		readonly cancelable: false;
+		readonly composed: true;
+	},
+) => ResumeSharedPatchEvent;
+
+function createSharedPatchEvent(patch: RuntimeGraphSharedPatch): ResumeSharedPatchEvent {
+	const CustomEventConstructor = (
+		globalThis as {
+			readonly CustomEvent?: ResumeCustomEventConstructor;
+		}
+	).CustomEvent;
+	const init = {
+		detail: patch,
+		bubbles: true,
+		cancelable: false,
+		composed: true,
+	} as const;
+
+	if (CustomEventConstructor) {
+		return new CustomEventConstructor(SHARED_PATCH_EVENT_TYPE, init);
+	}
+
+	return {
+		type: SHARED_PATCH_EVENT_TYPE,
+		...init,
+	};
+}
+
+function isResumeSharedPatchEvent(
+	event: ResumeDomEvent | ResumeSharedPatchEvent,
+): event is ResumeSharedPatchEvent {
+	return (
+		event.type === SHARED_PATCH_EVENT_TYPE &&
+		isRuntimeGraphSharedPatch((event as { readonly detail?: unknown }).detail)
+	);
+}
+
+function isRuntimeGraphSharedPatch(value: unknown): value is RuntimeGraphSharedPatch {
+	if (!value || typeof value !== 'object') return false;
+
+	const patch = value as {
+		readonly id?: unknown;
+		readonly scope?: unknown;
+		readonly version?: unknown;
+		readonly patch?: unknown;
+	};
+	if (typeof patch.id !== 'string') return false;
+	if (patch.scope !== undefined && typeof patch.scope !== 'string') return false;
+	if (typeof patch.version !== 'number' || !Number.isInteger(patch.version)) return false;
+	if (!Array.isArray(patch.patch)) return false;
+
+	return patch.patch.every((operation) => {
+		if (!Array.isArray(operation) || operation.length !== 3) return false;
+		const [type, path] = operation;
+		return (
+			type === 'set' &&
+			Array.isArray(path) &&
+			path.every((segment) => typeof segment === 'string')
+		);
+	});
+}
+
+function collectRemovedElements(
+	removedNode: ResumeDomNode,
+	removedElements: Set<ResumeDomElement>,
+): void {
+	if (removedNode.nodeType !== 1) return;
+
+	const element = removedNode as ResumeDomElement;
+	removedElements.add(element);
+	for (const child of element.childNodes ?? []) {
+		collectRemovedElements(child, removedElements);
+	}
+}
+
+function hostIdsInsideRemovedElements(
+	elementsByHostId: Map<string, ResumeDomElement>,
+	removedElements: Set<ResumeDomElement>,
+): string[] {
+	const hostNodeIds: string[] = [];
+
+	for (const [hostNodeId, element] of elementsByHostId) {
+		for (const removedElement of removedElements) {
+			if (containsElement(removedElement, element)) {
+				hostNodeIds.push(hostNodeId);
+				break;
+			}
+		}
+	}
+
+	return hostNodeIds;
+}
+
 function materializeElementHandles(
+	root: ResumeDomElement,
 	elementsByHostId: Map<string, ResumeDomElement>,
 	handles: ResumeViewRecord['elementHandles'],
 ): {
@@ -465,7 +897,10 @@ function materializeElementHandles(
 
 	return {
 		get(handleIdOrName) {
-			return byHandleId.get(handleIdOrName) ?? byName.get(handleIdOrName);
+			return connectedElement(
+				root,
+				byHandleId.get(handleIdOrName) ?? byName.get(handleIdOrName),
+			);
 		},
 		deleteHost(hostNodeId) {
 			const keys = keysByHostId.get(hostNodeId);
@@ -476,6 +911,34 @@ function materializeElementHandles(
 			keysByHostId.delete(hostNodeId);
 		},
 	};
+}
+
+function connectedElement(
+	root: ResumeDomElement,
+	element: ResumeDomElement | undefined,
+): ResumeDomElement | undefined {
+	if (!element) return undefined;
+	return containsElement(root, element) ? element : undefined;
+}
+
+function containsElement(root: ResumeDomElement, target: ResumeDomElement): boolean {
+	if (root === target) return true;
+
+	for (const child of root.childNodes ?? []) {
+		if (child.nodeType === 1 && containsElement(child as ResumeDomElement, target)) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
+function isPromiseLike<T>(value: T | PromiseLike<T>): value is PromiseLike<T> {
+	return (
+		value !== null &&
+		(typeof value === 'object' || typeof value === 'function') &&
+		typeof (value as { readonly then?: unknown }).then === 'function'
+	);
 }
 
 function materializeAsyncBoundaryLocators(

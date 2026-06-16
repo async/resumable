@@ -1,5 +1,32 @@
 import { ASYNC_PROTOCOL_VERSION, type ProtocolStatePayload } from '@async/resumable-protocol';
-import { serializeGraphValue, type SerializationDiagnostic } from './value.ts';
+import {
+	serializeGraphValue,
+	type SerializedGraphPayload,
+	type SerializationDiagnostic,
+} from './value.ts';
+
+export type ProtocolAsyncComputedSnapshotInput =
+	| {
+			readonly status: 'idle';
+			readonly version: 0;
+	  }
+	| {
+			readonly status: 'pending';
+			readonly version: number;
+			readonly key: unknown;
+	  }
+	| {
+			readonly status: 'fulfilled';
+			readonly version: number;
+			readonly key: unknown;
+			readonly value: unknown;
+	  }
+	| {
+			readonly status: 'rejected';
+			readonly version: number;
+			readonly key: unknown;
+			readonly error: unknown;
+	  };
 
 export type ProtocolStatePayloadInput = {
 	readonly cells: ReadonlyArray<{
@@ -8,7 +35,12 @@ export type ProtocolStatePayloadInput = {
 		readonly valueKind: 'scalar' | 'object' | 'array' | 'unknown';
 		readonly value: unknown;
 	}>;
-	readonly computed?: ProtocolStatePayload['computed'];
+	readonly computed?: ReadonlyArray<
+		Omit<ProtocolStatePayload['computed'][number], 'snapshot'> & {
+			readonly snapshot?: ProtocolAsyncComputedSnapshotInput;
+		}
+	>;
+	readonly sharedDefinitions?: ProtocolStatePayload['sharedDefinitions'];
 };
 
 export type ProtocolStateSerializationDiagnostic = SerializationDiagnostic & {
@@ -67,8 +99,72 @@ export function createProtocolStatePayload(input: ProtocolStatePayloadInput): Pr
 				value: result.payload,
 			};
 		}),
-		computed: input.computed ?? [],
+		computed: (input.computed ?? []).map(serializeComputedSnapshot),
+		sharedDefinitions: input.sharedDefinitions,
 	};
+}
+
+function serializeComputedSnapshot(
+	computed: NonNullable<ProtocolStatePayloadInput['computed']>[number],
+): ProtocolStatePayload['computed'][number] {
+	if (!computed.snapshot) return computed;
+	if (computed.snapshot.status === 'idle')
+		return computed as ProtocolStatePayload['computed'][number];
+
+	const key = serializeProtocolStateField(computed, 'key', computed.snapshot.key);
+	if (computed.snapshot.status === 'pending') {
+		return {
+			...computed,
+			snapshot: {
+				status: computed.snapshot.status,
+				version: computed.snapshot.version,
+				key,
+			},
+		};
+	}
+
+	if (computed.snapshot.status === 'fulfilled') {
+		return {
+			...computed,
+			snapshot: {
+				status: computed.snapshot.status,
+				version: computed.snapshot.version,
+				key,
+				value: serializeProtocolStateField(computed, 'value', computed.snapshot.value),
+			},
+		};
+	}
+
+	return {
+		...computed,
+		snapshot: {
+			status: computed.snapshot.status,
+			version: computed.snapshot.version,
+			key,
+			error: serializeProtocolStateField(computed, 'error', computed.snapshot.error),
+		},
+	};
+}
+
+function serializeProtocolStateField(
+	computed: NonNullable<ProtocolStatePayloadInput['computed']>[number],
+	field: string,
+	value: unknown,
+): SerializedGraphPayload {
+	const result = serializeGraphValue(value);
+	if (!result.ok) {
+		throw protocolStateSerializationError(
+			{
+				graphNodeId: computed.graphNodeId,
+				name: `${computed.name}.snapshot.${field}`,
+				valueKind: 'unknown',
+				value,
+			},
+			result.diagnostics[0],
+		);
+	}
+
+	return result.payload;
 }
 
 function protocolStateSerializationError(

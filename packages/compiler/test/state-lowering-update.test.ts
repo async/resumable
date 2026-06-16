@@ -25,6 +25,8 @@ test('lowerStateAccess preserves update expression operator and prefix metadata'
 				valueKind: 'scalar',
 			},
 		],
+		sharedDefinitions: [],
+		sharedInstances: [],
 		hostNodes: [],
 		events: [],
 		behaviors: [],

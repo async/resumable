@@ -152,3 +152,74 @@ test('alias collector records array destructured graph aliases', () => {
 		}),
 	]);
 });
+
+test('alias collector reports graph destructuring defaults instead of dropping fallback semantics', () => {
+	const source = 'const { title: menuTitle = "Untitled" } = menu;';
+	const menuTitleStart = source.indexOf('menuTitle');
+	const defaultStart = source.indexOf('menuTitle = "Untitled"');
+	const initStart = source.lastIndexOf('menu');
+	const graph = createMutableSemanticGraphArtifact('src/App.tsrx');
+	graph.graphBindings.push({
+		id: 'state:menu',
+		name: 'menu',
+		kind: 'state',
+		writable: true,
+	});
+	const state = createWalkState({
+		filename: 'src/App.tsrx',
+		source,
+		graph,
+	});
+	const pattern = {
+		type: 'ObjectPattern',
+		properties: [
+			{
+				type: 'Property',
+				key: { type: 'Identifier', name: 'title' },
+				value: {
+					type: 'AssignmentPattern',
+					start: defaultStart,
+					end: defaultStart + 'menuTitle = "Untitled"'.length,
+					left: {
+						type: 'Identifier',
+						name: 'menuTitle',
+						start: menuTitleStart,
+						end: menuTitleStart + 'menuTitle'.length,
+					},
+					right: { type: 'Literal', value: 'Untitled' },
+				},
+			},
+		],
+	} satisfies AnyNode;
+	const init = {
+		type: 'Identifier',
+		start: initStart,
+		end: initStart + 'menu'.length,
+		name: 'menu',
+	} satisfies AnyNode;
+
+	collectDestructuredAliases(pattern, init, 'const', state);
+
+	expect(graph.aliases).toEqual([]);
+	expect(graph.diagnostics).toEqual([
+		expect.objectContaining({
+			code: 'AA_STATE_DESTRUCTURE_DEFAULT_UNSUPPORTED',
+			severity: 'error',
+			phase: 'semantic-graph',
+			passId: 'tsrx-semantic-graph',
+			artifactKeys: ['semanticGraph'],
+			title: 'Graph destructuring defaults are not supported yet',
+			message:
+				'Cannot create graph alias "menuTitle" from "menu.title" with a default value.',
+			why: 'A destructuring default must run only when the property value is undefined. The current graph alias artifact can represent a graph path, but not a fallback expression without changing JavaScript semantics.',
+			primarySpan: {
+				filename: 'src/App.tsrx',
+				start: defaultStart,
+				end: defaultStart + 'menuTitle = "Untitled"'.length,
+			},
+			statePath: 'menu.title',
+			source: 'menuTitle = "Untitled"',
+			docsUrl: 'https://async.await.dev/errors/AA_STATE_DESTRUCTURE_DEFAULT_UNSUPPORTED',
+		}),
+	]);
+});

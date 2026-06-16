@@ -23,6 +23,52 @@ function element(): FakeElement {
 	};
 }
 
+type FakeRangeNode = {
+	readonly name: string;
+	parentNode: FakeRangeParent | null;
+};
+
+type FakeRangeParent = {
+	childNodes: FakeRangeNode[];
+	insertBefore(node: FakeRangeNode, before: FakeRangeNode | null): FakeRangeNode;
+	removeChild(node: FakeRangeNode): FakeRangeNode;
+};
+
+function rangeNode(name: string): FakeRangeNode {
+	return {
+		name,
+		parentNode: null,
+	};
+}
+
+function rangeParent(childNodes: FakeRangeNode[]): FakeRangeParent {
+	const parent: FakeRangeParent = {
+		childNodes: [],
+		insertBefore(node, before) {
+			const currentIndex = this.childNodes.indexOf(node);
+			if (currentIndex >= 0) this.childNodes.splice(currentIndex, 1);
+
+			const beforeIndex = before === null ? -1 : this.childNodes.indexOf(before);
+			const insertIndex = beforeIndex >= 0 ? beforeIndex : this.childNodes.length;
+			this.childNodes.splice(insertIndex, 0, node);
+			node.parentNode = this;
+			return node;
+		},
+		removeChild(node) {
+			this.childNodes = this.childNodes.filter((child) => child !== node);
+			node.parentNode = null;
+			return node;
+		},
+	};
+
+	for (const child of childNodes) parent.insertBefore(child, null);
+	return parent;
+}
+
+function childNames(parent: FakeRangeParent): string[] {
+	return parent.childNodes.map((child) => child.name);
+}
+
 test('runtime DOM journal applier mutates concrete text attribute and property targets in order', () => {
 	const countText = { textContent: '' };
 	const button = element();
@@ -141,6 +187,136 @@ test('runtime DOM journal applier routes range entries through host callbacks in
 		'move:range:first->anchor:end',
 		'remove:range:second',
 	]);
+});
+
+test('runtime DOM journal applier replaces async boundary ranges with concrete DOM operations', () => {
+	const start = rangeNode('start');
+	const pending = rangeNode('pending');
+	const end = rangeNode('end');
+	const next = rangeNode('next');
+	const fulfilled = rangeNode('fulfilled');
+	const root = rangeParent([start, pending, end, next]);
+	const targets = new Map<string, unknown>([
+		['async-boundary:profile:start', start],
+		['async-boundary:profile:end', end],
+	]);
+
+	applyDomJournalEntries(
+		[
+			{ type: 'removeRange', locator: 'async-boundary:profile' },
+			{ type: 'insertRange', locator: 'async-boundary:profile:start', fragment: [fulfilled] },
+		],
+		{
+			resolveTarget(locator) {
+				return targets.get(locator);
+			},
+		},
+	);
+
+	expect(childNames(root)).toEqual(['start', 'fulfilled', 'end', 'next']);
+	expect(pending.parentNode).toBe(null);
+	expect(fulfilled.parentNode).toBe(root);
+});
+
+test('runtime DOM journal applier renders rejected async boundary snapshots before insertion', () => {
+	const start = rangeNode('start');
+	const pending = rangeNode('pending');
+	const end = rangeNode('end');
+	const next = rangeNode('next');
+	const rejected = rangeNode('rejected');
+	const root = rangeParent([start, pending, end, next]);
+	const targets = new Map<string, unknown>([
+		['async-boundary:profile:start', start],
+		['async-boundary:profile:end', end],
+	]);
+	const renderedSnapshots: unknown[] = [];
+
+	applyDomJournalEntries(
+		[
+			{ type: 'removeRange', locator: 'async-boundary:profile' },
+			{
+				type: 'insertRange',
+				locator: 'async-boundary:profile:start',
+				fragment: {
+					type: 'async-boundary-snapshot',
+					boundaryId: 'profile',
+					graphNodeId: 'computed:profile',
+					path: ['name'],
+					snapshot: {
+						status: 'rejected',
+						version: 2,
+						key: 'ada',
+						error: new Error('profile failed'),
+					},
+				},
+			},
+		],
+		{
+			resolveTarget(locator) {
+				return targets.get(locator);
+			},
+			renderAsyncSnapshot(fragment) {
+				renderedSnapshots.push(fragment);
+				return [rejected];
+			},
+		},
+	);
+
+	expect(renderedSnapshots).toEqual([
+		expect.objectContaining({
+			boundaryId: 'profile',
+			graphNodeId: 'computed:profile',
+			path: ['name'],
+			snapshot: expect.objectContaining({
+				status: 'rejected',
+				error: expect.any(Error),
+			}),
+		}),
+	]);
+	expect(childNames(root)).toEqual(['start', 'rejected', 'end', 'next']);
+	expect(pending.parentNode).toBe(null);
+	expect(rejected.parentNode).toBe(root);
+});
+
+test('runtime DOM journal applier moves retained-anchor range contents before a target anchor', () => {
+	const firstStart = rangeNode('first-start');
+	const firstContent = rangeNode('first-content');
+	const firstEnd = rangeNode('first-end');
+	const secondStart = rangeNode('second-start');
+	const secondContent = rangeNode('second-content');
+	const secondEnd = rangeNode('second-end');
+	const root = rangeParent([
+		firstStart,
+		firstContent,
+		firstEnd,
+		secondStart,
+		secondContent,
+		secondEnd,
+	]);
+	const targets = new Map<string, unknown>([
+		['item:first:start', firstStart],
+		['item:second:start', secondStart],
+		['item:second:end', secondEnd],
+	]);
+
+	applyDomJournalEntries(
+		[{ type: 'moveRange', locator: 'item:second', before: 'item:first:start' }],
+		{
+			resolveTarget(locator) {
+				return targets.get(locator);
+			},
+		},
+	);
+
+	expect(childNames(root)).toEqual([
+		'second-content',
+		'first-start',
+		'first-content',
+		'first-end',
+		'second-start',
+		'second-end',
+	]);
+	expect(secondContent.parentNode).toBe(root);
 });
 
 test('createDomUpdateEntry maps DOM update targets to concrete DOM operations', () => {

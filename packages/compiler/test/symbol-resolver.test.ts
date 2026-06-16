@@ -4,6 +4,8 @@ import { planSymbolResolver } from '../src/passes/symbol-resolver.ts';
 
 const source = `
 import { state, computed } from '@async/resumable';
+import { chart, resizeCanvas } from './behaviors';
+import { clamp } from './math';
 
 export function App() @{
 	let count = state(0);
@@ -25,7 +27,7 @@ export function App() @{
 				}
 			}}
 		/>
-		<button onClick={[() => count++, () => query = 'clicked']}>
+		<button onClick={[() => count++, () => query = 'clicked', () => count = clamp(count, 10)]}>
 			{count} {result.title}
 		</button>
 		<canvas use={[chart(result), resizeCanvas]} />
@@ -52,6 +54,19 @@ test('planSymbolResolver assigns lazy symbols while resolver owns import boundar
 	expect(plan.symbols).toEqual(
 		expect.arrayContaining([
 			expect.objectContaining({ kind: 'event-handler', eventName: 'input' }),
+			expect.objectContaining({
+				kind: 'event-handler',
+				eventName: 'input',
+				parameters: ['event'],
+				writes: [
+					expect.objectContaining({
+						source: 'query',
+						graphNodeId: 'state:query',
+						operation: 'assign',
+						valueSource: 'event.currentTarget.value',
+					}),
+				],
+			}),
 			expect.objectContaining({ kind: 'event-handler', eventName: 'keydown' }),
 			expect.objectContaining({
 				kind: 'event-handler',
@@ -72,14 +87,58 @@ test('planSymbolResolver assigns lazy symbols while resolver owns import boundar
 				order: 1,
 				source: "() => query = 'clicked'",
 			}),
+			expect.objectContaining({
+				kind: 'event-handler',
+				eventName: 'click',
+				order: 2,
+				source: '() => count = clamp(count, 10)',
+				moduleImports: [
+					{
+						localName: 'clamp',
+						importedName: 'clamp',
+						source: './math',
+						kind: 'named',
+					},
+				],
+				writes: [
+					expect.objectContaining({
+						graphNodeId: 'state:count',
+						operation: 'assign',
+						valueSource: 'clamp(count, 10)',
+					}),
+				],
+			}),
 			expect.objectContaining({ kind: 'dom-update', source: 'query' }),
 			expect.objectContaining({ kind: 'dom-update', source: 'count' }),
 			expect.objectContaining({ kind: 'dom-update', source: 'result.title' }),
-			expect.objectContaining({ kind: 'behavior', source: 'chart(result)' }),
-			expect.objectContaining({ kind: 'behavior', source: 'resizeCanvas' }),
+			expect.objectContaining({
+				kind: 'behavior',
+				source: 'chart(result)',
+				functionSource: 'chart',
+				inputSources: ['result'],
+				moduleImport: {
+					localName: 'chart',
+					importedName: 'chart',
+					source: './behaviors',
+					kind: 'named',
+				},
+			}),
+			expect.objectContaining({
+				kind: 'behavior',
+				source: 'resizeCanvas',
+				functionSource: 'resizeCanvas',
+				inputSources: [],
+				moduleImport: {
+					localName: 'resizeCanvas',
+					importedName: 'resizeCanvas',
+					source: './behaviors',
+					kind: 'named',
+				},
+			}),
 			expect.objectContaining({
 				kind: 'async-computed-runner',
 				graphNodeId: 'computed:result',
+				source: expect.stringContaining("await fetch('/api/search?q=' + q"),
 			}),
 		]),
 	);
@@ -90,4 +149,96 @@ test('planSymbolResolver assigns lazy symbols while resolver owns import boundar
 		}),
 	]);
 	expect(plan.diagnostics).toEqual([]);
+});
+
+test('planSymbolResolver keeps compound and binary assignment writes with their own handlers', async () => {
+	const semanticGraph = await buildSemanticGraph({
+		filename: 'src/Assignments.tsrx',
+		source: `
+import { state } from '@async/resumable';
+
+export function App() @{
+	const profile = state({ step: 2 });
+	let total = state(0);
+
+	<section>
+		<button onClick={() => total += profile.step}>{total}</button>
+		<button onClick={() => total = total + profile.step}>{total}</button>
+	</section>
+}
+`,
+	});
+	const stateLowering = lowerStateAccess({ semanticGraph });
+	const payloadArena = planPayloadArena({ semanticGraph, stateLowering });
+
+	const plan = planSymbolResolver({
+		semanticGraph,
+		payloadArena,
+		stateLowering,
+	});
+	const compoundSymbol = plan.symbols.find(
+		(symbol) =>
+			symbol.kind === 'event-handler' && symbol.source.includes('total += profile.step'),
+	);
+	const binarySymbol = plan.symbols.find(
+		(symbol) =>
+			symbol.kind === 'event-handler' &&
+			symbol.source.includes('total = total + profile.step'),
+	);
+
+	expect(compoundSymbol).toMatchObject({
+		kind: 'event-handler',
+		writes: [
+			expect.objectContaining({
+				source: 'total',
+				assignmentOperator: '+=',
+				valueSource: 'profile.step',
+			}),
+		],
+	});
+	expect(binarySymbol).toMatchObject({
+		kind: 'event-handler',
+		writes: [
+			expect.objectContaining({
+				source: 'total',
+				valueSource: 'total + profile.step',
+			}),
+		],
+	});
+	expect(compoundSymbol?.writes).toHaveLength(1);
+	expect(binarySymbol?.writes).toHaveLength(1);
+	expect(binarySymbol?.writes[0]?.assignmentOperator).toBeUndefined();
+});
+
+test('planSymbolResolver ignores module import names that only appear in event string literals', async () => {
+	const semanticGraph = await buildSemanticGraph({
+		filename: 'src/EventImportString.tsrx',
+		source: `
+import { state } from '@async/resumable';
+import { clamp } from './math';
+
+export function App() @{
+	let label = state('');
+
+	<button onClick={() => label = "clamp"}>{label}</button>
+}
+`,
+	});
+	const stateLowering = lowerStateAccess({ semanticGraph });
+	const payloadArena = planPayloadArena({ semanticGraph, stateLowering });
+
+	const plan = planSymbolResolver({
+		semanticGraph,
+		payloadArena,
+		stateLowering,
+	});
+	const symbol = plan.symbols.find(
+		(item) => item.kind === 'event-handler' && item.source.includes('"clamp"'),
+	);
+
+	expect(symbol).toMatchObject({
+		kind: 'event-handler',
+		source: '() => label = "clamp"',
+	});
+	expect(symbol).not.toHaveProperty('moduleImports');
 });
