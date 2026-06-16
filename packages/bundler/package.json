@@ -3,6 +3,7 @@
 	"version": "0.0.0",
 	"private": true,
 	"type": "module",
+	"sideEffects": false,
 	"exports": {
 		"./rolldown": "./src/rolldown.ts",
 		"./vite": "./src/vite/index.ts"
