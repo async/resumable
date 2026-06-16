@@ -343,11 +343,11 @@ in the split specs.
   outside async boundaries, sync computeds that transitively depend on async
   computeds, unsupported graph destructuring defaults, same-module shared
   definition cycles, invalid/duplicate element handle bindings, element handles
-  stored in `state()`, and `use` on components.
+  stored in `state()`, and `attach` on components.
 - The current implemented stable diagnostic code inventory is
   `AA_STATE_MODULE_SCOPE`, `AA_ASYNC_POST_AWAIT_READ`,
   `AA_ASYNC_BOUNDARY_REQUIRED`, `AA_ELEMENT_HANDLE_REQUIRED`,
-  `AA_ELEMENT_HANDLE_DUPLICATE`, `AA_USE_HOST_ELEMENT_REQUIRED`,
+  `AA_ELEMENT_HANDLE_DUPLICATE`, `AA_ATTACH_HOST_ELEMENT_REQUIRED`,
   `AA_SYNC_POLICY_UNEXTRACTABLE`, `AA_STATE_UNRESOLVED_WRITE`,
   `AA_STATE_DYNAMIC_PATH_READ`, `AA_STATE_DYNAMIC_PATH_WRITE`,
   `AA_STATE_OPTIONAL_CHAIN_WRITE`, `AA_STATE_REST_ALIAS_EXCLUDED_PATH`,
@@ -380,17 +380,17 @@ in the split specs.
   post-`await` graph reads in async computed bodies, and propagates
   async-capable status through sync computeds that depend on async computeds.
 - Semantic graph element/behavior collection records `el` handle bindings and
-  host-element `use` behavior source records, including behavior function source
+  host-element `attach` behavior source records, including behavior function source
   plus authored input expression sources for supported identifier/member and
   call forms, while rejecting `el` bindings that do not target `element()`
-  handles, duplicate live handle bindings, and `use` on components.
+  handles, duplicate live handle bindings, and `attach` on components.
 - Semantic graph collection records non-framework module imports for named,
   default, and namespace import specifiers so later lazy symbol modules can
   re-import authored module-level values instead of depending on serialized
   closures.
 - Semantic graph element collection currently classifies static lowercase tag
   names as host elements and static uppercase tag names as components for host
-  node records and `use` diagnostics.
+  node records and `attach` diagnostics.
 - Semantic graph sync-policy extraction records selected graph-state/event-field
   guard policies for synchronous `preventDefault()` / `stopPropagation()`
   actions and reports `AA_SYNC_POLICY_UNEXTRACTABLE` when a browser-critical
@@ -1431,7 +1431,7 @@ commands are listed in the implementation/build section above.
   behavior input values, or proves input-change reruns against real browser DOM
   removal/timing.
 - element/behavior audit confirmed current coverage is focused on compiler
-  diagnostics and payload records for `el` / `use`, behavior symbol planning,
+  diagnostics and payload records for `el` / `attach`, behavior symbol planning,
   behavior function/input source metadata, and Node fake-DOM runtime behavior
   record/startup-no-load paths.
 - capture-analysis audit confirmed current coverage is focused on semantic
@@ -1679,7 +1679,7 @@ commands are listed in the implementation/build section above.
   diagnostics, branch/list locator streams, or control-flow disposal metadata.
 - dynamic-tag/style audit confirmed current element collection derives static
   host/component classification from identifier tag names and lowercase host
-  names, and tests static component-vs-host `use` diagnostics. The current split
+  names, and tests static component-vs-host `attach` diagnostics. The current split
   specs only list dynamic tags/components and scoped styles as TSRX baseline
   syntax; no package source emits dynamic tag/component artifacts, dynamic
   ownership diagnostics, style-scope records, style-composition records, or
@@ -1924,7 +1924,7 @@ commands are listed in the implementation/build section above.
   assertions, real browser default-action timing, or browser DOM application
   after the flush.
 - Current element/behavior tests prove invalid and duplicate `el` diagnostics,
-  `use`-on-component diagnostics, element handle payload/protocol records,
+  `attach`-on-component diagnostics, element handle payload/protocol records,
   multiple behavior source records, behavior function/input source metadata, and
   symbol IDs in authored/view order, module import metadata for imported behavior
   functions, partial generated imported-behavior and inline behavior-function
@@ -2060,7 +2060,7 @@ commands are listed in the implementation/build section above.
   diagnostics for React-style child inspection/manipulation.
 - Current dynamic tag/component/style coverage proves static identifier tag
   handling only: lowercase names become host node records, uppercase names stay
-  component-like for `use` diagnostics, and protocol locators preserve the static
+  component-like for `attach` diagnostics, and protocol locators preserve the static
   `tagName`. It does not prove dynamic `<{expr}>` lowering, dynamic
   host/component ownership diagnostics, style scoping/composition, style payload
   metadata, or runtime behavior for dynamically selected hosts/components.

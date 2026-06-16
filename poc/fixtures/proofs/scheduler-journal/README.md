@@ -20,13 +20,13 @@ The fixture source lives at [src/App.tsrx](./src/App.tsrx).
 - Stale async completion ignored after newer writes by changing selection and
   incrementing `journal.revision` before an older `preview` can settle.
 - Concrete DOM mutation journal categories:
-  - `setText` from dynamic text bindings such as `{summary}` and `{flushLabel}`;
-  - `setAttr` from dynamic attributes such as `data-revision`, `data-selected`,
-    `aria-busy`, and keyed row state;
-  - `insertRange` from opening the branch or adding a row;
-  - `removeRange` from closing the branch or deleting a keyed row;
-  - `moveRange` from keyed row reorder;
-  - `runCleanup` from behavior cleanup on removed branch and list ranges.
+    - `setText` from dynamic text bindings such as `{summary}` and `{flushLabel}`;
+    - `setAttr` from dynamic attributes such as `data-revision`, `data-selected`,
+      `aria-busy`, and keyed row state;
+    - `insertRange` from opening the branch or adding a row;
+    - `removeRange` from closing the branch or deleting a keyed row;
+    - `moveRange` from keyed row reorder;
+    - `runCleanup` from behavior cleanup on removed branch and list ranges.
 - No VDOM semantics: future tests should assert ordered journal records against
   concrete DOM locators, not virtual element reconciliation.
 - No rollback after committed graph writes: `commitThenThrow` writes graph state
@@ -34,7 +34,7 @@ The fixture source lives at [src/App.tsrx](./src/App.tsrx).
 - Handler ordering when multiple lazy handlers run for the same browser event
   through the ordered `onClick={[...]}` handler list.
 - Behavior cleanup ordering for removed branch and keyed-list ranges through
-  `use={journalBehavior(...)}` on both a branch host and row hosts.
+  `attach={journalBehavior(...)}` on both a branch host and row hosts.
 
 ## Future Pass-Boundary Tests
 
@@ -43,7 +43,7 @@ The same authored fixture should be consumed one layer at a time:
 1. **TSRX semantic graph**: identify the component function, state sites,
    computed sites, async computed runner, event props, ordered handler list,
    dynamic text bindings, dynamic attributes, `@if` branch, keyed `@for` loop,
-   `@empty` fallback, `use={...}` behavior hosts, and `element()` handle.
+   `@empty` fallback, `attach={...}` behavior hosts, and `element()` handle.
 2. **State lowering**: prove event writes such as `journal.filter = ...`,
    `journal.revision++`, `items.push(...)`, `items.splice(...)`, and
    `journal.committed++` become graph writes instead of closure mutation.

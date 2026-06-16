@@ -24,7 +24,7 @@ export function App() @{
 			}}
 		/>
 		<button onClick={[() => count++, () => menu.open = true]}>{count}</button>
-		<canvas use={[chart(menu), resizeCanvas]} />
+		<canvas attach={[chart(menu), resizeCanvas]} />
 	</section>
 }
 `;

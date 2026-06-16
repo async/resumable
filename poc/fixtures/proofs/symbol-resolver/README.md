@@ -12,7 +12,7 @@ The fixture source lives at [src/App.tsrx](./src/App.tsrx).
   closures. They become lazy event handler symbol records.
 - Binding update functions for dynamic text, attributes, properties, branch
   content, and keyed list rows become lazy binding symbols.
-- `use={...}` behavior factories become behavior symbols with serializable
+- `attach={...}` behavior factories become behavior symbols with serializable
   inputs and ordered cleanup ownership on the host element.
 - Async `computed()` callbacks become async runner symbols that the scheduler can
   request through the resolver.
@@ -31,7 +31,7 @@ The same authored fixture should be consumed one layer at a time:
 
 1. **TSRX semantic graph**: identify component functions, `state()` sites,
    `computed()` sites, async computed callbacks, host nodes, event props,
-   dynamic bindings, `use={...}` behavior hosts, element handles, branch scopes,
+   dynamic bindings, `attach={...}` behavior hosts, element handles, branch scopes,
    and keyed list scopes.
 2. **State lowering**: prove handler and binding bodies read and write graph
    cells by ID instead of capturing mutable JavaScript closure state.
@@ -39,11 +39,11 @@ The same authored fixture should be consumed one layer at a time:
    behavior records, async runner records, sync policy records, and DOM locator
    references without encoding per-node DOM closures.
 4. **Symbol resolver planning**: assign stable private symbol IDs for:
-   - event handlers such as `onInput`, `onKeyDown`, `onClick`, and `onSubmit`;
-   - binding update functions for `value`, `aria-*`, `data-*`, dynamic text, and
-     branch/list text;
-   - behavior factories used by `use={...}`;
-   - async computed runner callbacks.
+    - event handlers such as `onInput`, `onKeyDown`, `onClick`, and `onSubmit`;
+    - binding update functions for `value`, `aria-*`, `data-*`, dynamic text, and
+      branch/list text;
+    - behavior factories used by `attach={...}`;
+    - async computed runner callbacks.
 5. **Generated resolver ownership**: emit a resolver table that maps symbol IDs
    to manifest entries, chunks, and exports. The generated resolver is the only
    place that performs dynamic `import()`.

@@ -581,7 +581,7 @@ function classifyIdentifier(
 				title: 'Cannot serialize runtime resource class',
 				why: 'Classes with private runtime state or cleanup closures cannot be restored from durable own fields.',
 				suggestion:
-					'Move runtime resource setup into use={...} or recreate it from serializable state.',
+					'Move runtime resource setup into attach={...} or recreate it from serializable state.',
 			});
 			return;
 		}
@@ -711,7 +711,7 @@ function collectBehaviorRecords(ast: AnyNode, context: PlanningContext): void {
 		const hostNodeId = `h${hostNodeIndex++}`;
 		for (const attribute of asNodes(node.attributes)) {
 			if (attribute.type !== 'Attribute') continue;
-			if (getIdentifierName(attribute.name) !== 'use') continue;
+			if (getIdentifierName(attribute.name) !== 'attach') continue;
 
 			const value = attribute.value as AnyNode | undefined;
 			const behavior = getCalleeName(value);
@@ -854,7 +854,7 @@ function addUnsupportedRuntimeDiagnostic(input: {
 		title,
 		why: 'This value depends on runtime identity or hidden host state that cannot be restored from async/state.',
 		suggestion:
-			'Move runtime resources into use={...}, or store serializable data needed to recreate them.',
+			'Move runtime resources into attach={...}, or store serializable data needed to recreate them.',
 	});
 }
 

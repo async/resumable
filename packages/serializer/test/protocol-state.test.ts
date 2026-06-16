@@ -66,7 +66,7 @@ test('createProtocolStatePayload preserves structured serialization diagnostics 
 		docsUrl: 'https://async.await.dev/errors/AA_SERIALIZE_UNSUPPORTED_VALUE',
 		suggestions: [
 			{
-				message: expect.stringContaining('use={...}'),
+				message: expect.stringContaining('attach={...}'),
 			},
 		],
 	});

@@ -30,7 +30,7 @@ export function App() @{
 		<button onClick={[() => count++, () => query = 'clicked', () => count = clamp(count, 10)]}>
 			{count} {result.title}
 		</button>
-		<canvas use={[chart(result), resizeCanvas]} />
+		<canvas attach={[chart(result), resizeCanvas]} />
 	</section>
 }
 `;

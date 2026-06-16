@@ -184,7 +184,7 @@ no annotation:
 
 - event handler expressions (`onClick={...}`, `onVisible={...}`), including
   each entry in event handler arrays
-- element behavior expressions (`use={...}` on host elements), including each
+- element behavior expressions (`attach={...}` on host elements), including each
   entry in behavior arrays
 - `computed()` bodies
 - async computed run functions and async boundary branch DOM updates
@@ -207,7 +207,7 @@ in a plain variable — is a **compile-time diagnostic** pointing at the exact
 variable, explaining why it can't cross a resume boundary and what to do instead
 (usually: make it state, make it an `element()` handle, hoist it to module scope,
 derive it inside the closure, or move DOM-backed setup into a host element
-behavior with `use`). The diagnostic does the job Qwik's `$` does, but only fires
+behavior with `attach`). The diagnostic does the job Qwik's `$` does, but only fires
 when something is actually unserializable instead of taxing every line.
 Diagnostic quality is a first-class deliverable, not polish.
 

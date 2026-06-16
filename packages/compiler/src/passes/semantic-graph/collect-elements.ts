@@ -16,9 +16,9 @@ import {
 	hasSyncEventPolicyCandidate,
 } from './collect-sync-policy.ts';
 import {
+	attachHostElementRequiredDiagnostic,
 	duplicateElementHandleDiagnostic,
 	elementHandleRequiredDiagnostic,
-	useHostElementRequiredDiagnostic,
 } from './diagnostics.ts';
 import type { MutableSemanticGraphArtifact, SemanticGraphWalk, WalkState } from './types.ts';
 
@@ -109,10 +109,10 @@ function collectAttribute(
 	const value = attribute.value as AnyNode | undefined;
 	const expressionValue = unwrapExpressionContainer(value);
 
-	if (attributeName === 'use' && !isHostElement) {
+	if (attributeName === 'attach' && !isHostElement) {
 		if (expressionValue) {
 			state.graph.diagnostics.push(
-				useHostElementRequiredDiagnostic(ownerTagName, expressionValue, state),
+				attachHostElementRequiredDiagnostic(ownerTagName, expressionValue, state),
 			);
 			collectExpressionReads(expressionValue, state);
 			walk(expressionValue, state);
@@ -148,7 +148,7 @@ function collectAttribute(
 		return;
 	}
 
-	if (attributeName === 'use') {
+	if (attributeName === 'attach') {
 		if (expressionValue) {
 			for (const behavior of behaviorExpressions(expressionValue)) {
 				state.graph.behaviors.push({

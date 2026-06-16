@@ -36,7 +36,7 @@ export function Counter() @{
 		>
 			{count} {doubled} {menu.title} {menuTitle} {menuLabel} {menuRest.meta.label} {menuRest.title}
 		</button>
-		<canvas use={renderChart(chartConfig.palette)} />
+		<canvas attach={renderChart(chartConfig.palette)} />
 	</section>
 }
 `;

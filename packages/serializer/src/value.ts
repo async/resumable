@@ -522,7 +522,7 @@ function unsupportedDiagnostic(
 		suggestions: [
 			{
 				message:
-					'Move runtime resources into use={...}, make the value serializable state, or derive it with computed().',
+					'Move runtime resources into attach={...}, make the value serializable state, or derive it with computed().',
 			},
 		],
 		docsUrl: 'https://async.await.dev/errors/AA_SERIALIZE_UNSUPPORTED_VALUE',

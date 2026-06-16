@@ -43,7 +43,7 @@ export function App() @{
   });
 
   <main>
-    <section use={markProofPanel(panelLabel)}>
+    <section attach={markProofPanel(panelLabel)}>
       <button
         type="button"
         onClick={() => {

@@ -21,7 +21,7 @@ The fixture source lives at [src/App.tsrx](./src/App.tsrx).
   fixture uses `MoneyValue` and `CustomerSnapshot` methods as imported behavior;
   method bodies are not serialized data.
 - Recreated values that belong in `computed()` instead of durable state.
-- DOM/resource behavior that belongs in `use={...}` with serializable inputs,
+- DOM/resource behavior that belongs in `attach={...}` with serializable inputs,
   while the behavior result, cleanup, `AbortController`, and element object are
   not serialized.
 - Unsupported DOM/runtime value diagnostics for live elements, element handles
@@ -35,22 +35,22 @@ The fixture source lives at [src/App.tsrx](./src/App.tsrx).
 The same authored fixture should be consumed one layer at a time:
 
 1. **TSRX semantic graph**: identify the component functions, `state()` sites,
-   `computed()` sites, `use={...}` behavior hosts, element handles, built-in
+   `computed()` sites, `attach={...}` behavior hosts, element handles, built-in
    constructor calls, class instances, shared object references, cycle setup,
    and diagnostic comments.
 2. **Serializer value classification**: classify reachable graph values by
    tier:
-   - primitives, plain objects, arrays, `Date`, `RegExp`, `Map`, `Set`, `URL`,
-     `BigInt`, typed arrays, and `ArrayBuffer`;
-   - framework graph references and element handles as framework IDs/locators,
-     not user objects;
-   - app value classes with serializable own fields and imported prototype
-     methods;
-   - recreated computed values whose durable dependencies serialize instead of
-     the derived object itself;
-   - DOM/resource behavior represented by behavior code reference plus
-     serializable inputs;
-   - unsupported live DOM/runtime resources.
+    - primitives, plain objects, arrays, `Date`, `RegExp`, `Map`, `Set`, `URL`,
+      `BigInt`, typed arrays, and `ArrayBuffer`;
+    - framework graph references and element handles as framework IDs/locators,
+      not user objects;
+    - app value classes with serializable own fields and imported prototype
+      methods;
+    - recreated computed values whose durable dependencies serialize instead of
+      the derived object itself;
+    - DOM/resource behavior represented by behavior code reference plus
+      serializable inputs;
+    - unsupported live DOM/runtime resources.
 3. **Identity table planning**: prove repeated references to `sharedContact`,
    `cycleA`, and class instances become payload IDs/backrefs rather than naive
    JSON cloning.

@@ -1,6 +1,6 @@
 ---
 name: async-await-spec-maintenance
-description: "Use when updating, splitting, reviewing, or reconciling the @async/resumable framework design specs under specs/framework* or the specs/state.md progress ledger. Applies the current decisions without over-scoping implementation: TSRX-only, no hydration, no VDOM, graph-state resumability, compiler artifact pipeline, JS/TS on @tsrx/core first, runtime-agnostic ESM, Rolldown/Vite-only build tooling, and explicit deferred decisions."
+description: 'Use when updating, splitting, reviewing, or reconciling the @async/resumable framework design specs under specs/framework* or the specs/state.md progress ledger. Applies the current decisions without over-scoping implementation: TSRX-only, no hydration, no VDOM, graph-state resumability, compiler artifact pipeline, JS/TS on @tsrx/core first, runtime-agnostic ESM, Rolldown/Vite-only build tooling, and explicit deferred decisions.'
 ---
 
 # Async Resumable Spec Maintenance
@@ -16,16 +16,16 @@ description: "Use when updating, splitting, reviewing, or reconciling the @async
 ## Maintenance Rules
 
 - Preserve the major decisions unless the user explicitly reopens them:
-  - TSRX-only, no TSX/JSX support.
-  - No hydration and no component execution on client resume.
-  - No VDOM, no render-output reconciliation, no client component rerender path.
-  - State is a graph data plane; lazy symbols are the behavior/code plane.
-  - Dynamic imports are owned by the symbol resolver, not event props.
-  - Sync event policy handles browser-immediate behavior before lazy imports.
-  - First compiler implementation uses JS/TS with `@tsrx/core`; OXC/native work is deferred.
-  - Do not use the sibling `../native-tsrx` repository: do not inspect it, edit it, run commands in it, or make async-await work depend on changes there.
-  - Shared packages are runtime-agnostic ESM and avoid Node-only APIs.
-  - Build scripts and optimization use Rolldown or Vite only.
+    - TSRX-only, no TSX/JSX support.
+    - No hydration and no component execution on client resume.
+    - No VDOM, no render-output reconciliation, no client component rerender path.
+    - State is a graph data plane; lazy symbols are the behavior/code plane.
+    - Dynamic imports are owned by the symbol resolver, not event props.
+    - Sync event policy handles browser-immediate behavior before lazy imports.
+    - First compiler implementation uses JS/TS with `@tsrx/core`; OXC/native work is deferred.
+    - Do not use the sibling `../native-tsrx` repository: do not inspect it, edit it, run commands in it, or make async-await work depend on changes there.
+    - Shared packages are runtime-agnostic ESM and avoid Node-only APIs.
+    - Build scripts and optimization use Rolldown or Vite only.
 - Do not specify low-level runtime storage shapes unless the user asks. Specify behavioral contracts instead.
 - Do not define exact compiler output prematurely. Prefer human-readable artifacts, pass boundaries, diagnostics, and fixtures.
 - Make implementation-facing additions concrete enough for tests: accepted behavior, unsupported cases, diagnostics, and validation strategy.
@@ -36,7 +36,7 @@ description: "Use when updating, splitting, reviewing, or reconciling the @async
 - `01-tsrx-host-contract.md`: TSRX host semantics and projection model.
 - `02-compiler-pipeline.md`: pass pipeline, artifact contracts, extraction/capture, tests.
 - `03-state-graph.md`: state/computed/shared semantics and serialization-facing state rules.
-- `04-events-symbols-behaviors.md`: element handles, `use`, events, sync policy, symbol resolver.
+- `04-events-symbols-behaviors.md`: element handles, `attach`, events, sync policy, symbol resolver.
 - `05-resumability-payload.md`: serializer tiers, compact data scripts, payload contents.
 - `06-runtime-resumer.md`: graph behavior, scheduler, flush, resume.
 - `07-diagnostics.md`: compiler/runtime diagnostic shape and examples.

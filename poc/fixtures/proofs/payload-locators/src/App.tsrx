@@ -66,7 +66,7 @@ export function App() @{
         Filter
         <input
           el={filterInput}
-          use={focusVisibleInput(view.open)}
+          attach={focusVisibleInput(view.open)}
           value={view.filter}
           onInput={(event) => {
             view.filter = event.currentTarget.value.trim().toLowerCase();
@@ -94,7 +94,7 @@ export function App() @{
     @if (view.open) {
       <section
         el={detailsPanel}
-        use={markLocatorHost({
+        attach={markLocatorHost({
           label: "selected-panel",
           selectedId: selected.id,
         })}
@@ -118,7 +118,7 @@ export function App() @{
     <ol>
       @for (const item of visibleItems; index index; key item.id) {
         <li>
-          <article use={markLocatorHost({
+          <article attach={markLocatorHost({
             label: "item-row",
             selectedId: item.id,
           })}>

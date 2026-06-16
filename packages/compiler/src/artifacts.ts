@@ -153,7 +153,7 @@ export type SemanticGraphDiagnostic = CompilerDiagnostic & {
 		| 'AA_SHARED_DEFINITION_CYCLE'
 		| 'AA_ELEMENT_HANDLE_REQUIRED'
 		| 'AA_ELEMENT_HANDLE_DUPLICATE'
-		| 'AA_USE_HOST_ELEMENT_REQUIRED'
+		| 'AA_ATTACH_HOST_ELEMENT_REQUIRED'
 		| 'AA_SYNC_POLICY_UNEXTRACTABLE';
 	readonly phase: 'semantic-graph' | 'sync-policy';
 	readonly passId: 'tsrx-semantic-graph';

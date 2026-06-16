@@ -76,7 +76,7 @@ test('resume-basic semantic graph exposes pass-boundary facts', async () => {
 		graph.eventProps.some((event) => event.eventName === 'keydown' && event.hasSyncPolicy),
 		'keydown should expose a sync preventDefault policy',
 	).toBe(true);
-	expect(graph.behaviorProps, 'one use behavior should be discovered').toHaveLength(1);
+	expect(graph.behaviorProps, 'one attach behavior should be discovered').toHaveLength(1);
 	expect(graph.asyncBoundaries, 'one @try async boundary should be discovered').toHaveLength(1);
 	includes(
 		graph.stateWrites.map((write) => write.target),
@@ -133,7 +133,11 @@ test('state-lvalues semantic graph exposes valid lvalue pass-boundary facts', as
 	hasWrite(graph.stateWrites, { target: 'count', operation: 'update' }, 'state writes');
 	hasWrite(graph.stateWrites, { target: 'count', operation: 'assign' }, 'state writes');
 	hasWrite(graph.stateWrites, { target: 'obj.x', operation: 'assign' }, 'state writes');
-	hasWrite(graph.stateWrites, { target: 'obj.nested.title', operation: 'assign' }, 'state writes');
+	hasWrite(
+		graph.stateWrites,
+		{ target: 'obj.nested.title', operation: 'assign' },
+		'state writes',
+	);
 	hasWrite(
 		graph.stateWrites,
 		{ target: 'obj.nested.meta.saves', operation: 'update' },
@@ -190,7 +194,11 @@ test('state-lvalues semantic graph exposes invalid write diagnostic targets', as
 		{ target: 'settings.nested.title', operation: 'assign' },
 		'invalid writes',
 	);
-	hasWrite(graph.stateWrites, { target: 'items', operation: 'call', method: 'push' }, 'invalid writes');
+	hasWrite(
+		graph.stateWrites,
+		{ target: 'items', operation: 'call', method: 'push' },
+		'invalid writes',
+	);
 	hasWrite(graph.stateWrites, { target: 'xAlias', operation: 'assign' }, 'invalid writes');
 	hasWrite(graph.stateWrites, { target: 'dynamicAlias', operation: 'assign' }, 'invalid writes');
 	hasWrite(graph.stateWrites, { target: 'firstItem', operation: 'assign' }, 'invalid writes');
@@ -239,7 +247,10 @@ test('payload-locators semantic graph exposes locator ownership facts', async ()
 			readonly handleName: string;
 			readonly hostNodeId: string;
 		}>;
-		readonly textBindings: ReadonlyArray<{ readonly source: string; readonly hostNodeId: string }>;
+		readonly textBindings: ReadonlyArray<{
+			readonly source: string;
+			readonly hostNodeId: string;
+		}>;
 		readonly branchAnchors: ReadonlyArray<{
 			readonly condition: string;
 			readonly firstHostNodeId: string | null;

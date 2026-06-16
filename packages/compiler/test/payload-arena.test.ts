@@ -27,7 +27,7 @@ export function App() @{
 			}}
 		/>
 		<button onClick={() => count++}>{count}</button>
-		<canvas use={chart(details)} />
+		<canvas attach={chart(details)} />
 		@try {
 			<p>{details.title}</p>
 		} @pending {
@@ -262,8 +262,8 @@ export function App() @{
 	const details = computed(() => menu.options.color);
 
 	<section>
-		<canvas use={chart(menu.options.color, 'line', 3, false, null)} />
-		<div use={tooltip(details)} />
+		<canvas attach={chart(menu.options.color, 'line', 3, false, null)} />
+		<div attach={tooltip(details)} />
 	</section>
 }
 `,

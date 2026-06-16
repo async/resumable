@@ -96,7 +96,7 @@ export function Handles() @{
 }
 `;
 
-const componentUseSource = `
+const componentAttachSource = `
 import { state } from '@async/resumable';
 
 function ChartWrapper() @{
@@ -107,7 +107,7 @@ export function Dashboard() @{
 	const config = state({ color: 'red' });
 
 	<section>
-		<ChartWrapper use={chart(config)} />
+		<ChartWrapper attach={chart(config)} />
 	</section>
 }
 `;
@@ -492,7 +492,7 @@ test('buildSemanticGraph reports invalid and duplicate element handle bindings',
 			suggestions: [
 				{
 					message:
-						'Create a handle with element<T>() and bind that handle with el={handle}. Keep DOM-backed resources in use={...}.',
+						'Create a handle with element<T>() and bind that handle with el={handle}. Keep DOM-backed resources in attach={...}.',
 				},
 			],
 			docsUrl: 'https://async.await.dev/errors/AA_ELEMENT_HANDLE_REQUIRED',
@@ -559,24 +559,24 @@ test('buildSemanticGraph reports element handles stored in state', async () => {
 	]);
 });
 
-test('buildSemanticGraph reports use on components instead of treating it as a host behavior', async () => {
+test('buildSemanticGraph reports attach on components instead of treating it as a host behavior', async () => {
 	const graph = await buildSemanticGraph({
 		filename: 'src/Dashboard.tsrx',
-		source: componentUseSource,
+		source: componentAttachSource,
 	});
-	const behaviorStart = componentUseSource.indexOf('chart(config)');
+	const behaviorStart = componentAttachSource.indexOf('chart(config)');
 
 	expect(graph.behaviors).toEqual([]);
 	expect(graph.diagnostics).toEqual([
 		expect.objectContaining({
-			code: 'AA_USE_HOST_ELEMENT_REQUIRED',
+			code: 'AA_ATTACH_HOST_ELEMENT_REQUIRED',
 			severity: 'error',
 			phase: 'semantic-graph',
 			passId: 'tsrx-semantic-graph',
 			artifactKeys: ['semanticGraph'],
-			title: 'use can only be bound to host elements',
+			title: 'attach can only be bound to host elements',
 			message:
-				'Cannot bind use={chart(config)} on component <ChartWrapper>. use installs DOM behavior and needs a concrete host element owner.',
+				'Cannot bind attach={chart(config)} on component <ChartWrapper>. attach installs DOM behavior and needs a concrete host element owner.',
 			why: 'Element behaviors are resumed by locating the owning DOM element. A component is not a DOM locator and may render zero, one, or many host nodes.',
 			primarySpan: {
 				filename: 'src/Dashboard.tsrx',
@@ -586,10 +586,10 @@ test('buildSemanticGraph reports use on components instead of treating it as a h
 			suggestions: [
 				{
 					message:
-						'Move use={...} to a host element such as <canvas>, or make the component forward behavior to a known host element in its own TSRX body.',
+						'Move attach={...} to a host element such as <canvas>, or make the component forward behavior to a known host element in its own TSRX body.',
 				},
 			],
-			docsUrl: 'https://async.await.dev/errors/AA_USE_HOST_ELEMENT_REQUIRED',
+			docsUrl: 'https://async.await.dev/errors/AA_ATTACH_HOST_ELEMENT_REQUIRED',
 		}),
 	]);
 });

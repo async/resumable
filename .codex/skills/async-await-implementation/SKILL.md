@@ -1,6 +1,6 @@
 ---
 name: async-await-implementation
-description: "Use when implementing the @async/resumable TSRX framework: compiler passes, state graph runtime, resumability payloads, unified render/resume behavior, event/symbol behavior, build plugins, package scripts, or tests. Enforces test-driven development, the split framework specs, TSRX-only no-hydration/no-VDOM model, JS/TS compiler on @tsrx/core first, runtime-agnostic ESM, Rolldown/Vite-only build tooling, and junior/AI-friendly diagnostics."
+description: 'Use when implementing the @async/resumable TSRX framework: compiler passes, state graph runtime, resumability payloads, unified render/resume behavior, event/symbol behavior, build plugins, package scripts, or tests. Enforces test-driven development, the split framework specs, TSRX-only no-hydration/no-VDOM model, JS/TS compiler on @tsrx/core first, runtime-agnostic ESM, Rolldown/Vite-only build tooling, and junior/AI-friendly diagnostics.'
 ---
 
 # Async Resumable Implementation
@@ -23,7 +23,7 @@ description: "Use when implementing the @async/resumable TSRX framework: compile
 - `state()` and `computed()` are compiled graph bindings. Reads/writes lower through the graph while preserving JavaScript behavior for supported forms.
 - Lazy handler and binding code resolves through the generated symbol resolver. Authored event props do not become DOM event closures.
 - Sync event policy is the only v1 path for synchronous `preventDefault()` / `stopPropagation()`. It may read already-materialized graph state by ID; it must not import app chunks.
-- DOM and runtime resources belong in host element behavior via `use={...}`, not in serialized state.
+- DOM and runtime resources belong in host element behavior via `attach={...}`, not in serialized state.
 
 ## Compiler Rules
 

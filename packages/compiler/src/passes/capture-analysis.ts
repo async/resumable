@@ -66,11 +66,11 @@ function bindingKindLabel(kind: SemanticLocalBinding['kind']): string {
 
 function suggestionForBinding(kind: SemanticLocalBinding['kind']): string {
 	if (kind === 'class-instance') {
-		return 'Represent durable data with state()/computed(), hoist serializable helpers to module scope, or move DOM-backed setup into a host element behavior with use.';
+		return 'Represent durable data with state()/computed(), hoist serializable helpers to module scope, or move DOM-backed setup into a host element behavior with attach.';
 	}
 
 	if (kind === 'dom-node') {
-		return 'Use element() with el={...} for DOM locators, or move DOM-backed setup into a host element behavior with use.';
+		return 'Use element() with el={...} for DOM locators, or move DOM-backed setup into a host element behavior with attach.';
 	}
 
 	if (kind === 'non-serializable-constant') {

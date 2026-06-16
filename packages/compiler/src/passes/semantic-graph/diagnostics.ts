@@ -214,7 +214,7 @@ export function elementHandleRequiredDiagnostic(
 		suggestions: [
 			{
 				message:
-					'Create a handle with element<T>() and bind that handle with el={handle}. Keep DOM-backed resources in use={...}.',
+					'Create a handle with element<T>() and bind that handle with el={handle}. Keep DOM-backed resources in attach={...}.',
 			},
 		],
 		docsUrl: 'https://async.await.dev/errors/AA_ELEMENT_HANDLE_REQUIRED',
@@ -245,7 +245,7 @@ export function duplicateElementHandleDiagnostic(
 	};
 }
 
-export function useHostElementRequiredDiagnostic(
+export function attachHostElementRequiredDiagnostic(
 	ownerTagName: string | null,
 	value: AnyNode,
 	state: Pick<WalkState, 'filename' | 'source'>,
@@ -254,11 +254,11 @@ export function useHostElementRequiredDiagnostic(
 	const owner = ownerTagName ? `<${ownerTagName}>` : 'a non-host element';
 
 	return {
-		code: 'AA_USE_HOST_ELEMENT_REQUIRED',
+		code: 'AA_ATTACH_HOST_ELEMENT_REQUIRED',
 		severity: 'error',
 		phase: 'semantic-graph',
-		title: 'use can only be bound to host elements',
-		message: `Cannot bind use={${source}} on component ${owner}. use installs DOM behavior and needs a concrete host element owner.`,
+		title: 'attach can only be bound to host elements',
+		message: `Cannot bind attach={${source}} on component ${owner}. attach installs DOM behavior and needs a concrete host element owner.`,
 		why: 'Element behaviors are resumed by locating the owning DOM element. A component is not a DOM locator and may render zero, one, or many host nodes.',
 		primarySpan: sourceSpan(value, state.filename),
 		passId: 'tsrx-semantic-graph',
@@ -266,10 +266,10 @@ export function useHostElementRequiredDiagnostic(
 		suggestions: [
 			{
 				message:
-					'Move use={...} to a host element such as <canvas>, or make the component forward behavior to a known host element in its own TSRX body.',
+					'Move attach={...} to a host element such as <canvas>, or make the component forward behavior to a known host element in its own TSRX body.',
 			},
 		],
-		docsUrl: 'https://async.await.dev/errors/AA_USE_HOST_ELEMENT_REQUIRED',
+		docsUrl: 'https://async.await.dev/errors/AA_ATTACH_HOST_ELEMENT_REQUIRED',
 	};
 }
 

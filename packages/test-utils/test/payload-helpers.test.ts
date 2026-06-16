@@ -68,7 +68,7 @@ test('summarizeProtocolPayload counts protocol records for fixture assertions', 
 						source: 'buttonBehavior',
 						functionSource: 'buttonBehavior',
 						inputSources: [],
-						symbolId: 'symbol:use',
+						symbolId: 'symbol:attach',
 					},
 				],
 				elementHandles: [{ hostNodeId: 'h0', handleId: 'element:button', name: 'button' }],
@@ -105,7 +105,7 @@ test('decodePayloadScriptPair parses canonical scripts for fixture assertions', 
 	const stateScript =
 		'<script type="async/state">{"version":1,"cells":[{"graphNodeId":"state:count","name":"count","valueKind":"scalar","value":1}],"computed":[{"graphNodeId":"computed:label","name":"label","async":false}]}</script>';
 	const viewScript =
-		'<script type="async/view">{"version":1,"locators":[{"hostNodeId":"h0","strategy":"dom-order","index":0,"tagName":"button"}],"events":[{"hostNodeId":"h0","eventName":"click","symbolIds":["symbol:click"]}],"domUpdates":[{"hostNodeId":"h0","source":"count","graphNodeId":"state:count","path":[],"target":{"kind":"text"},"symbolId":"symbol:domUpdate"}],"behaviors":[{"hostNodeId":"h0","source":"buttonBehavior","functionSource":"buttonBehavior","inputSources":[],"symbolId":"symbol:use"}],"elementHandles":[{"hostNodeId":"h0","handleId":"element:button","name":"button"}],"asyncBoundaries":[{"id":"boundary:profile","startAnchor":{"strategy":"dom-order-comment","index":0},"endAnchor":{"strategy":"dom-order-comment","index":1},"asyncReads":[{"source":"profile","graphNodeId":"computed:profile","path":[],"runnerSymbolId":"symbol:profile"}]}]}</script>';
+		'<script type="async/view">{"version":1,"locators":[{"hostNodeId":"h0","strategy":"dom-order","index":0,"tagName":"button"}],"events":[{"hostNodeId":"h0","eventName":"click","symbolIds":["symbol:click"]}],"domUpdates":[{"hostNodeId":"h0","source":"count","graphNodeId":"state:count","path":[],"target":{"kind":"text"},"symbolId":"symbol:domUpdate"}],"behaviors":[{"hostNodeId":"h0","source":"buttonBehavior","functionSource":"buttonBehavior","inputSources":[],"symbolId":"symbol:attach"}],"elementHandles":[{"hostNodeId":"h0","handleId":"element:button","name":"button"}],"asyncBoundaries":[{"id":"boundary:profile","startAnchor":{"strategy":"dom-order-comment","index":0},"endAnchor":{"strategy":"dom-order-comment","index":1},"asyncReads":[{"source":"profile","graphNodeId":"computed:profile","path":[],"runnerSymbolId":"symbol:profile"}]}]}</script>';
 
 	expect(decodePayloadScriptPair({ stateScript, viewScript })).toEqual({
 		state: {
@@ -133,7 +133,7 @@ test('decodePayloadScriptPair parses canonical scripts for fixture assertions', 
 					source: 'buttonBehavior',
 					functionSource: 'buttonBehavior',
 					inputSources: [],
-					symbolId: 'symbol:use',
+					symbolId: 'symbol:attach',
 				},
 			],
 			elementHandles: [{ hostNodeId: 'h0', handleId: 'element:button', name: 'button' }],
@@ -171,7 +171,7 @@ test('createPayloadDebugDump returns a human-readable decoded payload shape', ()
 	const stateScript =
 		'<script type="async/state">{"version":1,"cells":[{"graphNodeId":"state:count","name":"count","valueKind":"scalar","value":1}],"computed":[{"graphNodeId":"computed:label","name":"label","async":false}]}</script>';
 	const viewScript =
-		'<script type="async/view">{"version":1,"locators":[{"hostNodeId":"h0","strategy":"dom-order","index":0,"tagName":"button"}],"events":[{"hostNodeId":"h0","eventName":"click","symbolIds":["symbol:click"]}],"domUpdates":[{"hostNodeId":"h0","source":"count","graphNodeId":"state:count","path":[],"target":{"kind":"text"},"symbolId":"symbol:domUpdate"}],"behaviors":[{"hostNodeId":"h0","source":"buttonBehavior","functionSource":"buttonBehavior","inputSources":[],"symbolId":"symbol:use"}],"elementHandles":[{"hostNodeId":"h0","handleId":"element:button","name":"button"}],"asyncBoundaries":[{"id":"boundary:profile","startAnchor":{"strategy":"dom-order-comment","index":0},"endAnchor":{"strategy":"dom-order-comment","index":1},"asyncReads":[{"source":"profile","graphNodeId":"computed:profile","path":[],"runnerSymbolId":"symbol:profile"}]}]}</script>';
+		'<script type="async/view">{"version":1,"locators":[{"hostNodeId":"h0","strategy":"dom-order","index":0,"tagName":"button"}],"events":[{"hostNodeId":"h0","eventName":"click","symbolIds":["symbol:click"]}],"domUpdates":[{"hostNodeId":"h0","source":"count","graphNodeId":"state:count","path":[],"target":{"kind":"text"},"symbolId":"symbol:domUpdate"}],"behaviors":[{"hostNodeId":"h0","source":"buttonBehavior","functionSource":"buttonBehavior","inputSources":[],"symbolId":"symbol:attach"}],"elementHandles":[{"hostNodeId":"h0","handleId":"element:button","name":"button"}],"asyncBoundaries":[{"id":"boundary:profile","startAnchor":{"strategy":"dom-order-comment","index":0},"endAnchor":{"strategy":"dom-order-comment","index":1},"asyncReads":[{"source":"profile","graphNodeId":"computed:profile","path":[],"runnerSymbolId":"symbol:profile"}]}]}</script>';
 
 	expect(createPayloadDebugDump({ stateScript, viewScript })).toEqual({
 		summary: {
@@ -216,7 +216,7 @@ test('createPayloadDebugDump returns a human-readable decoded payload shape', ()
 					source: 'buttonBehavior',
 					functionSource: 'buttonBehavior',
 					inputSources: [],
-					symbolId: 'symbol:use',
+					symbolId: 'symbol:attach',
 				},
 			],
 			elementHandles: [{ hostNodeId: 'h0', handleId: 'element:button', name: 'button' }],

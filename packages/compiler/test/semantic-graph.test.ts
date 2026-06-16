@@ -32,7 +32,7 @@ export function App({ label }: { label: string }) @{
 			}}
 		/>
 		<button onClick={() => count++}>{label}: {count} and {doubled} and {menuTitle} and {menuLabel} and {menuRest.meta.label}</button>
-		<canvas use={makeChart(details)} />
+		<canvas attach={makeChart(details)} />
 		@try {
 			<p>{details.title}</p>
 		} @pending {

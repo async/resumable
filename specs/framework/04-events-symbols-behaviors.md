@@ -33,7 +33,7 @@ measurement, pointer capture, popover/dialog/file-picker APIs, and cross-event
 DOM access. It also keeps two jobs separate:
 
 - `element()` names an element for later imperative use.
-- element behavior setup and cleanup belongs on the host node through `use`,
+- element behavior setup and cleanup belongs on the host node through `attach`,
   not inside `element()` handles or serialized state.
 
 `state()` cannot hold DOM nodes, and `element()` handles are not serialized as
@@ -47,7 +47,7 @@ observers, gesture libraries, and drag/resize helpers all need a real browser
 element and often need cleanup. They should not be stored in `state()` and they
 should not become serializer problems.
 
-Use the framework-owned `use` prop on host elements for node-owned DOM behavior:
+Use the framework-owned `attach` prop on host elements for node-owned DOM behavior:
 
 ```tsrx
 import { Chart } from "chart.js";
@@ -62,17 +62,17 @@ function chart(config: ChartConfig) {
 export function SalesChart({ points }: { points: Point[] }) @{
   const config = computed(() => makeChartConfig(points));
 
-  <canvas use={chart(config)} />
+  <canvas attach={chart(config)} />
 }
 ```
 
-`use` is the declarative bridge from imperative DOM/library code to the node
+`attach` is the declarative bridge from imperative DOM/library code to the node
 that owns it. It is similar in spirit to events and element handles:
 
 ```txt
 onClick={}  runs event behavior owned by this node
 el={}       gives lazy access to this node later
-use={}      installs longer-lived DOM behavior owned by this node
+attach={}      installs longer-lived DOM behavior owned by this node
 ```
 
 The behavior result is never serialized. Initial render records the host element
@@ -83,7 +83,7 @@ it, such as visibility, an event, or a future declared behavior policy. A behavi
 that must run eagerly when connected must be represented as an explicit opt-in
 trigger for that host; it is not component replay.
 
-`use` is compiler-special on host elements. In `use={chart(config)}`, the
+`attach` is compiler-special on host elements. In `attach={chart(config)}`, the
 factory call is not normal eager initial-render execution. The compiler treats
 it as:
 
@@ -96,9 +96,9 @@ owner: current host element
 The v1 supported forms are:
 
 ```tsrx
-<input use={autofocus} />
-<canvas use={chart(config)} />
-<div use={[tooltip(options), clickOutside(close)]} />
+<input attach={autofocus} />
+<canvas attach={chart(config)} />
+<div attach={[tooltip(options), clickOutside(close)]} />
 ```
 
 Behavior functions receive the element and may return a cleanup function:
@@ -112,8 +112,8 @@ again. Future versions may support an explicit update contract for libraries
 that can update in place. Multiple behaviors install in array order and clean up
 in reverse order.
 
-`use` is host-element-only. Components can expose higher-level wrappers, but
-`use` passed directly to a component is a diagnostic unless that component's
+`attach` is host-element-only. Components can expose higher-level wrappers, but
+`attach` passed directly to a component is a diagnostic unless that component's
 compiler output explicitly forwards it to a host element. Behavior inputs use
 the same capture and serialization rules as event handlers: no request objects,
 secrets, host-only modules, DOM nodes, or runtime handles may cross into a
@@ -141,7 +141,7 @@ Semantics:
   that runs on element removal.
 - **Not a reactive computation.** State reads inside are current-value reads —
   no subscriptions, no re-runs. DOM-backed libraries that need setup, updates,
-  and cleanup belong in `use`, not `onVisible`.
+  and cleanup belong in `attach`, not `onVisible`.
 - The zero-JS guarantee gets a _scoped_, greppable asterisk: pages without
   `onVisible` ship zero eager behavior; pages with it run exactly the symbols
   whose elements are on screen. There is no free-floating equivalent
@@ -166,7 +166,7 @@ Event and behavior props accept either one expression or an array of expressions
 ```tsrx
 <button onClick={[saveDraft, closeDialog]} />
 <div onVisible={[recordImpression, preloadDetails]} />
-<canvas use={[chart(config), resizeCanvas]} />
+<canvas attach={[chart(config), resizeCanvas]} />
 ```
 
 For `on*` event props, array entries run in authored order. The runtime stops at
@@ -218,7 +218,7 @@ from graph state, constants/props, and event fields, compilation fails with a
 diagnostic rather than silently emitting a handler whose default action is too
 late to matter.
 
-For `use`, behavior entries install in authored order and clean up in reverse
+For `attach`, behavior entries install in authored order and clean up in reverse
 order. Each behavior has its own serialized input and code reference, so one
 behavior can be lazy-loaded or diagnosed independently from the others.
 
@@ -268,7 +268,7 @@ the current build or page, plus enough build/protocol identity to fail closed if
 `async/view` references a symbol the resolver does not know.
 
 The same resolver path is used for event handlers, DOM update symbols,
-`use={...}` behavior symbols, async computed run functions, and other lazy
+`attach={...}` behavior symbols, async computed run functions, and other lazy
 runtime behavior. Captures are materialized by the runtime from graph references,
 serializable constants, props/shared references, and element locators; they are
 not serialized as arbitrary function closures.
