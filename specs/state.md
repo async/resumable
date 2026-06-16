@@ -2276,8 +2276,12 @@ commands are listed in the implementation/build section above.
   A fresh CSR preview receipt proves the rebuilt CSR fixture renders the
   client-created counter, updates it from `0` to `1`, and has no console errors
   or failed requests after the preload cleanup stopped leaving orphan Vite helper
-  init calls in the emitted entry:
-  `packages/bundler/.witness/receipts/2026-06-16T17-49-41.117Z/receipt.json`.
+  init calls in the emitted entry. The same receipt now records real browser
+  script requests and budgets: startup requested three scripts at 10,028 raw
+  bytes / 3,771 gzip bytes with a largest runtime-heavy chunk of 3,595 gzip
+  bytes, while the first counter click requested one lazy symbol chunk at 633
+  raw bytes / 349 gzip bytes and no runtime-heavy chunks:
+  `packages/bundler/.witness/receipts/2026-06-16T17-55-17.475Z/receipt.json`.
   A vite-plus fixture now has a real app entry and a package-local preview box
   that proves a vite-plus config emits the async-resumable manifest, bundle
   graph, and browser output through Vite preview.

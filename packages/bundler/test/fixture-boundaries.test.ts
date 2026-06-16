@@ -116,6 +116,24 @@ describe('fixture framework boundaries', () => {
 		expect(box).not.toContain('render?.');
 		expect(box).not.toContain('serverHtml');
 	});
+
+	test('CSR fixture preview exposes browser script requests for size receipts', async () => {
+		const config = await readFixture('vite-csr/vite.config.ts');
+
+		expect(config).toContain('configurePreviewServer');
+		expect(config).toContain('__async-resumable-fixture-requests');
+		expect(config).toContain('isScriptRequest');
+	});
+
+	test('CSR preview box records startup and interaction runtime sizes', async () => {
+		const box = await readBox('csr-preview.box.ts');
+
+		expect(box).toContain('runtimeSizeReport');
+		expect(box).toContain('CSR startup runtime size');
+		expect(box).toContain('CSR interaction runtime size');
+		expect(box).toContain('MAX_INTERACTION_RUNTIME_CHUNK_GZIP_BYTES = 0');
+		expect(box).toContain('MAX_INTERACTION_SCRIPT_COUNT = 1');
+	});
 });
 
 function readFixture(path: string): Promise<string> {
