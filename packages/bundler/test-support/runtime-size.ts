@@ -21,6 +21,7 @@ export type RuntimeScriptSize = {
 	readonly rawBytes: number;
 	readonly gzipBytes: number;
 	readonly origins: readonly string[];
+	readonly hasVitePreloadHelper: boolean;
 };
 
 export type RuntimeSizeReport = {
@@ -50,11 +51,13 @@ export async function runtimeSizeReport(input: RuntimeSizeReportInput): Promise<
 	const scripts = await Promise.all(
 		fileNames.map(async (fileName) => {
 			const source = await readEmittedScript(input.dist, fileName);
+			const sourceText = new TextDecoder().decode(source);
 			return {
 				fileName,
 				rawBytes: source.length,
 				gzipBytes: gzipSync(source, { level: 9 }).length,
 				origins: bundles[fileName]?.origins ?? [],
+				hasVitePreloadHelper: sourceText.includes('vite:preloadError'),
 			} satisfies RuntimeScriptSize;
 		}),
 	);

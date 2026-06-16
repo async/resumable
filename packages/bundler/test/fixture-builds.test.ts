@@ -15,8 +15,9 @@ const fixtures = [
 		manifest: 'packages/bundler/fixtures/vite-csr/dist/async-resumable-manifest.json',
 		runtimeBudget: {
 			dist: 'packages/bundler/fixtures/vite-csr/dist',
-			maxRuntimeChunkGzipBytes: 8_600,
-			maxAsyncScriptsGzipBytes: 9_600,
+			maxRuntimeChunkGzipBytes: 8_100,
+			maxAsyncScriptsGzipBytes: 9_000,
+			forbidVitePreloadHelper: true,
 		},
 	},
 	{
@@ -29,8 +30,9 @@ const fixtures = [
 		manifest: 'packages/bundler/fixtures/vite-ssr/dist/async-resumable-manifest.json',
 		runtimeBudget: {
 			dist: 'packages/bundler/fixtures/vite-ssr/dist',
-			maxRuntimeChunkGzipBytes: 3_400,
-			maxAsyncScriptsGzipBytes: 4_800,
+			maxRuntimeChunkGzipBytes: 2_700,
+			maxAsyncScriptsGzipBytes: 4_000,
+			forbidVitePreloadHelper: true,
 		},
 	},
 	{
@@ -39,8 +41,9 @@ const fixtures = [
 		manifest: 'packages/bundler/fixtures/vite-plus/dist/async-resumable-manifest.json',
 		runtimeBudget: {
 			dist: 'packages/bundler/fixtures/vite-plus/dist',
-			maxRuntimeChunkGzipBytes: 8_500,
-			maxAsyncScriptsGzipBytes: 9_200,
+			maxRuntimeChunkGzipBytes: 8_000,
+			maxAsyncScriptsGzipBytes: 8_500,
+			forbidVitePreloadHelper: true,
 		},
 	},
 	{
@@ -90,6 +93,12 @@ describe('fixture builds', () => {
 				expect(report.asyncScripts.gzipBytes, report.summary).toBeLessThanOrEqual(
 					fixture.runtimeBudget.maxAsyncScriptsGzipBytes,
 				);
+				if (fixture.runtimeBudget.forbidVitePreloadHelper) {
+					const chunksWithVitePreloadHelper = report.runtimeChunks
+						.filter((chunk) => chunk.hasVitePreloadHelper)
+						.map((chunk) => chunk.fileName);
+					expect(chunksWithVitePreloadHelper, report.summary).toEqual([]);
+				}
 			}
 		}, 120_000);
 	}

@@ -2202,12 +2202,15 @@ commands are listed in the implementation/build section above.
   proving the browser entry resumes that existing DOM for the same click update.
   The same SSR preview box now records the post-interaction script request list,
   computes gzip sizes for those requested build artifacts, and fails if the
-  current-regression interaction budget is exceeded: 3.4 KB gzip for the
-  runtime-heavy chunk and 4.8 KB gzip for all post-click async scripts. Focused
+  current-regression interaction budget is exceeded: 2.7 KB gzip for the
+  runtime-heavy chunk and 4.0 KB gzip for all post-click async scripts. Focused
   fixture-build tests also rebuild the CSR, SSR, and vite-plus fixtures and
   enforce current-regression gzip ceilings for each fixture's runtime-heavy
-  chunk and total generated async scripts while reporting the event-only
-  300-500 B gzip target / 700 B gzip hard budget as the remaining spec target.
+  chunk and total generated async scripts: CSR 8.1 KB / 9.0 KB, SSR 2.7 KB /
+  4.0 KB, and vite-plus 8.0 KB / 8.5 KB. Those tests also fail if generated
+  runtime chunks retain Vite's empty dynamic-import preload helper and still
+  report the event-only 300-500 B gzip target / 700 B gzip hard budget as the
+  remaining spec target.
   Grep MCP research against Vite/Rolldown usage showed `@vite-ignore` is used
   for runtime/non-static imports and a Rolldown fixture documents static
   dynamic imports with `@vite-ignore` as having no import record, so generated
@@ -2225,14 +2228,19 @@ commands are listed in the implementation/build section above.
   setProp DOM journal entries without importing the full payload validator,
   serializer built-ins, `createResumeRuntime`, behavior/visibility/removal
   observers, async-boundary range journal support, or shared-patch runtime. Current
-  rebuilt fixture totals are still above the final target for CSR and vite-plus:
-  9,373 gzip bytes for all CSR async scripts, 4,358 gzip bytes for all SSR async
-  scripts, and 8,994 gzip bytes for all vite-plus async scripts. The latest
-  Witness SSR post-click path is smaller than the full SSR build artifact set:
-  no startup scripts, five requested post-click async scripts, 10,161 raw bytes
-  / 4,088 gzip bytes total, and the largest runtime-heavy interaction chunk is
-  8,126 raw bytes / 3,102 gzip bytes. The fresh receipt is
-  `packages/bundler/.witness/receipts/2026-06-16T16-42-32.397Z/receipt.json`.
+  client bundle output also strips empty Vite dynamic-import preload wrappers
+  from generated async-resumable runtime chunks after bundling, preserving plain
+  `import(...)` records during Vite/Rolldown resolution while removing the
+  unused preload helper from emitted JS. Current rebuilt fixture totals are
+  still above the final event-only target for CSR and vite-plus but are bounded
+  by regression tests: 8,841 gzip bytes for all CSR async scripts, 3,759 gzip
+  bytes for all SSR async scripts, and 8,461 gzip bytes for all vite-plus async
+  scripts. The latest Witness SSR post-click path is smaller than the full SSR
+  build artifact set: no startup scripts, five requested post-click async
+  scripts, 8,752 raw bytes / 3,489 gzip bytes total, and the largest
+  runtime-heavy interaction chunk is 6,717 raw bytes / 2,503 gzip bytes. The
+  fresh receipt is
+  `packages/bundler/.witness/receipts/2026-06-16T16-57-46.553Z/receipt.json`.
   A vite-plus fixture now has a real app entry and a package-local preview box
   that proves a vite-plus config emits the async-resumable manifest, bundle
   graph, and browser output through Vite preview.

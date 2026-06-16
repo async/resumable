@@ -12,8 +12,8 @@ const MANIFEST = `${FIXTURE}/dist/async-resumable-manifest.json`;
 const COUNTER = '[data-counter]';
 const REQUESTS = '/__async-resumable-fixture-requests';
 const WAIT = { timeoutMs: 10_000 };
-const MAX_INTERACTION_RUNTIME_CHUNK_GZIP_BYTES = 3_400;
-const MAX_INTERACTION_SCRIPTS_GZIP_BYTES = 4_800;
+const MAX_INTERACTION_RUNTIME_CHUNK_GZIP_BYTES = 2_700;
+const MAX_INTERACTION_SCRIPTS_GZIP_BYTES = 4_000;
 
 export default box(
 	{
@@ -135,6 +135,14 @@ function assertRuntimeSizeBudget(report: RuntimeSizeReport): void {
 	if (report.asyncScripts.gzipBytes > MAX_INTERACTION_SCRIPTS_GZIP_BYTES) {
 		throw new Error(
 			`SSR interaction script gzip budget exceeded: ${report.asyncScripts.gzipBytes} > ${MAX_INTERACTION_SCRIPTS_GZIP_BYTES}\n${report.summary}`,
+		);
+	}
+	const chunksWithVitePreloadHelper = report.runtimeChunks
+		.filter((chunk) => chunk.hasVitePreloadHelper)
+		.map((chunk) => chunk.fileName);
+	if (chunksWithVitePreloadHelper.length > 0) {
+		throw new Error(
+			`SSR interaction runtime chunks still include the Vite preload helper: ${chunksWithVitePreloadHelper.join(', ')}\n${report.summary}`,
 		);
 	}
 }

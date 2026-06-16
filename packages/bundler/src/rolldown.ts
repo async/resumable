@@ -12,6 +12,7 @@ import {
 	devTagsManifest,
 	injectManifest,
 } from './build/manifest.ts';
+import { stripEmptyVitePreloadWrappers } from './build/preload-cleanup.ts';
 import { createResumableDevGraph } from './dev.ts';
 import { ASYNC_RESUMABLE_VIRTUAL_PREFIX, transformTsrxModule } from './transform.ts';
 import type {
@@ -107,8 +108,7 @@ export function createResumableRolldownPlugin(input: {
 
 			return {
 				...input,
-				preserveEntrySignatures:
-					input.preserveEntrySignatures ?? 'allow-extension',
+				preserveEntrySignatures: input.preserveEntrySignatures ?? 'allow-extension',
 			};
 		},
 		async buildStart(input) {
@@ -203,6 +203,8 @@ export function createResumableRolldownPlugin(input: {
 			handler(_, bundle) {
 				if (getEnvironment(this) !== 'client') return;
 
+				stripEmptyPreloadWrappersFromGeneratedChunks(bundle);
+
 				const clientManifest = createManifest(
 					bundle,
 					transformManifests.values(),
@@ -233,6 +235,38 @@ export function createResumableRolldownPlugin(input: {
 	} satisfies Plugin & { api: ResumableRolldownPluginApi };
 
 	return plugin;
+}
+
+function stripEmptyPreloadWrappersFromGeneratedChunks(bundle: Record<string, unknown>) {
+	for (const output of Object.values(bundle)) {
+		if (!isChunkWithGeneratedRuntime(output)) continue;
+
+		const nextCode = stripEmptyVitePreloadWrappers(output.code);
+		if (nextCode !== output.code) {
+			output.code = nextCode;
+		}
+	}
+}
+
+function isChunkWithGeneratedRuntime(output: unknown): output is {
+	readonly type: 'chunk';
+	code: string;
+	readonly moduleIds: readonly string[];
+} {
+	if (!output || typeof output !== 'object') return false;
+	const chunk = output as {
+		readonly type?: unknown;
+		readonly code?: unknown;
+		readonly moduleIds?: unknown;
+	};
+	if (chunk.type !== 'chunk' || typeof chunk.code !== 'string') return false;
+	if (!Array.isArray(chunk.moduleIds)) return false;
+
+	return chunk.moduleIds.some((id) => {
+		if (typeof id !== 'string') return false;
+		const normalized = normalizeVirtualId(id);
+		return normalized.startsWith(ASYNC_RESUMABLE_VIRTUAL_PREFIX) || TSRX_SOURCE_FILE.test(id);
+	});
 }
 
 function pluginName(environment: Environment) {
