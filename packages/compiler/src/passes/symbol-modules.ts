@@ -75,8 +75,6 @@ function emitEventHandlerModule(
 	return [
 		...imports.map(emitModuleImport),
 		...(imports.length > 0 ? [''] : []),
-		`export const authoredSource = ${JSON.stringify(symbol.source)};`,
-		'',
 		`export function ${exportName}(context) {`,
 		...(writes.length > 0 ? writes : ['	void context;']),
 		'}',
@@ -193,19 +191,65 @@ function emitDomBindingModule(
 	symbol: Extract<PlannedSymbol, { readonly kind: 'dom-update' }>,
 ): string {
 	const exportName = symbolExportName(symbol.id);
+	const entryProperties = domJournalEntryProperties(symbol);
 
 	return [
-		"import { createDomUpdateEntry } from '@async/resumable/runtime/dom-update';",
-		'',
 		`export function ${exportName}(context) {`,
-		'	return createDomUpdateEntry({',
-		`		locator: context.domUpdate?.hostNodeId ?? ${JSON.stringify(symbol.hostNodeId)},`,
-		`		target: context.domUpdate?.target ?? ${JSON.stringify(symbol.target)},`,
-		'		value: context.value,',
-		'	});',
+		'	return {',
+		...entryProperties,
+		'	};',
 		'}',
 		'',
 	].join('\n');
+}
+
+function domJournalEntryProperties(
+	symbol: Extract<PlannedSymbol, { readonly kind: 'dom-update' }>,
+): string[] {
+	const locator = `context.domUpdate?.hostNodeId ?? ${JSON.stringify(symbol.hostNodeId)}`;
+	const value = 'context.value';
+
+	if (symbol.target.kind === 'text') {
+		return [
+			`		type: ${JSON.stringify('setText')},`,
+			`		locator: ${locator},`,
+			`		value: ${value},`,
+		];
+	}
+
+	if (symbol.target.kind === 'property') {
+		return [
+			`		type: ${JSON.stringify('setProp')},`,
+			`		locator: ${locator},`,
+			`		name: ${JSON.stringify(symbol.target.name)},`,
+			`		value: ${value},`,
+		];
+	}
+
+	if (symbol.target.kind === 'class') {
+		return [
+			`		type: ${JSON.stringify('setAttr')},`,
+			`		locator: ${locator},`,
+			`		name: ${JSON.stringify('class')},`,
+			`		value: ${value},`,
+		];
+	}
+
+	if (symbol.target.kind === 'style') {
+		return [
+			`		type: ${JSON.stringify('setAttr')},`,
+			`		locator: ${locator},`,
+			`		name: ${JSON.stringify('style')},`,
+			`		value: ${value},`,
+		];
+	}
+
+	return [
+		`		type: ${JSON.stringify('setAttr')},`,
+		`		locator: ${locator},`,
+		`		name: ${JSON.stringify(symbol.target.name)},`,
+		`		value: ${value},`,
+	];
 }
 
 function emitBehaviorModule(symbol: Extract<PlannedSymbol, { readonly kind: 'behavior' }>): string {

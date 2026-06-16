@@ -31,11 +31,11 @@ describe('TSRX Rolldown plugin structure', () => {
 		expect(callOptions(resumableClient(), {})).toMatchObject({
 			preserveEntrySignatures: 'allow-extension',
 		});
-		expect(
-			callOptions(resumableClient(), { preserveEntrySignatures: 'strict' }),
-		).toMatchObject({
-			preserveEntrySignatures: 'strict',
-		});
+		expect(callOptions(resumableClient(), { preserveEntrySignatures: 'strict' })).toMatchObject(
+			{
+				preserveEntrySignatures: 'strict',
+			},
+		);
 		expect(callOptions(resumableServer(), {})).toEqual({});
 		expect(callOptions(resumableLib(), {})).toEqual({});
 	});
@@ -105,7 +105,7 @@ describe('TSRX Rolldown plugin structure', () => {
 		expect(symbolSources).toEqual(
 			expect.arrayContaining([
 				expect.stringContaining('context.graph.update({'),
-				expect.stringContaining('createDomUpdateEntry'),
+				expect.stringContaining('type: "setText"'),
 			]),
 		);
 	});

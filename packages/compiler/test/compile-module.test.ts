@@ -196,219 +196,166 @@ test('compileTsrxModule emits generated event modules for supported graph write 
 		symbols: [],
 	});
 
-	const clickModule = result.symbolModules.modules.find(
-		(module) => module.kind === 'event-handler' && module.source.includes('items.pop'),
-	);
-	const inputModule = result.symbolModules.modules.find(
-		(module) =>
-			module.kind === 'event-handler' && module.source.includes('event.currentTarget.value'),
-	);
-	const inputCollectionModule = result.symbolModules.modules.find(
-		(module) =>
-			module.kind === 'event-handler' &&
-			module.source.includes('items.push(event.currentTarget.value)'),
-	);
-	const dateModule = result.symbolModules.modules.find(
-		(module) =>
-			module.kind === 'event-handler' &&
-			module.source.includes('currentDate.setTime(nextTime)'),
-	);
+	const eventModuleSource = (sourceSnippet: string): string => {
+		const symbol = result.symbolResolver.symbols.find(
+			(symbol) => symbol.kind === 'event-handler' && symbol.source.includes(sourceSnippet),
+		);
+		expect(symbol, sourceSnippet).toBeDefined();
+		const module = result.symbolModules.modules.find(
+			(module) => module.symbolId === symbol?.id,
+		);
+		expect(module, sourceSnippet).toBeDefined();
+		return module?.source ?? '';
+	};
+
+	const clickModule = eventModuleSource('items.pop');
+	const inputModule = eventModuleSource('event.currentTarget.value');
+	const inputCollectionModule = eventModuleSource('items.push(event.currentTarget.value)');
+	const dateModule = eventModuleSource('currentDate.setTime(nextTime)');
 
 	expect(result.stateLowering.diagnostics).toEqual([]);
-	expect(clickModule?.source).toContain('context.graph.write({');
-	expect(clickModule?.source).toContain('graphNodeId: "state:menu"');
-	expect(clickModule?.source).toContain('path: ["open"]');
-	expect(clickModule?.source).toContain('value: false');
-	expect(clickModule?.source).toContain('context.graph.delete({');
-	expect(clickModule?.source).toContain('path: ["title"]');
-	expect(clickModule?.source).toContain('context.graph.call({');
-	expect(clickModule?.source).toContain('graphNodeId: "state:items"');
-	expect(clickModule?.source).toContain('method: "pop"');
-	expect(clickModule?.source).toContain('method: "push"');
-	expect(clickModule?.source).toContain('args: ["third"]');
-	expect(clickModule?.source).toContain('args: [context.graph.read("state:menu", ["title"])]');
-	expect(clickModule?.source).toContain('args: [...context.graph.read("state:nextItems", [])]');
-	expect(inputModule?.source).toContain('graphNodeId: "state:menu"');
-	expect(inputModule?.source).toContain('path: ["title"]');
-	expect(inputModule?.source).toContain('value: context.event?.currentTarget?.value');
-	expect(inputCollectionModule?.source).toContain('graphNodeId: "state:items"');
-	expect(inputCollectionModule?.source).toContain('args: [context.event?.currentTarget?.value]');
-	expect(inputCollectionModule?.source).not.toContain('args: ["third"]');
-	expect(dateModule?.source).toContain('context.graph.call({');
-	expect(dateModule?.source).toContain('graphNodeId: "state:currentDate"');
-	expect(dateModule?.source).toContain('path: []');
-	expect(dateModule?.source).toContain('method: "setTime"');
-	expect(dateModule?.source).toContain('args: [context.graph.read("state:nextTime", [])]');
+	expect(clickModule).toContain('context.graph.write({');
+	expect(clickModule).toContain('graphNodeId: "state:menu"');
+	expect(clickModule).toContain('path: ["open"]');
+	expect(clickModule).toContain('value: false');
+	expect(clickModule).toContain('context.graph.delete({');
+	expect(clickModule).toContain('path: ["title"]');
+	expect(clickModule).toContain('context.graph.call({');
+	expect(clickModule).toContain('graphNodeId: "state:items"');
+	expect(clickModule).toContain('method: "pop"');
+	expect(clickModule).toContain('method: "push"');
+	expect(clickModule).toContain('args: ["third"]');
+	expect(clickModule).toContain('args: [context.graph.read("state:menu", ["title"])]');
+	expect(clickModule).toContain('args: [...context.graph.read("state:nextItems", [])]');
+	expect(inputModule).toContain('graphNodeId: "state:menu"');
+	expect(inputModule).toContain('path: ["title"]');
+	expect(inputModule).toContain('value: context.event?.currentTarget?.value');
+	expect(inputCollectionModule).toContain('graphNodeId: "state:items"');
+	expect(inputCollectionModule).toContain('args: [context.event?.currentTarget?.value]');
+	expect(inputCollectionModule).not.toContain('args: ["third"]');
+	expect(dateModule).toContain('context.graph.call({');
+	expect(dateModule).toContain('graphNodeId: "state:currentDate"');
+	expect(dateModule).toContain('path: []');
+	expect(dateModule).toContain('method: "setTime"');
+	expect(dateModule).toContain('args: [context.graph.read("state:nextTime", [])]');
 
-	const copyModule = result.symbolModules.modules.find(
-		(module) =>
-			module.kind === 'event-handler' && module.source.includes('menu.title = profile.name'),
-	);
+	const copyModule = eventModuleSource('menu.title = profile.name');
 
-	expect(copyModule?.source).toContain('graphNodeId: "state:menu"');
-	expect(copyModule?.source).toContain('path: ["title"]');
-	expect(copyModule?.source).toContain('value: context.graph.read("state:profile", ["name"])');
+	expect(copyModule).toContain('graphNodeId: "state:menu"');
+	expect(copyModule).toContain('path: ["title"]');
+	expect(copyModule).toContain('value: context.graph.read("state:profile", ["name"])');
 
-	const toggleModule = result.symbolModules.modules.find(
-		(module) =>
-			module.kind === 'event-handler' && module.source.includes('menu.open = !menu.open'),
-	);
+	const toggleModule = eventModuleSource('menu.open = !menu.open');
 
-	expect(toggleModule?.source).toContain('context.graph.write({');
-	expect(toggleModule?.source).toContain('graphNodeId: "state:menu"');
-	expect(toggleModule?.source).toContain('path: ["open"]');
-	expect(toggleModule?.source).toContain('value: !context.graph.read("state:menu", ["open"])');
+	expect(toggleModule).toContain('context.graph.write({');
+	expect(toggleModule).toContain('graphNodeId: "state:menu"');
+	expect(toggleModule).toContain('path: ["open"]');
+	expect(toggleModule).toContain('value: !context.graph.read("state:menu", ["open"])');
 
-	const addModule = result.symbolModules.modules.find(
-		(module) =>
-			module.kind === 'event-handler' && module.source.includes('total += profile.step'),
-	);
+	const addModule = eventModuleSource('total += profile.step');
 
-	expect(addModule?.source).toContain('context.graph.update({');
-	expect(addModule?.source).toContain('graphNodeId: "state:total"');
-	expect(addModule?.source).toContain('path: []');
-	expect(addModule?.source).toContain(
-		'return value + context.graph.read("state:profile", ["step"]);',
-	);
+	expect(addModule).toContain('context.graph.update({');
+	expect(addModule).toContain('graphNodeId: "state:total"');
+	expect(addModule).toContain('path: []');
+	expect(addModule).toContain('return value + context.graph.read("state:profile", ["step"]);');
 
-	const binaryAddModule = result.symbolModules.modules.find(
-		(module) =>
-			module.kind === 'event-handler' &&
-			module.source.includes('total = total + profile.step'),
-	);
+	const binaryAddModule = eventModuleSource('total = total + profile.step');
 
-	expect(binaryAddModule?.source).toContain('context.graph.write({');
-	expect(binaryAddModule?.source).toContain('graphNodeId: "state:total"');
-	expect(binaryAddModule?.source).toContain('path: []');
-	expect(binaryAddModule?.source).toContain(
+	expect(binaryAddModule).toContain('context.graph.write({');
+	expect(binaryAddModule).toContain('graphNodeId: "state:total"');
+	expect(binaryAddModule).toContain('path: []');
+	expect(binaryAddModule).toContain(
 		'value: context.graph.read("state:total", []) + context.graph.read("state:profile", ["step"])',
 	);
 
-	const nestedAddModule = result.symbolModules.modules.find(
-		(module) =>
-			module.kind === 'event-handler' &&
-			module.source.includes('total = (total + profile.step) * profile.scale'),
-	);
+	const nestedAddModule = eventModuleSource('total = (total + profile.step) * profile.scale');
 
-	expect(nestedAddModule?.source).toContain('context.graph.write({');
-	expect(nestedAddModule?.source).toContain('graphNodeId: "state:total"');
-	expect(nestedAddModule?.source).toContain('path: []');
-	expect(nestedAddModule?.source).toContain(
+	expect(nestedAddModule).toContain('context.graph.write({');
+	expect(nestedAddModule).toContain('graphNodeId: "state:total"');
+	expect(nestedAddModule).toContain('path: []');
+	expect(nestedAddModule).toContain(
 		'value: (context.graph.read("state:total", []) + context.graph.read("state:profile", ["step"])) * context.graph.read("state:profile", ["scale"])',
 	);
 
-	const conditionalModule = result.symbolModules.modules.find(
-		(module) =>
-			module.kind === 'event-handler' &&
-			module.source.includes('total = menu.open ? profile.step : total'),
-	);
+	const conditionalModule = eventModuleSource('total = menu.open ? profile.step : total');
 
-	expect(conditionalModule?.source).toContain('context.graph.write({');
-	expect(conditionalModule?.source).toContain('graphNodeId: "state:total"');
-	expect(conditionalModule?.source).toContain('path: []');
-	expect(conditionalModule?.source).toContain(
+	expect(conditionalModule).toContain('context.graph.write({');
+	expect(conditionalModule).toContain('graphNodeId: "state:total"');
+	expect(conditionalModule).toContain('path: []');
+	expect(conditionalModule).toContain(
 		'value: context.graph.read("state:menu", ["open"]) ? context.graph.read("state:profile", ["step"]) : context.graph.read("state:total", [])',
 	);
 
-	const callValueModule = result.symbolModules.modules.find(
-		(module) =>
-			module.kind === 'event-handler' &&
-			module.source.includes('total = Math.max(total, profile.step)'),
-	);
+	const callValueModule = eventModuleSource('total = Math.max(total, profile.step)');
 
-	expect(callValueModule?.source).toContain('context.graph.write({');
-	expect(callValueModule?.source).toContain('graphNodeId: "state:total"');
-	expect(callValueModule?.source).toContain('path: []');
-	expect(callValueModule?.source).toContain(
+	expect(callValueModule).toContain('context.graph.write({');
+	expect(callValueModule).toContain('graphNodeId: "state:total"');
+	expect(callValueModule).toContain('path: []');
+	expect(callValueModule).toContain(
 		'value: Math.max(context.graph.read("state:total", []), context.graph.read("state:profile", ["step"]))',
 	);
 
-	const importedCallValueModule = result.symbolModules.modules.find(
-		(module) =>
-			module.kind === 'event-handler' &&
-			module.source.includes('total = clamp(total, profile.step)'),
-	);
+	const importedCallValueModule = eventModuleSource('total = clamp(total, profile.step)');
 
-	expect(importedCallValueModule?.source).toContain('import { clamp } from "./math";');
-	expect(importedCallValueModule?.source).toContain('context.graph.write({');
-	expect(importedCallValueModule?.source).toContain('graphNodeId: "state:total"');
-	expect(importedCallValueModule?.source).toContain('path: []');
-	expect(importedCallValueModule?.source).toContain(
+	expect(importedCallValueModule).toContain('import { clamp } from "./math";');
+	expect(importedCallValueModule).toContain('context.graph.write({');
+	expect(importedCallValueModule).toContain('graphNodeId: "state:total"');
+	expect(importedCallValueModule).toContain('path: []');
+	expect(importedCallValueModule).toContain(
 		'value: clamp(context.graph.read("state:total", []), context.graph.read("state:profile", ["step"]))',
 	);
 
-	const arrayLiteralModule = result.symbolModules.modules.find(
-		(module) => module.kind === 'event-handler' && module.source.includes('items = [nextItem'),
-	);
+	const arrayLiteralModule = eventModuleSource('items = [nextItem');
 
-	expect(arrayLiteralModule?.source).toContain('context.graph.write({');
-	expect(arrayLiteralModule?.source).toContain('graphNodeId: "state:items"');
-	expect(arrayLiteralModule?.source).toContain('path: []');
-	expect(arrayLiteralModule?.source).toContain(
+	expect(arrayLiteralModule).toContain('context.graph.write({');
+	expect(arrayLiteralModule).toContain('graphNodeId: "state:items"');
+	expect(arrayLiteralModule).toContain('path: []');
+	expect(arrayLiteralModule).toContain(
 		'value: [context.graph.read("state:nextItem", []), "fallback"]',
 	);
 
-	const arraySpreadModule = result.symbolModules.modules.find(
-		(module) =>
-			module.kind === 'event-handler' && module.source.includes('items = [...nextItems'),
-	);
+	const arraySpreadModule = eventModuleSource('items = [...nextItems');
 
-	expect(arraySpreadModule?.source).toContain('context.graph.write({');
-	expect(arraySpreadModule?.source).toContain('graphNodeId: "state:items"');
-	expect(arraySpreadModule?.source).toContain('path: []');
-	expect(arraySpreadModule?.source).toContain(
+	expect(arraySpreadModule).toContain('context.graph.write({');
+	expect(arraySpreadModule).toContain('graphNodeId: "state:items"');
+	expect(arraySpreadModule).toContain('path: []');
+	expect(arraySpreadModule).toContain(
 		'value: [...context.graph.read("state:nextItems", []), context.graph.read("state:nextItem", [])]',
 	);
 
-	const objectLiteralModule = result.symbolModules.modules.find(
-		(module) =>
-			module.kind === 'event-handler' &&
-			module.source.includes('settings = { title: menu.title'),
-	);
+	const objectLiteralModule = eventModuleSource('settings = { title: menu.title');
 
-	expect(objectLiteralModule?.source).toContain('context.graph.write({');
-	expect(objectLiteralModule?.source).toContain('graphNodeId: "state:settings"');
-	expect(objectLiteralModule?.source).toContain('path: []');
-	expect(objectLiteralModule?.source).toContain(
+	expect(objectLiteralModule).toContain('context.graph.write({');
+	expect(objectLiteralModule).toContain('graphNodeId: "state:settings"');
+	expect(objectLiteralModule).toContain('path: []');
+	expect(objectLiteralModule).toContain(
 		'value: { title: context.graph.read("state:menu", ["title"]), step: context.graph.read("state:profile", ["step"]) }',
 	);
 
-	const objectSpreadModule = result.symbolModules.modules.find(
-		(module) =>
-			module.kind === 'event-handler' &&
-			module.source.includes('settings = { ...settings, title: menu.title'),
-	);
+	const objectSpreadModule = eventModuleSource('settings = { ...settings, title: menu.title');
 
-	expect(objectSpreadModule?.source).toContain('context.graph.write({');
-	expect(objectSpreadModule?.source).toContain('graphNodeId: "state:settings"');
-	expect(objectSpreadModule?.source).toContain('path: []');
-	expect(objectSpreadModule?.source).toContain(
+	expect(objectSpreadModule).toContain('context.graph.write({');
+	expect(objectSpreadModule).toContain('graphNodeId: "state:settings"');
+	expect(objectSpreadModule).toContain('path: []');
+	expect(objectSpreadModule).toContain(
 		'value: { ...context.graph.read("state:settings", []), title: context.graph.read("state:menu", ["title"]) }',
 	);
 
-	const computedKeyModule = result.symbolModules.modules.find(
-		(module) =>
-			module.kind === 'event-handler' &&
-			module.source.includes('settings = { [menu.title]: profile.step'),
-	);
+	const computedKeyModule = eventModuleSource('settings = { [menu.title]: profile.step');
 
-	expect(computedKeyModule?.source).toContain('context.graph.write({');
-	expect(computedKeyModule?.source).toContain('graphNodeId: "state:settings"');
-	expect(computedKeyModule?.source).toContain('path: []');
-	expect(computedKeyModule?.source).toContain(
+	expect(computedKeyModule).toContain('context.graph.write({');
+	expect(computedKeyModule).toContain('graphNodeId: "state:settings"');
+	expect(computedKeyModule).toContain('path: []');
+	expect(computedKeyModule).toContain(
 		'value: { [context.graph.read("state:menu", ["title"])]: context.graph.read("state:profile", ["step"]) }',
 	);
 
-	const logicalModule = result.symbolModules.modules.find(
-		(module) =>
-			module.kind === 'event-handler' &&
-			module.source.includes('menu.open &&= profile.enabled'),
-	);
+	const logicalModule = eventModuleSource('menu.open &&= profile.enabled');
 
-	expect(logicalModule?.source).toContain('context.graph.update({');
-	expect(logicalModule?.source).toContain('graphNodeId: "state:menu"');
-	expect(logicalModule?.source).toContain('path: ["open"]');
-	expect(logicalModule?.source).toContain(
+	expect(logicalModule).toContain('context.graph.update({');
+	expect(logicalModule).toContain('graphNodeId: "state:menu"');
+	expect(logicalModule).toContain('path: ["open"]');
+	expect(logicalModule).toContain(
 		'return value && context.graph.read("state:profile", ["enabled"]);',
 	);
 });

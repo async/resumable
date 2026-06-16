@@ -52,7 +52,7 @@ test('emitSymbolModules emits event and DOM update modules that consume resume c
 		kind: 'event-handler',
 		exportName: 'symbol_click',
 	});
-	expect(artifact.modules[0].source).toContain('export const authoredSource = "() => count++";');
+	expect(artifact.modules[0].source).not.toContain('authoredSource');
 	expect(artifact.modules[0].source).toContain('export function symbol_click(context)');
 	expect(artifact.modules[0].source).toContain('context.graph.update({');
 	expect(artifact.modules[0].source).toContain('graphNodeId: "state:count"');
@@ -63,15 +63,75 @@ test('emitSymbolModules emits event and DOM update modules that consume resume c
 		kind: 'dom-update',
 		exportName: 'symbol_domUpdate',
 	});
-	expect(artifact.modules[1].source).toContain(
-		"import { createDomUpdateEntry } from '@async/resumable/runtime/dom-update';",
-	);
+	expect(artifact.modules[1].source).not.toContain('import ');
+	expect(artifact.modules[1].source).not.toContain('createDomUpdateEntry');
 	expect(artifact.modules[1].source).toContain('export function symbol_domUpdate(context)');
+	expect(artifact.modules[1].source).toContain('type: "setProp"');
 	expect(artifact.modules[1].source).toContain('locator: context.domUpdate?.hostNodeId ?? "h1"');
-	expect(artifact.modules[1].source).toContain(
-		'target: context.domUpdate?.target ?? {"kind":"property","name":"value"}',
-	);
+	expect(artifact.modules[1].source).toContain('name: "value"');
 	expect(artifact.modules[1].source).toContain('value: context.value');
+});
+
+test('emitSymbolModules emits concrete DOM journal entries for each binding target', () => {
+	const cases = [
+		{
+			id: 'text',
+			target: { kind: 'text' } as const,
+			expected: ['type: "setText"', 'value: context.value'],
+		},
+		{
+			id: 'attribute',
+			target: { kind: 'attribute', name: 'aria-label' } as const,
+			expected: ['type: "setAttr"', 'name: "aria-label"', 'value: context.value'],
+		},
+		{
+			id: 'property',
+			target: { kind: 'property', name: 'value' } as const,
+			expected: ['type: "setProp"', 'name: "value"', 'value: context.value'],
+		},
+		{
+			id: 'class',
+			target: { kind: 'class' } as const,
+			expected: ['type: "setAttr"', 'name: "class"', 'value: context.value'],
+		},
+		{
+			id: 'style',
+			target: { kind: 'style' } as const,
+			expected: ['type: "setAttr"', 'name: "style"', 'value: context.value'],
+		},
+	];
+
+	for (const targetCase of cases) {
+		const artifact = emitSymbolModules({
+			symbolResolver: {
+				passId: 'symbol-resolver',
+				dynamicImportOwner: 'generated-symbol-resolver',
+				symbols: [
+					{
+						id: `symbol:${targetCase.id}`,
+						kind: 'dom-update',
+						hostNodeId: 'h1',
+						source: 'count',
+						graphNodeId: 'state:count',
+						target: targetCase.target,
+					},
+				],
+				syncPolicies: [],
+				diagnostics: [],
+			},
+			captureAnalysis: {
+				passId: 'capture-analysis',
+				extractedSymbols: [],
+				diagnostics: [],
+			},
+		});
+
+		expect(artifact.modules[0].source).not.toContain('import ');
+		expect(artifact.modules[0].source).not.toContain('createDomUpdateEntry');
+		for (const expected of targetCase.expected) {
+			expect(artifact.modules[0].source).toContain(expected);
+		}
+	}
 });
 
 test('emitSymbolModules emits imported behavior modules with deferred input values', () => {
