@@ -1,13 +1,9 @@
 import { asNodes, getIdentifierName, type AnyNode } from '../../ast/nodes.ts';
+import type { SemanticModuleImport } from '../../artifacts.ts';
 
 export type FrameworkApiName = 'state' | 'computed' | 'element' | 'shared';
 
-const frameworkApiNames = new Set<FrameworkApiName>([
-	'state',
-	'computed',
-	'element',
-	'shared',
-]);
+const frameworkApiNames = new Set<FrameworkApiName>(['state', 'computed', 'element', 'shared']);
 
 // These imports make compiler-rewritten APIs explicit in user code.
 // A bare state() call is not enough; it must resolve to an import from @async/resumable.
@@ -34,6 +30,59 @@ export function collectImports(
 	return imports;
 }
 
+export function collectModuleImports(
+	statements: ReadonlyArray<AnyNode>,
+): ReadonlyArray<SemanticModuleImport> {
+	const imports: SemanticModuleImport[] = [];
+
+	for (const statement of statements) {
+		if (statement.type !== 'ImportDeclaration') continue;
+		const source = importSource(statement);
+		if (!source || source === '@async/resumable') continue;
+
+		for (const specifier of asNodes(statement.specifiers)) {
+			if (specifier.type === 'ImportSpecifier') {
+				const importedName = getIdentifierName(specifier.imported as AnyNode | undefined);
+				const localName = getIdentifierName(specifier.local as AnyNode | undefined);
+				if (!importedName || !localName) continue;
+
+				imports.push({
+					localName,
+					importedName,
+					source,
+					kind: 'named',
+				});
+				continue;
+			}
+
+			if (specifier.type === 'ImportDefaultSpecifier') {
+				const localName = getIdentifierName(specifier.local as AnyNode | undefined);
+				if (!localName) continue;
+
+				imports.push({
+					localName,
+					source,
+					kind: 'default',
+				});
+				continue;
+			}
+
+			if (specifier.type === 'ImportNamespaceSpecifier') {
+				const localName = getIdentifierName(specifier.local as AnyNode | undefined);
+				if (!localName) continue;
+
+				imports.push({
+					localName,
+					source,
+					kind: 'namespace',
+				});
+			}
+		}
+	}
+
+	return imports;
+}
+
 export function getFrameworkApiForCall(
 	node: AnyNode | undefined | null,
 	imports: ReadonlyMap<string, FrameworkApiName>,
@@ -52,4 +101,9 @@ export function getCallName(node: AnyNode | undefined | null): string | null {
 
 export function isFrameworkApiName(name: string | null): name is FrameworkApiName {
 	return frameworkApiNames.has(name as FrameworkApiName);
+}
+
+function importSource(node: AnyNode): string | null {
+	const value = node.source?.value;
+	return typeof value === 'string' ? value : null;
 }

@@ -160,6 +160,7 @@ test('compiler extracts sync preventDefault policy while keeping writes lazy', a
 			path: ['open'],
 			operation: 'assign',
 			method: undefined,
+			valueSource: 'false',
 		},
 	]);
 

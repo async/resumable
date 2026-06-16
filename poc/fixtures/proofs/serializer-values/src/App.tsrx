@@ -162,7 +162,7 @@ export function App() @{
 
   <main
     el={panel}
-    use={serializerBehavior({
+    attach={serializerBehavior({
       tier: "dom-resource-behavior",
       selectedId: stateArena.identity.primary.id,
       byteLength: derivedSummary.byteLength,
@@ -202,7 +202,7 @@ export function Diagnostics() @{
     // expected diagnostic: streams cannot be restored from durable data.
     stream: liveStream,
 
-    // expected diagnostic: sockets and native handles belong in use={...}.
+    // expected diagnostic: sockets and native handles belong in attach={...}.
     socket: liveSocket,
 
     // expected diagnostic: WeakMap-only state has hidden identity and entries.

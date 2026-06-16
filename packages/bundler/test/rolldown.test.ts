@@ -31,11 +31,11 @@ describe('TSRX Rolldown plugin structure', () => {
 		expect(callOptions(resumableClient(), {})).toMatchObject({
 			preserveEntrySignatures: 'allow-extension',
 		});
-		expect(
-			callOptions(resumableClient(), { preserveEntrySignatures: 'strict' }),
-		).toMatchObject({
-			preserveEntrySignatures: 'strict',
-		});
+		expect(callOptions(resumableClient(), { preserveEntrySignatures: 'strict' })).toMatchObject(
+			{
+				preserveEntrySignatures: 'strict',
+			},
+		);
 		expect(callOptions(resumableServer(), {})).toEqual({});
 		expect(callOptions(resumableLib(), {})).toEqual({});
 	});
@@ -48,7 +48,7 @@ describe('TSRX Rolldown plugin structure', () => {
 
 		expect(result.code).toContain('export const resumableSource');
 		expect(result.code).toContain(
-			"import payloadScripts from 'virtual:async-resumable:payload:",
+			"import payloadScripts, { state as payloadState, view as payloadView } from 'virtual:async-resumable:payload:",
 		);
 		expect(result.code).toContain(
 			"import { loadSymbol, symbolManifest } from 'virtual:async-resumable:resolver:",
@@ -57,7 +57,7 @@ describe('TSRX Rolldown plugin structure', () => {
 			"import moduleManifest from 'virtual:async-resumable:module-manifest:",
 		);
 		expect(result.code).toContain(
-			'export { loadSymbol, moduleManifest, payloadScripts, symbolManifest };',
+			'export { loadSymbol, moduleManifest, payloadScripts, payloadState, payloadView, symbolManifest };',
 		);
 		expect(result.virtualModules.map((item) => item.type)).toEqual(
 			expect.arrayContaining(['payload', 'resolver', 'module-manifest', 'symbol']),
@@ -94,7 +94,11 @@ describe('TSRX Rolldown plugin structure', () => {
 		expect(await callResolveId(plugin, payloadId!)).toEqual(
 			expect.objectContaining({ id: `\0${payloadId}` }),
 		);
-		expect(await callLoad(plugin, `\0${payloadId}`)).toContain('export default');
+		const payloadSource = (await callLoad(plugin, `\0${payloadId}`)) as string;
+		expect(payloadSource).toContain('export const state =');
+		expect(payloadSource).toContain('export const view =');
+		expect(payloadSource).toContain('export const payloadScripts =');
+		expect(payloadSource).toContain('export default payloadScripts;');
 		const resolverSource = (await callLoad(plugin, `\0${resolverId}`)) as string;
 		const symbolIds = [...resolverSource.matchAll(/import\("([^"]+)"\)/g)].map(
 			(match) => match[1],
@@ -105,7 +109,7 @@ describe('TSRX Rolldown plugin structure', () => {
 		expect(symbolSources).toEqual(
 			expect.arrayContaining([
 				expect.stringContaining('context.graph.update({'),
-				expect.stringContaining('createDomUpdateEntry'),
+				expect.stringContaining('type: "setText"'),
 			]),
 		);
 	});

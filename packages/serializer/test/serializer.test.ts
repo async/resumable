@@ -80,6 +80,31 @@ test('serializeGraphValue preserves typed array backing buffer identity and offs
 	expect([...decoded.words]).toEqual([770, 1284]);
 });
 
+test('serializeGraphValue preserves DataView backing buffer identity and offsets', () => {
+	const buffer = new ArrayBuffer(8);
+	new Uint8Array(buffer).set([0, 1, 2, 3, 4, 5, 6, 7]);
+	const value = {
+		buffer,
+		bytes: new Uint8Array(buffer),
+		view: new DataView(buffer, 2, 4),
+	};
+
+	const result = serializeGraphValue(value);
+
+	expect(result.ok).toBe(true);
+	if (!result.ok) return;
+
+	const decoded = deserializeGraphValue(result.payload) as typeof value;
+
+	expect(decoded.view).toBeInstanceOf(DataView);
+	expect(decoded.view.buffer).toBe(decoded.buffer);
+	expect(decoded.view.buffer).toBe(decoded.bytes.buffer);
+	expect(decoded.view.byteOffset).toBe(2);
+	expect(decoded.view.byteLength).toBe(4);
+	expect(decoded.view.getUint16(0)).toBe(515);
+	expect([...new Uint8Array(decoded.buffer)]).toEqual([0, 1, 2, 3, 4, 5, 6, 7]);
+});
+
 test('serializeGraphValue preserves built-in object identity for Date RegExp and URL', () => {
 	const created = new Date('2026-06-14T12:00:00.000Z');
 	const pattern = /menu/gi;
@@ -133,7 +158,7 @@ test('serializeGraphValue reports unsupported values with a state path', () => {
 			suggestions: [
 				{
 					message:
-						'Move runtime resources into use={...}, make the value serializable state, or derive it with computed().',
+						'Move runtime resources into attach={...}, make the value serializable state, or derive it with computed().',
 				},
 			],
 			docsUrl: 'https://async.await.dev/errors/AA_SERIALIZE_UNSUPPORTED_VALUE',

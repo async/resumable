@@ -36,7 +36,7 @@ export function Counter() @{
 		>
 			{count} {doubled} {menu.title} {menuTitle} {menuLabel} {menuRest.meta.label} {menuRest.title}
 		</button>
-		<canvas use={renderChart(chartConfig.palette)} />
+		<canvas attach={renderChart(chartConfig.palette)} />
 	</section>
 }
 `;
@@ -74,6 +74,79 @@ export function Counter() @{
 		}}
 	>
 		{frozenCount}
+	</button>
+}
+`;
+
+const nestedAliasSource = `
+import { state } from '@async/resumable';
+
+export function Queue() @{
+	const groups = state([['first'], { meta: { label: 'second' } }]);
+	const [[firstItem], { meta: { label: secondLabel } }] = groups;
+	let [editableGroup] = groups;
+
+	<button
+		onClick={() => {
+			editableGroup = ['next'];
+		}}
+	>
+		{firstItem} {secondLabel} {editableGroup[0]}
+	</button>
+}
+`;
+
+const sharedFactorySource = `
+import { shared, state, computed } from '@async/resumable';
+
+export const session = shared(() => {
+	const data = state({ user: null, status: 'anonymous' });
+	const signedIn = computed(() => data.user !== null);
+
+	return {
+		...data,
+		signedIn,
+		logout() {
+			data.user = null;
+			data.status = 'anonymous';
+		},
+	};
+});
+
+export function Header() @{
+	const currentSession = session();
+
+	<button
+		onClick={() => {
+			currentSession.status = 'ready';
+		}}
+	>
+		{currentSession.status} {currentSession.signedIn}
+	</button>
+}
+`;
+
+const sharedDynamicPathSource = `
+import { shared, state } from '@async/resumable';
+
+export const session = shared(() => {
+	const data = state({ status: 'anonymous' });
+
+	return {
+		...data,
+	};
+});
+
+export function Header() @{
+	const currentSession = session();
+	const statusKey = 'status';
+
+	<button
+		onClick={() => {
+			currentSession[statusKey] = 'ready';
+		}}
+	>
+		{currentSession[statusKey]}
 	</button>
 }
 `;
@@ -175,12 +248,14 @@ test('lowerStateAccess resolves plain reads and writes to graph operations', asy
 				graphNodeId: 'state:menu',
 				path: ['open'],
 				operation: 'assign',
+				valueSource: '!menu.open',
 			}),
 			expect.objectContaining({
 				source: 'menuOpen',
 				graphNodeId: 'state:menu',
 				path: ['open'],
 				operation: 'assign',
+				valueSource: '!menuOpen',
 			}),
 			expect.objectContaining({
 				source: 'total',
@@ -188,6 +263,7 @@ test('lowerStateAccess resolves plain reads and writes to graph operations', asy
 				path: [],
 				operation: 'assign',
 				assignmentOperator: '+=',
+				valueSource: 'increment',
 			}),
 			expect.objectContaining({
 				source: 'items',
@@ -209,6 +285,160 @@ test('lowerStateAccess resolves plain reads and writes to graph operations', asy
 	expect(lowered.diagnostics).toEqual([]);
 });
 
+test('lowerStateAccess resolves parser-collected nested destructured aliases', async () => {
+	const semanticGraph = await buildSemanticGraph({
+		filename: 'src/Queue.tsrx',
+		source: nestedAliasSource,
+	});
+
+	const lowered = lowerStateAccess({ semanticGraph });
+
+	expect(semanticGraph.aliases).toEqual(
+		expect.arrayContaining([
+			expect.objectContaining({
+				name: 'firstItem',
+				target: 'groups.0.0',
+				declarationKind: 'const',
+			}),
+			expect.objectContaining({
+				name: 'secondLabel',
+				target: 'groups.1.meta.label',
+				declarationKind: 'const',
+			}),
+			expect.objectContaining({
+				name: 'editableGroup',
+				target: 'groups.0',
+				declarationKind: 'let',
+			}),
+		]),
+	);
+	expect(lowered.reads).toEqual(
+		expect.arrayContaining([
+			{
+				source: 'firstItem',
+				graphNodeId: 'state:groups',
+				path: ['0', '0'],
+			},
+			{
+				source: 'secondLabel',
+				graphNodeId: 'state:groups',
+				path: ['1', 'meta', 'label'],
+			},
+			{
+				source: 'editableGroup[0]',
+				graphNodeId: 'state:groups',
+				path: ['0', '0'],
+			},
+		]),
+	);
+	expect(lowered.writes).toEqual([
+		{
+			source: 'editableGroup',
+			graphNodeId: 'state:groups',
+			path: ['0'],
+			operation: 'assign',
+			valueSource: "['next']",
+		},
+	]);
+	expect(lowered.diagnostics).toEqual([]);
+});
+
+test('lowerStateAccess resolves shared factory graph reads and writes to shared-scoped ids', async () => {
+	const semanticGraph = await buildSemanticGraph({
+		filename: 'src/session.tsrx',
+		source: sharedFactorySource,
+	});
+
+	const lowered = lowerStateAccess({ semanticGraph });
+
+	expect(lowered.reads).toEqual(
+		expect.arrayContaining([
+			{
+				source: 'data.user',
+				graphNodeId: 'shared:src/session.tsrx#session/state:data',
+				path: ['user'],
+			},
+		]),
+	);
+	expect(lowered.writes).toEqual(
+		expect.arrayContaining([
+			expect.objectContaining({
+				source: 'data.user',
+				graphNodeId: 'shared:src/session.tsrx#session/state:data',
+				path: ['user'],
+				operation: 'assign',
+				valueSource: 'null',
+			}),
+			expect.objectContaining({
+				source: 'data.status',
+				graphNodeId: 'shared:src/session.tsrx#session/state:data',
+				path: ['status'],
+				operation: 'assign',
+				valueSource: "'anonymous'",
+			}),
+		]),
+	);
+	expect(lowered.diagnostics).toEqual([]);
+});
+
+test('lowerStateAccess resolves shared instance return property reads and writes', async () => {
+	const semanticGraph = await buildSemanticGraph({
+		filename: 'src/session.tsrx',
+		source: sharedFactorySource,
+	});
+
+	const lowered = lowerStateAccess({ semanticGraph });
+
+	expect(lowered.reads).toEqual(
+		expect.arrayContaining([
+			{
+				source: 'currentSession.status',
+				graphNodeId: 'shared:src/session.tsrx#session/state:data',
+				path: ['status'],
+			},
+			{
+				source: 'currentSession.signedIn',
+				graphNodeId: 'shared:src/session.tsrx#session/computed:signedIn',
+				path: [],
+			},
+		]),
+	);
+	expect(lowered.writes).toEqual(
+		expect.arrayContaining([
+			expect.objectContaining({
+				source: 'currentSession.status',
+				graphNodeId: 'shared:src/session.tsrx#session/state:data',
+				path: ['status'],
+				operation: 'assign',
+				valueSource: "'ready'",
+			}),
+		]),
+	);
+	expect(lowered.diagnostics).toEqual([]);
+});
+
+test('lowerStateAccess reports dynamic graph path diagnostics for shared instance properties', async () => {
+	const semanticGraph = await buildSemanticGraph({
+		filename: 'src/session.tsrx',
+		source: sharedDynamicPathSource,
+	});
+
+	const lowered = lowerStateAccess({ semanticGraph });
+
+	expect(lowered.diagnostics).toEqual(
+		expect.arrayContaining([
+			expect.objectContaining({
+				code: 'AA_STATE_DYNAMIC_PATH_READ',
+				source: 'currentSession[statusKey]',
+			}),
+			expect.objectContaining({
+				code: 'AA_STATE_DYNAMIC_PATH_WRITE',
+				source: 'currentSession[statusKey]',
+			}),
+		]),
+	);
+});
+
 test('lowerStateAccess resolves array destructured aliases to indexed graph paths', () => {
 	const semanticGraph = {
 		passId: 'tsrx-semantic-graph',
@@ -225,6 +455,8 @@ test('lowerStateAccess resolves array destructured aliases to indexed graph path
 				initialValue: ['first', 'second'],
 			},
 		],
+		sharedDefinitions: [],
+		sharedInstances: [],
 		hostNodes: [{ id: 'h0', tagName: 'button' }],
 		events: [],
 		behaviors: [],
@@ -244,7 +476,7 @@ test('lowerStateAccess resolves array destructured aliases to indexed graph path
 		],
 		stateReads: [{ source: 'secondItem' }],
 		templateReads: [{ hostNodeId: 'h0', source: 'firstItem' }],
-		stateWrites: [{ target: 'firstItem', operation: 'assign' }],
+		stateWrites: [{ target: 'firstItem', operation: 'assign', valueSource: "'next'" }],
 		asyncBoundaries: [],
 		diagnostics: [],
 	} satisfies SemanticGraphArtifact;
@@ -270,6 +502,7 @@ test('lowerStateAccess resolves array destructured aliases to indexed graph path
 			graphNodeId: 'state:items',
 			path: ['0'],
 			operation: 'assign',
+			valueSource: "'next'",
 		},
 	]);
 	expect(lowered.diagnostics).toEqual([]);
@@ -290,6 +523,8 @@ test('lowerStateAccess reports a structured diagnostic for dynamic graph path wr
 				valueKind: 'array',
 			},
 		],
+		sharedDefinitions: [],
+		sharedInstances: [],
 		hostNodes: [],
 		events: [],
 		behaviors: [],
@@ -354,6 +589,8 @@ test('lowerStateAccess reports a structured diagnostic for dynamic graph path re
 				valueKind: 'array',
 			},
 		],
+		sharedDefinitions: [],
+		sharedInstances: [],
 		hostNodes: [{ id: 'h0', tagName: 'p' }],
 		events: [],
 		behaviors: [],
@@ -418,6 +655,8 @@ test('lowerStateAccess reports a structured diagnostic for writes to paths exclu
 				valueKind: 'object',
 			},
 		],
+		sharedDefinitions: [],
+		sharedInstances: [],
 		hostNodes: [],
 		events: [],
 		behaviors: [],
@@ -489,6 +728,8 @@ test('lowerStateAccess reports a structured diagnostic for optional graph writes
 				valueKind: 'array',
 			},
 		],
+		sharedDefinitions: [],
+		sharedInstances: [],
 		hostNodes: [],
 		events: [],
 		behaviors: [],
@@ -644,6 +885,7 @@ test('lowerStateAccess reports a structured diagnostic for const graph binding r
 				path: ['open'],
 				operation: 'assign',
 				method: undefined,
+				valueSource: 'true',
 			},
 		]),
 	);

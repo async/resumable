@@ -8,7 +8,7 @@
 		"check": "vp check",
 		"fmt": "vp fmt",
 		"lint": "vp lint",
-		"test": "vp test",
+		"test": "vp test && pnpm --dir packages/bundler test:boxes",
 		"test:compiler": "vp test packages/compiler/test/*.test.ts"
 	},
 	"devDependencies": {

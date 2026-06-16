@@ -1,5 +1,5 @@
-import { render } from '@async/resumable/runtime';
-import { loadSymbol, payloadScripts } from './root.tsrx';
+import { render } from '@async/resumable/runtime/render';
+import { loadSymbol, payloadState, payloadView } from './root.tsrx';
 
 const app = document.querySelector('#app');
 if (!app) {
@@ -20,8 +20,8 @@ await render(
 	() => {
 		return {
 			root: counter,
-			state: payloadScripts.state,
-			view: payloadScripts.view,
+			state: payloadState,
+			view: payloadView,
 			loadSymbol,
 		};
 	},

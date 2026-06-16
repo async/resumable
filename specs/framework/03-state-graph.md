@@ -114,7 +114,7 @@ The classic uses of effects each have a better home:
   not with lifecycle APIs.
 - _React to state you don't own_ → deliberately unsupported.
 - _Eager browser setup_ (third-party widgets, canvas init, observers) →
-  host element behavior through `use`.
+  host element behavior through `attach`.
 
 ### Async derivation and TSRX boundaries
 
@@ -216,7 +216,7 @@ runtime stubs fail loudly if called directly without compilation. There is no
 `Signal`/`Tracked` type in the public API. Event handler props are camelCase
 (`onClick`, `onInput`), matching TSRX event-prop convention — no directive
 namespace. Element handles use the host prop `el`, which only accepts imported
-`element()` handles. Element behaviors use the host prop `use`, which only
+`element()` handles. Element behaviors use the host prop `attach`, which only
 accepts compiler-known element behavior expressions.
 
 `state()`/`computed()` may be created anywhere in a call tree rooted in a

@@ -15,10 +15,12 @@ export function resolveGraphPath(
 
 export function graphBindingMap(
 	graph: Pick<SemanticGraphArtifact, 'graphBindings'>,
+	sharedDefinitionId?: string | null,
 ): ReadonlyMap<string, SemanticGraphBinding> {
 	const bindings = new Map<string, SemanticGraphBinding>();
 
 	for (const binding of graph.graphBindings) {
+		if (!isInGraphScope(binding.sharedDefinitionId, sharedDefinitionId)) continue;
 		bindings.set(binding.name, binding);
 	}
 
@@ -27,14 +29,26 @@ export function graphBindingMap(
 
 export function semanticAliasMap(
 	graph: Pick<SemanticGraphArtifact, 'aliases'>,
+	sharedDefinitionId?: string | null,
 ): ReadonlyMap<string, SemanticGraphAlias> {
 	const aliases = new Map<string, SemanticGraphAlias>();
 
 	for (const alias of graph.aliases) {
+		if (!isInGraphScope(alias.sharedDefinitionId, sharedDefinitionId)) continue;
 		aliases.set(alias.name, alias);
 	}
 
 	return aliases;
+}
+
+function isInGraphScope(
+	valueSharedDefinitionId: string | undefined,
+	requestedSharedDefinitionId: string | null | undefined,
+): boolean {
+	if (requestedSharedDefinitionId === undefined) return true;
+	if (requestedSharedDefinitionId === null) return valueSharedDefinitionId === undefined;
+
+	return valueSharedDefinitionId === requestedSharedDefinitionId;
 }
 
 export function graphPathSource(

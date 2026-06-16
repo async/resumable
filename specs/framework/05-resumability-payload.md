@@ -5,7 +5,7 @@ Serialization tiers, compact state/view data scripts, payload arenas, and DOM lo
 ### Serialization tiers
 
 Serialization is for durable graph state, not runtime resources. `computed()`
-and `use={...}` deliberately remove most expensive cases from the serializer:
+and `attach={...}` deliberately remove most expensive cases from the serializer:
 derived values are recreated, and DOM-backed libraries are owned by the host
 node that uses them.
 
@@ -28,7 +28,7 @@ The serializer checks reachable graph values in this order:
    the value lazily after resume.
 6. **DOM/resource behavior** — values that need a live element, browser API,
    observer, editor, chart, map, canvas context, worker, socket, or cleanup
-   belong in `use={...}` or host/meta-framework code. The serializer stores
+   belong in `attach={...}` or host/meta-framework code. The serializer stores
    only the behavior code reference and serializable inputs.
 7. **Unsupported values** — private hidden state, WeakMap-only state, live DOM
    nodes, request objects, secrets, DB clients, streams, native handles, and
@@ -51,7 +51,7 @@ library adapters, but ad hoc class serialization is not the default authoring
 model.
 
 If a class wraps DOM or runtime resources, it is not a value class. Put the
-resource setup on the host element with `use={...}` or recreate it from
+resource setup on the host element with `attach={...}` or recreate it from
 serializable state.
 
 ### Resumable containers
@@ -95,7 +95,7 @@ the HTML:
    `el={handle}` bindings. The payload identifies where the element is; it never
    serializes the element object itself.
 7. **Element behaviors** — host element locators mapped to ordered behavior
-   symbol IDs and serialized behavior inputs from `use={...}`. The payload never
+   symbol IDs and serialized behavior inputs from `attach={...}`. The payload never
    serializes the behavior result, DOM-backed class instance, observer, editor,
    map, chart, canvas context, or cleanup function.
 
@@ -111,7 +111,7 @@ Payloads are specified as logical arenas, not as public object-shaped JSON:
    async snapshots, shared snapshots, constants, backrefs, and forward refs.
 2. **View/wiring arena** — DOM locator stream, listener symbol IDs, sync event
    policies, DOM update records, element handle locators, async boundary
-   anchors, and `use={...}` host metadata.
+   anchors, and `attach={...}` host metadata.
 
 Production payloads should encode all arena data into compact private data
 scripts, rather than relying on verbose JSON objects or scattered per-node

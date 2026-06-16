@@ -84,7 +84,7 @@ export function App() @{
   <main
     data-open={panel.open}
     data-status={panel.status}
-    use={resolverHostBehavior(behaviorConfig)}
+    attach={resolverHostBehavior(behaviorConfig)}
   >
     <header>
       <h1>{statusLabel}</h1>
@@ -138,7 +138,7 @@ export function App() @{
         id="resolver-results"
         el={selectedRegion}
         data-current={selected.id}
-        use={resolverHostBehavior({
+        attach={resolverHostBehavior({
           mode: "active",
           selectedId: selected.id,
         })}

@@ -2,6 +2,7 @@ import type {
 	LoweredStateRead,
 	LoweredStateWrite,
 	SemanticGraphAlias,
+	SemanticGraphArtifact,
 	SemanticGraphBinding,
 	SemanticStateWrite,
 	SourceSpan,
@@ -10,6 +11,7 @@ import type {
 	StateLoweringInput,
 } from '../artifacts.ts';
 import {
+	graphBindingMap,
 	resolveGraphPath,
 	semanticAliasMap,
 	splitStaticGraphPath,
@@ -17,20 +19,22 @@ import {
 } from '../artifact-helpers/graph-paths.ts';
 
 export function lowerStateAccess(input: StateLoweringInput): StateLoweringArtifact {
-	const bindings = new Map<string, SemanticGraphBinding>();
-	const aliases = semanticAliasMap(input.semanticGraph);
 	const reads: LoweredStateRead[] = [];
 	const writes: LoweredStateWrite[] = [];
 	const diagnostics: StateLoweringDiagnostic[] = [];
 
-	for (const binding of input.semanticGraph.graphBindings) {
-		bindings.set(binding.name, binding);
-	}
-
 	for (const read of input.semanticGraph.templateReads) {
-		const resolved = resolveGraphPath(read.source, bindings, aliases);
+		const lookup = scopedGraphLookup(input, null);
+		const resolved = resolveStateGraphPath(input, read.source, lookup, null);
 		if (!resolved) {
-			if (isDynamicGraphPathSource(read.source, bindings, aliases)) {
+			if (
+				isDynamicGraphPathSource(
+					read.source,
+					lookup.bindings,
+					lookup.aliases,
+					input.semanticGraph,
+				)
+			) {
 				diagnostics.push(
 					dynamicGraphPathReadDiagnostic(
 						read.source,
@@ -50,9 +54,18 @@ export function lowerStateAccess(input: StateLoweringInput): StateLoweringArtifa
 	}
 
 	for (const read of input.semanticGraph.stateReads) {
-		const resolved = resolveGraphPath(read.source, bindings, aliases);
+		const sharedDefinitionId = read.sharedDefinitionId ?? null;
+		const lookup = scopedGraphLookup(input, sharedDefinitionId);
+		const resolved = resolveStateGraphPath(input, read.source, lookup, sharedDefinitionId);
 		if (!resolved) {
-			if (isDynamicGraphPathSource(read.source, bindings, aliases)) {
+			if (
+				isDynamicGraphPathSource(
+					read.source,
+					lookup.bindings,
+					lookup.aliases,
+					input.semanticGraph,
+				)
+			) {
 				diagnostics.push(
 					dynamicGraphPathReadDiagnostic(
 						read.source,
@@ -72,14 +85,17 @@ export function lowerStateAccess(input: StateLoweringInput): StateLoweringArtifa
 	}
 
 	for (const write of input.semanticGraph.stateWrites) {
+		const sharedDefinitionId = write.sharedDefinitionId ?? null;
+		const lookup = scopedGraphLookup(input, sharedDefinitionId);
+
 		if (write.optional === true) {
 			diagnostics.push(optionalChainWriteDiagnostic(write, input.semanticGraph.filename));
 			continue;
 		}
 
-		const resolved = resolveGraphPath(write.target, bindings, aliases);
+		const resolved = resolveStateGraphPath(input, write.target, lookup, sharedDefinitionId);
 		if (!resolved) {
-			const excludedAliasPath = findRestAliasExcludedPath(write.target, aliases);
+			const excludedAliasPath = findRestAliasExcludedPath(write.target, lookup.aliases);
 			if (excludedAliasPath) {
 				diagnostics.push(
 					restAliasExcludedPathDiagnostic({
@@ -92,7 +108,14 @@ export function lowerStateAccess(input: StateLoweringInput): StateLoweringArtifa
 				continue;
 			}
 
-			if (isDynamicGraphPathSource(write.target, bindings, aliases)) {
+			if (
+				isDynamicGraphPathSource(
+					write.target,
+					lookup.bindings,
+					lookup.aliases,
+					input.semanticGraph,
+				)
+			) {
 				diagnostics.push(
 					dynamicGraphPathWriteDiagnostic(write, input.semanticGraph.filename),
 				);
@@ -108,7 +131,7 @@ export function lowerStateAccess(input: StateLoweringInput): StateLoweringArtifa
 			continue;
 		}
 
-		if (isConstAliasReassignment(write, aliases)) {
+		if (isConstAliasReassignment(write, lookup.aliases)) {
 			diagnostics.push(constBindingReassignmentDiagnostic(write));
 			continue;
 		}
@@ -124,6 +147,7 @@ export function lowerStateAccess(input: StateLoweringInput): StateLoweringArtifa
 			path: resolved.path,
 			operation: write.operation,
 			assignmentOperator: write.assignmentOperator,
+			valueSource: write.valueSource,
 			prefix: write.prefix,
 			updateOperator: write.updateOperator,
 			method: write.method,
@@ -133,10 +157,84 @@ export function lowerStateAccess(input: StateLoweringInput): StateLoweringArtifa
 
 	return {
 		passId: 'state-lowering',
-		reads: uniqueBy(reads, (read) => `${read.graphNodeId}:${read.path.join('.')}:${read.source}`),
+		reads: uniqueBy(
+			reads,
+			(read) => `${read.graphNodeId}:${read.path.join('.')}:${read.source}`,
+		),
 		writes,
 		diagnostics,
 	};
+}
+
+type GraphLookup = {
+	readonly bindings: ReadonlyMap<string, SemanticGraphBinding>;
+	readonly aliases: ReadonlyMap<string, SemanticGraphAlias>;
+};
+
+type ResolvedStateGraphPath = {
+	readonly binding: SemanticGraphBinding;
+	readonly path: ReadonlyArray<string>;
+};
+
+function scopedGraphLookup(
+	input: StateLoweringInput,
+	sharedDefinitionId: string | null,
+): GraphLookup {
+	return {
+		bindings: graphBindingMap(input.semanticGraph, sharedDefinitionId),
+		aliases: semanticAliasMap(input.semanticGraph, sharedDefinitionId),
+	};
+}
+
+function resolveStateGraphPath(
+	input: StateLoweringInput,
+	source: string,
+	lookup: GraphLookup,
+	sharedDefinitionId: string | null,
+): ResolvedStateGraphPath | null {
+	const direct = resolveGraphPath(source, lookup.bindings, lookup.aliases);
+	if (direct) return direct;
+	if (sharedDefinitionId) return null;
+
+	return resolveSharedInstanceGraphPath(source, input.semanticGraph);
+}
+
+function resolveSharedInstanceGraphPath(
+	source: string,
+	graph: SemanticGraphArtifact,
+): ResolvedStateGraphPath | null {
+	const segments = splitStaticGraphPath(source);
+	if (segments.length < 2) return null;
+
+	const [localName, propertyName, ...propertyPath] = segments;
+	const instance = findLast(graph.sharedInstances, (item) => item.localName === localName);
+	if (!instance) return null;
+
+	const definition = graph.sharedDefinitions.find((item) => item.id === instance.definitionId);
+	if (!definition) return null;
+
+	const property = findLast(
+		definition.returnProperties ?? [],
+		(item) => item.name === propertyName,
+	);
+	if (property?.kind !== 'graph') return null;
+
+	const binding = graph.graphBindings.find((item) => item.id === property.graphNodeId);
+	if (!binding) return null;
+
+	return {
+		binding,
+		path: [...property.path, ...propertyPath],
+	};
+}
+
+function findLast<T>(values: ReadonlyArray<T>, predicate: (value: T) => boolean): T | undefined {
+	for (let index = values.length - 1; index >= 0; index--) {
+		const value = values[index];
+		if (value !== undefined && predicate(value)) return value;
+	}
+
+	return undefined;
 }
 
 function unresolvedWriteDiagnostic(
@@ -364,13 +462,16 @@ function isDynamicGraphPathSource(
 	source: string,
 	bindings: ReadonlyMap<string, SemanticGraphBinding>,
 	aliases: ReadonlyMap<string, SemanticGraphAlias>,
+	graph?: SemanticGraphArtifact,
 ): boolean {
 	if (!hasDynamicBracketSegment(source)) return false;
 
 	const root = graphPathRoot(source);
 	if (!root) return false;
 
-	return resolveGraphPath(root, bindings, aliases) !== null;
+	if (resolveGraphPath(root, bindings, aliases) !== null) return true;
+
+	return graph?.sharedInstances.some((instance) => instance.localName === root) ?? false;
 }
 
 function findRestAliasExcludedPath(

@@ -657,6 +657,301 @@ test('runtime graph skips Array.push and Array.unshift invalidation when no valu
 	]);
 });
 
+test('runtime graph invalidates array index subscribers when length is written', async () => {
+	const items = ['first', 'second'];
+	const graph = createRuntimeGraph({
+		cells: [
+			{
+				graphNodeId: 'state:items',
+				value: items,
+			},
+		],
+	});
+
+	graph.subscribe({
+		id: 'dom-update:length',
+		graphNodeId: 'state:items',
+		path: ['length'],
+		run(value) {
+			return {
+				type: 'setText',
+				locator: 'text:length',
+				value,
+			};
+		},
+	});
+	graph.subscribe({
+		id: 'dom-update:second',
+		graphNodeId: 'state:items',
+		path: ['1'],
+		run(value) {
+			return {
+				type: 'setText',
+				locator: 'text:second',
+				value,
+			};
+		},
+	});
+
+	graph.write({
+		graphNodeId: 'state:items',
+		path: ['length'],
+		value: 1,
+	});
+
+	await graph.flush();
+
+	expect(items).toEqual(['first']);
+	expect(graph.takeJournal()).toEqual([
+		{ type: 'setText', locator: 'text:length', value: 1 },
+		{ type: 'setText', locator: 'text:second', value: undefined },
+	]);
+});
+
+test('runtime graph skips Array.splice invalidation when the call does not mutate', async () => {
+	const stableItems = ['first', 'second'];
+	const pendingItems = ['first', 'second'];
+	const graph = createRuntimeGraph({
+		cells: [
+			{
+				graphNodeId: 'state:collections',
+				value: {
+					stableItems,
+					pendingItems,
+				},
+			},
+		],
+	});
+
+	graph.subscribe({
+		id: 'dom-update:stable-items',
+		graphNodeId: 'state:collections',
+		path: ['stableItems'],
+		run(value) {
+			return {
+				type: 'setText',
+				locator: 'text:stable-items',
+				value: (value as string[]).join(','),
+			};
+		},
+	});
+	graph.subscribe({
+		id: 'dom-update:pending-items',
+		graphNodeId: 'state:collections',
+		path: ['pendingItems'],
+		run(value) {
+			return {
+				type: 'setText',
+				locator: 'text:pending-items',
+				value: (value as string[]).join(','),
+			};
+		},
+	});
+
+	expect(
+		graph.call({
+			graphNodeId: 'state:collections',
+			path: ['stableItems'],
+			method: 'splice',
+		}),
+	).toEqual([]);
+	expect(
+		graph.call({
+			graphNodeId: 'state:collections',
+			path: ['pendingItems'],
+			method: 'splice',
+			args: [1, 1, 'third'],
+		}),
+	).toEqual(['second']);
+
+	await graph.flush();
+
+	expect(stableItems).toEqual(['first', 'second']);
+	expect(pendingItems).toEqual(['first', 'third']);
+	expect(graph.takeJournal()).toEqual([
+		{ type: 'setText', locator: 'text:pending-items', value: 'first,third' },
+	]);
+});
+
+test('runtime graph skips array mutator invalidation when the array contents do not change', async () => {
+	const stableCopy = ['a', 'b'];
+	const copied = ['a', 'b', 'c'];
+	const stableFill = ['x'];
+	const filled = ['x', 'y'];
+	const stableReverse = ['only'];
+	const reversed = ['a', 'b'];
+	const stableSort = ['a', 'b'];
+	const sorted = ['b', 'a'];
+	const graph = createRuntimeGraph({
+		cells: [
+			{
+				graphNodeId: 'state:collections',
+				value: {
+					stableCopy,
+					copied,
+					stableFill,
+					filled,
+					stableReverse,
+					reversed,
+					stableSort,
+					sorted,
+				},
+			},
+		],
+	});
+
+	for (const key of [
+		'stableCopy',
+		'copied',
+		'stableFill',
+		'filled',
+		'stableReverse',
+		'reversed',
+		'stableSort',
+		'sorted',
+	]) {
+		graph.subscribe({
+			id: `dom-update:${key}`,
+			graphNodeId: 'state:collections',
+			path: [key],
+			run(value) {
+				return {
+					type: 'setText',
+					locator: `text:${key}`,
+					value: (value as string[]).join(','),
+				};
+			},
+		});
+	}
+
+	expect(
+		graph.call({
+			graphNodeId: 'state:collections',
+			path: ['stableCopy'],
+			method: 'copyWithin',
+			args: [0, 0],
+		}),
+	).toBe(stableCopy);
+	expect(
+		graph.call({
+			graphNodeId: 'state:collections',
+			path: ['copied'],
+			method: 'copyWithin',
+			args: [0, 1],
+		}),
+	).toBe(copied);
+	expect(
+		graph.call({
+			graphNodeId: 'state:collections',
+			path: ['stableFill'],
+			method: 'fill',
+			args: ['x'],
+		}),
+	).toBe(stableFill);
+	expect(
+		graph.call({
+			graphNodeId: 'state:collections',
+			path: ['filled'],
+			method: 'fill',
+			args: ['z', 1],
+		}),
+	).toBe(filled);
+	expect(
+		graph.call({
+			graphNodeId: 'state:collections',
+			path: ['stableReverse'],
+			method: 'reverse',
+		}),
+	).toBe(stableReverse);
+	expect(
+		graph.call({
+			graphNodeId: 'state:collections',
+			path: ['reversed'],
+			method: 'reverse',
+		}),
+	).toBe(reversed);
+	expect(
+		graph.call({
+			graphNodeId: 'state:collections',
+			path: ['stableSort'],
+			method: 'sort',
+		}),
+	).toBe(stableSort);
+	expect(
+		graph.call({
+			graphNodeId: 'state:collections',
+			path: ['sorted'],
+			method: 'sort',
+		}),
+	).toBe(sorted);
+
+	await graph.flush();
+
+	expect(stableCopy).toEqual(['a', 'b']);
+	expect(copied).toEqual(['b', 'c', 'c']);
+	expect(stableFill).toEqual(['x']);
+	expect(filled).toEqual(['x', 'z']);
+	expect(stableReverse).toEqual(['only']);
+	expect(reversed).toEqual(['b', 'a']);
+	expect(stableSort).toEqual(['a', 'b']);
+	expect(sorted).toEqual(['a', 'b']);
+	expect(graph.takeJournal()).toEqual([
+		{ type: 'setText', locator: 'text:copied', value: 'b,c,c' },
+		{ type: 'setText', locator: 'text:filled', value: 'x,z' },
+		{ type: 'setText', locator: 'text:reversed', value: 'b,a' },
+		{ type: 'setText', locator: 'text:sorted', value: 'a,b' },
+	]);
+});
+
+test('runtime graph invalidates sparse array mutators when holes become own values', async () => {
+	const sparseItems: Array<string | undefined> = [];
+	sparseItems.length = 2;
+	sparseItems[1] = 'last';
+	const graph = createRuntimeGraph({
+		cells: [
+			{
+				graphNodeId: 'state:collections',
+				value: {
+					sparseItems,
+				},
+			},
+		],
+	});
+
+	graph.subscribe({
+		id: 'dom-update:sparse-items',
+		graphNodeId: 'state:collections',
+		path: ['sparseItems'],
+		run(value) {
+			const items = value as Array<string | undefined>;
+			return {
+				type: 'setText',
+				locator: 'text:sparse-items',
+				value: Object.prototype.hasOwnProperty.call(items, '0') ? 'own' : 'hole',
+			};
+		},
+	});
+
+	expect(Object.prototype.hasOwnProperty.call(sparseItems, '0')).toBe(false);
+	expect(
+		graph.call({
+			graphNodeId: 'state:collections',
+			path: ['sparseItems'],
+			method: 'fill',
+			args: [undefined, 0, 1],
+		}),
+	).toBe(sparseItems);
+
+	await graph.flush();
+
+	expect(sparseItems.length).toBe(2);
+	expect(sparseItems[0]).toBeUndefined();
+	expect(Object.prototype.hasOwnProperty.call(sparseItems, '0')).toBe(true);
+	expect(graph.takeJournal()).toEqual([
+		{ type: 'setText', locator: 'text:sparse-items', value: 'own' },
+	]);
+});
+
 test('runtime graph rejects unsupported collection method calls without invalidation', async () => {
 	const graph = createRuntimeGraph({
 		cells: [
@@ -693,6 +988,66 @@ test('runtime graph rejects unsupported collection method calls without invalida
 
 	expect(graph.read('state:items')).toEqual(['first']);
 	expect(graph.takeJournal()).toEqual([]);
+});
+
+test('runtime graph applies Date setter calls with timestamp invalidation', async () => {
+	const stableDate = new Date('2026-06-16T12:00:00.000Z');
+	const pendingDate = new Date('2026-06-16T12:00:00.000Z');
+	const graph = createRuntimeGraph({
+		cells: [
+			{
+				graphNodeId: 'state:dates',
+				value: {
+					stableDate,
+					pendingDate,
+				},
+			},
+		],
+	});
+
+	for (const key of ['stableDate', 'pendingDate']) {
+		graph.subscribe({
+			id: `dom-update:${key}`,
+			graphNodeId: 'state:dates',
+			path: [key],
+			run(value) {
+				return {
+					type: 'setText',
+					locator: `text:${key}`,
+					value: (value as Date).toISOString(),
+				};
+			},
+		});
+	}
+
+	expect(
+		graph.call({
+			graphNodeId: 'state:dates',
+			path: ['stableDate'],
+			method: 'setTime',
+			args: [stableDate.getTime()],
+		}),
+	).toBe(stableDate.getTime());
+	expect(
+		graph.call({
+			graphNodeId: 'state:dates',
+			path: ['pendingDate'],
+			method: 'setUTCFullYear',
+			args: [2027],
+		}),
+	).toBe(Date.UTC(2027, 5, 16, 12, 0, 0, 0));
+
+	await graph.flush();
+
+	expect(stableDate.toISOString()).toBe('2026-06-16T12:00:00.000Z');
+	expect(pendingDate.toISOString()).toBe('2027-06-16T12:00:00.000Z');
+	expect(graph.takeJournal()).toEqual([
+		{
+			type: 'setText',
+			locator: 'text:pendingDate',
+			value: '2027-06-16T12:00:00.000Z',
+		},
+	]);
 });
 
 test('runtime graph deletes object paths with path invalidation', async () => {
@@ -817,6 +1172,43 @@ test('runtime graph schedules a microtask flush for writes in an idle turn', asy
 	await drainMicrotasks();
 
 	expect(graph.takeJournal()).toEqual([{ type: 'setText', locator: 'button:text', value: 2 }]);
+});
+
+test('runtime graph flush waits for an in-progress scheduled flush', async () => {
+	const release = deferred<void>();
+	const graph = createRuntimeGraph({
+		cells: [{ graphNodeId: 'state:count', value: 0 }],
+	});
+	let subscriptionStarted = false;
+
+	graph.subscribe({
+		id: 'dom-update:count',
+		graphNodeId: 'state:count',
+		path: [],
+		async run(value) {
+			subscriptionStarted = true;
+			await release.promise;
+			return { type: 'setText', locator: 'button:text', value };
+		},
+	});
+
+	graph.write({ graphNodeId: 'state:count', value: 1 });
+	await Promise.resolve();
+
+	expect(subscriptionStarted).toBe(true);
+
+	let flushSettled = false;
+	const flush = graph.flush().then(() => {
+		flushSettled = true;
+	});
+	await Promise.resolve();
+
+	expect(flushSettled).toBe(false);
+
+	release.resolve();
+	await flush;
+
+	expect(graph.takeJournal()).toEqual([{ type: 'setText', locator: 'button:text', value: 1 }]);
 });
 
 test('runtime graph lazily recomputes sync computed nodes after path-granular invalidation', async () => {

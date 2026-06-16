@@ -1,5 +1,18 @@
-import type { CompileTsrxModuleInput, CompileTsrxModuleResult } from './artifacts.ts';
-import { validateCompilerPassGraph } from './pass-graph.ts';
+import type {
+	CaptureAnalysisArtifact,
+	CompileTsrxModuleInput,
+	CompileTsrxModuleResult,
+	PayloadArenaArtifact,
+	PayloadScriptsArtifact,
+	RunnableCompilerPassDefinition,
+	SemanticGraphArtifact,
+	StateLoweringArtifact,
+	SymbolModulesArtifact,
+	SymbolResolverModuleInput,
+	SymbolResolverModuleManifest,
+	SymbolResolverPlan,
+} from './artifacts.ts';
+import { runCompilerPassPipeline } from './pass-pipeline.ts';
 import { defaultCompilerPasses } from './pass-registry.ts';
 import { analyzeCaptures } from './passes/capture-analysis.ts';
 import { planPayloadArena } from './passes/payload-arena.ts';
@@ -18,43 +31,187 @@ import { planSymbolResolver } from './passes/symbol-resolver.ts';
 export async function compileTsrxModule(
 	input: CompileTsrxModuleInput,
 ): Promise<CompileTsrxModuleResult> {
-	const passGraph = validateCompilerPassGraph(defaultCompilerPasses, ['source', 'symbols']);
-	const semanticGraph = await buildSemanticGraph(input);
-	const stateLowering = lowerStateAccess({ semanticGraph });
-	const payloadArena = planPayloadArena({ semanticGraph, stateLowering });
-	const symbolResolver = planSymbolResolver({ semanticGraph, payloadArena, stateLowering });
-	const captureAnalysis = analyzeCaptures({ semanticGraph, symbolResolver });
-	const protocolState = createProtocolStatePayloadFromArena({ semanticGraph, payloadArena });
-	const protocolView = createProtocolViewPayload({ payloadArena, symbolResolver });
-	const { payloadScripts, renderShell } = renderPayloadScriptArtifact({
-		protocolState,
-		protocolView,
-	});
-	const symbolModules = emitSymbolModules({ symbolResolver, captureAnalysis });
-	const symbolResolverModule = emitSymbolResolverModule({
+	const symbolResolverModuleInput: SymbolResolverModuleInput = {
 		buildId: input.buildId,
 		resolverId: input.resolverId,
 		symbols: input.symbols,
+	};
+	const pipeline = await runCompilerPassPipeline({
+		passes: defaultRunnableCompilerPasses(),
+		initialArtifacts: {
+			source: input,
+			symbols: input.symbols,
+			symbolResolverModuleInput,
+		},
 	});
-	const symbolResolverModuleManifest = createSymbolResolverModuleManifest({
-		buildId: input.buildId,
-		resolverId: input.resolverId,
-		symbols: input.symbols,
-	});
+	const artifacts = pipeline.artifacts as {
+		readonly semanticGraph: SemanticGraphArtifact;
+		readonly stateLowering: StateLoweringArtifact;
+		readonly payloadArena: PayloadArenaArtifact;
+		readonly symbolResolver: SymbolResolverPlan;
+		readonly captureAnalysis: CaptureAnalysisArtifact;
+		readonly protocolState: CompileTsrxModuleResult['protocolState'];
+		readonly protocolView: CompileTsrxModuleResult['protocolView'];
+		readonly payloadScripts: PayloadScriptsArtifact['payloadScripts'];
+		readonly renderShell: PayloadScriptsArtifact['renderShell'];
+		readonly symbolModules: SymbolModulesArtifact;
+		readonly symbolResolverModule: string;
+		readonly symbolResolverModuleManifest: SymbolResolverModuleManifest;
+	};
 
 	return {
-		passGraph,
-		semanticGraph,
-		stateLowering,
-		payloadArena,
-		symbolResolver,
-		captureAnalysis,
-		protocolState,
-		protocolView,
-		payloadScripts,
-		renderShell,
-		symbolModules,
-		symbolResolverModule,
-		symbolResolverModuleManifest,
+		passGraph: pipeline.passGraph,
+		semanticGraph: artifacts.semanticGraph,
+		stateLowering: artifacts.stateLowering,
+		payloadArena: artifacts.payloadArena,
+		symbolResolver: artifacts.symbolResolver,
+		captureAnalysis: artifacts.captureAnalysis,
+		protocolState: artifacts.protocolState,
+		protocolView: artifacts.protocolView,
+		payloadScripts: artifacts.payloadScripts,
+		renderShell: artifacts.renderShell,
+		symbolModules: artifacts.symbolModules,
+		symbolResolverModule: artifacts.symbolResolverModule,
+		symbolResolverModuleManifest: artifacts.symbolResolverModuleManifest,
 	};
+}
+
+function defaultRunnableCompilerPasses(): ReadonlyArray<RunnableCompilerPassDefinition> {
+	return defaultCompilerPasses.map((pass) => {
+		if (pass.passId === 'tsrx-semantic-graph') {
+			return {
+				...pass,
+				async run({ inputs }) {
+					return { semanticGraph: await buildSemanticGraph(sourceInput(inputs.source)) };
+				},
+			};
+		}
+
+		if (pass.passId === 'state-lowering') {
+			return {
+				...pass,
+				run({ inputs }) {
+					const semanticGraph = inputs.semanticGraph as SemanticGraphArtifact;
+					return { stateLowering: lowerStateAccess({ semanticGraph }) };
+				},
+			};
+		}
+
+		if (pass.passId === 'payload-arena') {
+			return {
+				...pass,
+				run({ inputs }) {
+					return {
+						payloadArena: planPayloadArena({
+							semanticGraph: inputs.semanticGraph as SemanticGraphArtifact,
+							stateLowering: inputs.stateLowering as StateLoweringArtifact,
+						}),
+					};
+				},
+			};
+		}
+
+		if (pass.passId === 'symbol-resolver') {
+			return {
+				...pass,
+				run({ inputs }) {
+					return {
+						symbolResolver: planSymbolResolver({
+							semanticGraph: inputs.semanticGraph as SemanticGraphArtifact,
+							payloadArena: inputs.payloadArena as PayloadArenaArtifact,
+							stateLowering: inputs.stateLowering as StateLoweringArtifact,
+						}),
+					};
+				},
+			};
+		}
+
+		if (pass.passId === 'capture-analysis') {
+			return {
+				...pass,
+				run({ inputs }) {
+					return {
+						captureAnalysis: analyzeCaptures({
+							semanticGraph: inputs.semanticGraph as SemanticGraphArtifact,
+							symbolResolver: inputs.symbolResolver as SymbolResolverPlan,
+						}),
+					};
+				},
+			};
+		}
+
+		if (pass.passId === 'protocol-state') {
+			return {
+				...pass,
+				run({ inputs }) {
+					return {
+						protocolState: createProtocolStatePayloadFromArena({
+							semanticGraph: inputs.semanticGraph as SemanticGraphArtifact,
+							payloadArena: inputs.payloadArena as PayloadArenaArtifact,
+						}),
+					};
+				},
+			};
+		}
+
+		if (pass.passId === 'protocol-view') {
+			return {
+				...pass,
+				run({ inputs }) {
+					return {
+						protocolView: createProtocolViewPayload({
+							payloadArena: inputs.payloadArena as PayloadArenaArtifact,
+							symbolResolver: inputs.symbolResolver as SymbolResolverPlan,
+						}),
+					};
+				},
+			};
+		}
+
+		if (pass.passId === 'payload-scripts') {
+			return {
+				...pass,
+				run({ inputs }) {
+					return renderPayloadScriptArtifact({
+						protocolState: inputs.protocolState as Parameters<
+							typeof renderPayloadScriptArtifact
+						>[0]['protocolState'],
+						protocolView: inputs.protocolView as Parameters<
+							typeof renderPayloadScriptArtifact
+						>[0]['protocolView'],
+					});
+				},
+			};
+		}
+
+		if (pass.passId === 'symbol-modules') {
+			return {
+				...pass,
+				run({ inputs }) {
+					return {
+						symbolModules: emitSymbolModules({
+							symbolResolver: inputs.symbolResolver as SymbolResolverPlan,
+							captureAnalysis: inputs.captureAnalysis as CaptureAnalysisArtifact,
+						}),
+					};
+				},
+			};
+		}
+
+		return {
+			...pass,
+			run({ inputs }) {
+				const symbolInput = inputs.symbolResolverModuleInput as SymbolResolverModuleInput;
+
+				return {
+					symbolResolverModule: emitSymbolResolverModule(symbolInput),
+					symbolResolverModuleManifest: createSymbolResolverModuleManifest(symbolInput),
+				};
+			},
+		};
+	});
+}
+
+function sourceInput(value: unknown): CompileTsrxModuleInput {
+	return value as CompileTsrxModuleInput;
 }

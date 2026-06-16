@@ -3,6 +3,8 @@ import {
 	compileTsrxModule,
 	CompilerPassGraphError,
 	defaultCompilerPasses,
+	formatCompilerArtifactDump,
+	runCompilerPassPipeline,
 	validateCompilerPassGraph,
 } from '../src/index.ts';
 
@@ -47,7 +49,7 @@ test('default compiler passes declare stable artifact boundaries', () => {
 			expect.objectContaining({
 				passId: 'symbol-resolver',
 				description: expect.stringContaining('symbol'),
-				consumes: ['semanticGraph', 'payloadArena'],
+				consumes: ['semanticGraph', 'stateLowering', 'payloadArena'],
 				produces: ['symbolResolver'],
 			}),
 			expect.objectContaining({
@@ -59,7 +61,7 @@ test('default compiler passes declare stable artifact boundaries', () => {
 			expect.objectContaining({
 				passId: 'symbol-resolver-module',
 				description: expect.stringContaining('resolver module'),
-				consumes: ['symbols'],
+				consumes: ['symbolResolverModuleInput'],
 				produces: ['symbolResolverModule', 'symbolResolverModuleManifest'],
 			}),
 			expect.objectContaining({
@@ -262,6 +264,110 @@ test('validateCompilerPassGraph exposes structured diagnostics for invalid pass 
 	});
 });
 
+test('runCompilerPassPipeline executes passes in graph order and records artifact dumps', async () => {
+	const calls: string[] = [];
+	const result = await runCompilerPassPipeline({
+		initialArtifacts: { source: 'hello' },
+		passes: [
+			{
+				passId: 'final',
+				description: 'Consumes middle output.',
+				consumes: ['middle'],
+				produces: ['finalArtifact'],
+				run({ inputs }) {
+					calls.push('final');
+					expect(inputs).toEqual({ middle: 'hello-middle' });
+
+					return { finalArtifact: `${String(inputs.middle)}!` };
+				},
+			},
+			{
+				passId: 'middle',
+				description: 'Consumes source input.',
+				consumes: ['source'],
+				produces: ['middle'],
+				run({ inputs }) {
+					calls.push('middle');
+					expect(inputs).toEqual({ source: 'hello' });
+
+					return { middle: `${String(inputs.source)}-middle` };
+				},
+			},
+		],
+		dumpArtifact({ artifactKey, value }) {
+			return `${artifactKey}:${String(value)}`;
+		},
+	});
+
+	expect(calls).toEqual(['middle', 'final']);
+	expect(result.passGraph.orderedPassIds).toEqual(['middle', 'final']);
+	expect(result.artifacts).toEqual({
+		source: 'hello',
+		middle: 'hello-middle',
+		finalArtifact: 'hello-middle!',
+	});
+	expect(result.artifactDumps).toEqual([
+		{
+			passId: 'middle',
+			artifactKey: 'middle',
+			dump: 'middle:hello-middle',
+		},
+		{
+			passId: 'final',
+			artifactKey: 'finalArtifact',
+			dump: 'finalArtifact:hello-middle!',
+		},
+	]);
+});
+
+test('formatCompilerArtifactDump creates human-readable pass artifact snapshots', async () => {
+	const result = await runCompilerPassPipeline({
+		initialArtifacts: { source: 'Ada' },
+		passes: [
+			{
+				passId: 'semantic',
+				description: 'Builds the semantic artifact.',
+				consumes: ['source'],
+				produces: ['semanticGraph'],
+				run({ inputs }) {
+					return {
+						semanticGraph: {
+							component: inputs.source,
+							diagnostics: [],
+							meta: {
+								empty: undefined,
+								big: 2n,
+							},
+						},
+					};
+				},
+			},
+		],
+		dumpArtifact: formatCompilerArtifactDump,
+	});
+
+	expect(result.artifactDumps).toEqual([
+		{
+			passId: 'semantic',
+			artifactKey: 'semanticGraph',
+			dump: [
+				'# semantic -> semanticGraph',
+				'',
+				'```json',
+				'{',
+				'  "component": "Ada",',
+				'  "diagnostics": [],',
+				'  "meta": {',
+				'    "big": "2n",',
+				'    "empty": "[undefined]"',
+				'  }',
+				'}',
+				'```',
+			].join('\n'),
+		},
+	]);
+});
+
 test('compileTsrxModule validates and returns the default pass graph', async () => {
 	const result = await compileTsrxModule({
 		filename: 'src/App.tsrx',
@@ -287,6 +393,7 @@ test('compileTsrxModule validates and returns the default pass graph', async () 
 		expect.arrayContaining([
 			'source',
 			'symbols',
+			'symbolResolverModuleInput',
 			'semanticGraph',
 			'stateLowering',
 			'payloadArena',

@@ -1,11 +1,9 @@
 export {
 	applyDomJournalEntries,
-	createDomUpdateEntry,
 	render,
 	renderToString,
 	resumeFromPayloadDocument,
 	resumeFromPayloadScripts,
-	type DomUpdateEntryInput,
 	type DomJournalApplyOptions,
 	type DomJournalApplyTarget,
 	type CsrRenderContainer,

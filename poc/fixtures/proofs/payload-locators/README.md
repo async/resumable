@@ -16,7 +16,7 @@ The fixture source lives at [src/App.tsrx](./src/App.tsrx).
   follows domain keys across reorder, insert, and delete operations.
 - Text binding locators for scalar, computed, branch-local, and keyed-list text
   bindings that must update concrete text nodes rather than virtual children.
-- Behavior host locators for `use={...}` entries, including serialized behavior
+- Behavior host locators for `attach={...}` entries, including serialized behavior
   inputs and cleanup ownership on the host element.
 - Element handle locators for `element()` plus `el={...}` bindings, including a
   branch-owned handle that should resolve to `undefined` after its branch is
@@ -30,19 +30,19 @@ The fixture source lives at [src/App.tsrx](./src/App.tsrx).
 The same authored fixture should be consumed one layer at a time:
 
 1. **TSRX semantic graph**: identify the component function, state sites,
-   computed sites, host nodes, event props, `use={...}` behavior hosts,
+   computed sites, host nodes, event props, `attach={...}` behavior hosts,
    `element()` handles, `el={...}` bindings, text bindings, `@if` branches,
    keyed `@for` loops, `@empty` fallback, and DOM-order ownership of locator
    records.
 2. **Payload arena planning**: prove the view/wiring arena can represent:
-   - DOM-order locator records for dynamic host elements and text bindings.
-   - skip runs for static host nodes that do not need runtime records.
-   - comment anchor records for conditional branches and keyed list ranges.
-   - keyed item identity records rooted at `item.id`.
-   - behavior host records with ordered behavior symbol IDs and serializable
-     behavior inputs.
-   - element handle records that map handle IDs to DOM locators instead of
-     serializing DOM objects.
+    - DOM-order locator records for dynamic host elements and text bindings.
+    - skip runs for static host nodes that do not need runtime records.
+    - comment anchor records for conditional branches and keyed list ranges.
+    - keyed item identity records rooted at `item.id`.
+    - behavior host records with ordered behavior symbol IDs and serializable
+      behavior inputs.
+    - element handle records that map handle IDs to DOM locators instead of
+      serializing DOM objects.
 3. **Symbol resolver planning**: assign symbol IDs for event handlers, binding
    update functions, and behavior functions whose dynamic imports are owned by
    the generated resolver, not by authored host attributes.

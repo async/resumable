@@ -112,7 +112,10 @@ export type TsrxSemanticGraph = {
 	readonly computedSites: ReadonlyArray<ComputedSite>;
 	readonly elementHandles: ReadonlyArray<ElementHandle>;
 	readonly eventProps: ReadonlyArray<EventProp>;
-	readonly behaviorProps: ReadonlyArray<{ readonly hostNodeId: string; readonly expression: string }>;
+	readonly behaviorProps: ReadonlyArray<{
+		readonly hostNodeId: string;
+		readonly expression: string;
+	}>;
 	readonly asyncBoundaries: ReadonlyArray<{ readonly hostNodeId: string | null }>;
 	readonly stateWrites: ReadonlyArray<StateWrite>;
 	readonly bindingReads: ReadonlyArray<BindingRead>;
@@ -432,7 +435,7 @@ function collectElementFacts(
 			continue;
 		}
 
-		if (attributeName === 'use') {
+		if (attributeName === 'attach') {
 			graph.behaviorProps.push({
 				hostNodeId,
 				expression: sourceForNode(source, attribute.value as AnyNode),
@@ -509,8 +512,9 @@ function collectForLocatorFacts(
 	if (!statementSource.startsWith('@for')) return;
 
 	const itemName = forOfItemName(node.left as AnyNode | undefined);
-	const iterable = expressionPath(node.right as AnyNode | undefined)
-		?? sourceForNode(source, node.right as AnyNode).trim();
+	const iterable =
+		expressionPath(node.right as AnyNode | undefined) ??
+		sourceForNode(source, node.right as AnyNode).trim();
 	if (!itemName || !iterable) return;
 
 	pushUniqueKeyedLoop(graph, {
@@ -518,9 +522,10 @@ function collectForLocatorFacts(
 		iterable,
 		itemName,
 		indexName: getIdentifierName(node.index),
-		key: expressionPath(node.key as AnyNode | undefined)
-			?? sourceForNode(source, node.key as AnyNode).trim()
-			?? null,
+		key:
+			expressionPath(node.key as AnyNode | undefined) ??
+			sourceForNode(source, node.key as AnyNode).trim() ??
+			null,
 		firstHostNodeId: firstHostNodeIdIn(node.body as AnyNode, graph, hostNodeIds),
 		span: sourceSpan(node),
 	});
@@ -595,7 +600,11 @@ function getExportedFunction(node: AnyNode): AnyNode | null {
 	return declaration;
 }
 
-function collectBindingReads(node: AnyNode | null | undefined, hostNodeId: string, graph: MutableSemanticGraph): void {
+function collectBindingReads(
+	node: AnyNode | null | undefined,
+	hostNodeId: string,
+	graph: MutableSemanticGraph,
+): void {
 	walk(node, (candidate) => {
 		if (candidate.type !== 'MemberExpression') return;
 
@@ -618,7 +627,8 @@ function containsPreventDefault(node: AnyNode | null | undefined): boolean {
 		const callee = candidate.callee as AnyNode | undefined;
 		if (
 			callee?.type === 'MemberExpression' &&
-			getPropertyName(callee.property as AnyNode, callee.computed === true) === 'preventDefault'
+			getPropertyName(callee.property as AnyNode, callee.computed === true) ===
+				'preventDefault'
 		) {
 			found = true;
 		}
@@ -631,7 +641,10 @@ function collectionMethodWrite(node: AnyNode, source: string): StateWrite | null
 	const callee = node.callee as AnyNode | undefined;
 	if (callee?.type !== 'MemberExpression') return null;
 
-	const method = getPropertyName(callee.property as AnyNode | undefined, callee.computed === true);
+	const method = getPropertyName(
+		callee.property as AnyNode | undefined,
+		callee.computed === true,
+	);
 	if (!method || !mutatingCollectionMethods.has(method)) return null;
 
 	const target = expressionPathInfo(callee.object as AnyNode | undefined, source);
@@ -655,7 +668,10 @@ type ExpressionPathInfo = {
 	readonly segments: ReadonlyArray<StatePathSegment>;
 };
 
-function expressionPathInfo(node: AnyNode | null | undefined, source: string): ExpressionPathInfo | null {
+function expressionPathInfo(
+	node: AnyNode | null | undefined,
+	source: string,
+): ExpressionPathInfo | null {
 	if (!node) return null;
 
 	if (node.type === 'Identifier') {
@@ -873,7 +889,8 @@ function pushUniqueBranchAnchor(graph: MutableSemanticGraph, next: BranchAnchor)
 	if (
 		graph.branchAnchors.some(
 			(anchor) =>
-				anchor.condition === next.condition && anchor.firstHostNodeId === next.firstHostNodeId,
+				anchor.condition === next.condition &&
+				anchor.firstHostNodeId === next.firstHostNodeId,
 		)
 	) {
 		return;
@@ -900,9 +917,7 @@ function pushUniqueKeyedLoop(graph: MutableSemanticGraph, next: KeyedLoop): void
 
 function pushUniqueEmptyFallback(graph: MutableSemanticGraph, next: EmptyFallback): void {
 	if (
-		graph.emptyFallbacks.some(
-			(fallback) => fallback.firstHostNodeId === next.firstHostNodeId,
-		)
+		graph.emptyFallbacks.some((fallback) => fallback.firstHostNodeId === next.firstHostNodeId)
 	) {
 		return;
 	}

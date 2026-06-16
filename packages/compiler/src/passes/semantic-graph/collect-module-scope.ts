@@ -5,11 +5,8 @@ import {
 	frameworkImportRequiredDiagnostic,
 } from './diagnostics.ts';
 import { evaluateSyncPolicyConstant } from './collect-state.ts';
-import {
-	getFrameworkApiForCall,
-	getCallName,
-	isFrameworkApiName,
-} from './imports.ts';
+import { getFrameworkApiForCall, getCallName, isFrameworkApiName } from './imports.ts';
+import { collectSharedDefinition } from './collect-shared.ts';
 import type { WalkState } from './types.ts';
 
 export function collectModuleScopeGraphCreation(statement: AnyNode, state: WalkState): void {
@@ -37,6 +34,11 @@ export function collectModuleScopeGraphCreation(statement: AnyNode, state: WalkS
 			state.graph.diagnostics.push(
 				frameworkImportRequiredDiagnostic(callName, init, state.filename),
 			);
+			continue;
+		}
+
+		if (frameworkApi === 'shared' && name && init) {
+			collectSharedDefinition({ name, init, state });
 			continue;
 		}
 

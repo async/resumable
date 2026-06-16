@@ -3,6 +3,7 @@ export type * from './diagnostics.ts';
 
 export { compileTsrxModule } from './compile-module.ts';
 export { CompilerPassGraphError, validateCompilerPassGraph } from './pass-graph.ts';
+export { formatCompilerArtifactDump, runCompilerPassPipeline } from './pass-pipeline.ts';
 export { defaultCompilerPasses } from './pass-registry.ts';
 
 export { analyzeCaptures } from './passes/capture-analysis.ts';

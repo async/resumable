@@ -5,7 +5,7 @@ import {
 } from '@async/resumable-protocol';
 import { deserializeGraphValue, type SerializedGraphPayload } from '@async/resumable-serializer';
 import { applyDomJournalEntries } from './dom-journal.ts';
-import { createRuntimeGraph, type RuntimeGraph } from './graph.ts';
+import { createRuntimeGraph, type RuntimeGraph, type RuntimeGraphRead } from './graph.ts';
 import {
 	createResumeRuntime,
 	type ResumeDomElement,
@@ -37,6 +37,7 @@ export type ResumePayloadScriptsInput = EncodedPayloadScripts & {
 	readonly root: ResumeDomElement;
 	readonly loadSymbol: ResumeRuntimeInput['loadSymbol'];
 	readonly createVisibilityObserver?: ResumeRuntimeInput['createVisibilityObserver'];
+	readonly createRemovalObserver?: ResumeRuntimeInput['createRemovalObserver'];
 	readonly applyDomJournal?: ResumeRuntimeInput['applyDomJournal'];
 };
 
@@ -138,14 +139,150 @@ export function createRuntimeGraphFromStatePayload(payload: ProtocolStatePayload
 					? undefined
 					: deserializeGraphValue(cell.value as SerializedGraphPayload),
 		})),
+		sharedDefinitions: payload.sharedDefinitions,
 	});
+}
+
+function createRuntimeGraphFromResumePayload(input: {
+	readonly state: ProtocolStatePayload;
+	readonly view: ProtocolViewPayload;
+	readonly root: ResumeDomElement;
+	readonly loadSymbol: ResumeRuntimeInput['loadSymbol'];
+}): RuntimeGraph {
+	let graph!: RuntimeGraph;
+	graph = createRuntimeGraph({
+		cells: input.state.cells.map((cell) => ({
+			graphNodeId: cell.graphNodeId,
+			value:
+				cell.value === undefined
+					? undefined
+					: deserializeGraphValue(cell.value as SerializedGraphPayload),
+		})),
+		sharedDefinitions: input.state.sharedDefinitions,
+		asyncComputed: asyncComputedFromPayload(input, () => graph),
+	});
+
+	return graph;
+}
+
+function asyncComputedFromPayload(
+	input: {
+		readonly state: ProtocolStatePayload;
+		readonly view: ProtocolViewPayload;
+		readonly root: ResumeDomElement;
+		readonly loadSymbol: ResumeRuntimeInput['loadSymbol'];
+	},
+	graphRef: () => RuntimeGraph,
+) {
+	const runnerSymbols = asyncRunnerSymbolsByGraphNode(input.view);
+
+	return input.state.computed.flatMap((computed) => {
+		if (computed.async !== true) return [];
+
+		const runnerSymbolId = runnerSymbols.get(computed.graphNodeId);
+		if (!runnerSymbolId) return [];
+
+		const dependencies = computed.dependencies ?? [];
+		return [
+			{
+				graphNodeId: computed.graphNodeId,
+				dependencies,
+				initialSnapshot: computed.snapshot
+					? deserializeAsyncComputedSnapshot(computed.snapshot)
+					: undefined,
+				key: (read: RuntimeGraphRead) => dependencyKey(dependencies, read),
+				run: async ({
+					key,
+					signal,
+					read,
+				}: {
+					readonly key: unknown;
+					readonly signal: AbortSignal;
+					readonly read: RuntimeGraphRead;
+				}) => {
+					const symbol = await input.loadSymbol(runnerSymbolId);
+					return await symbol({
+						graph: graphRef(),
+						read,
+						key,
+						signal,
+						element: input.root,
+						getElementHandle: () => undefined,
+					});
+				},
+			},
+		];
+	});
+}
+
+function deserializeAsyncComputedSnapshot(
+	snapshot: NonNullable<ProtocolStatePayload['computed'][number]['snapshot']>,
+) {
+	if (snapshot.status === 'idle') return snapshot;
+
+	const key = deserializeGraphValue(snapshot.key as SerializedGraphPayload);
+	if (snapshot.status === 'pending') {
+		return {
+			status: snapshot.status,
+			version: snapshot.version,
+			key,
+		};
+	}
+
+	if (snapshot.status === 'fulfilled') {
+		return {
+			status: snapshot.status,
+			version: snapshot.version,
+			key,
+			value: deserializeGraphValue(snapshot.value as SerializedGraphPayload),
+		};
+	}
+
+	return {
+		status: snapshot.status,
+		version: snapshot.version,
+		key,
+		error: deserializeGraphValue(snapshot.error as SerializedGraphPayload),
+	};
+}
+
+function asyncRunnerSymbolsByGraphNode(view: ProtocolViewPayload): Map<string, string> {
+	const symbols = new Map<string, string>();
+
+	for (const boundary of view.asyncBoundaries) {
+		for (const read of boundary.asyncReads) {
+			if (!read.runnerSymbolId || symbols.has(read.graphNodeId)) continue;
+
+			symbols.set(read.graphNodeId, read.runnerSymbolId);
+		}
+	}
+
+	return symbols;
+}
+
+function dependencyKey(
+	dependencies: NonNullable<ProtocolStatePayload['computed'][number]['dependencies']>,
+	read: RuntimeGraphRead,
+): unknown {
+	if (dependencies.length === 0) return undefined;
+	if (dependencies.length === 1) {
+		const dependency = dependencies[0];
+		return read(dependency.graphNodeId, dependency.path);
+	}
+
+	return dependencies.map((dependency) => read(dependency.graphNodeId, dependency.path));
 }
 
 export async function resumeFromPayloadScripts(
 	input: ResumePayloadScriptsInput,
 ): Promise<ResumePayloadScriptsResult> {
 	const decoded = decodePayloadScripts(input);
-	const graph = createRuntimeGraphFromStatePayload(decoded.state);
+	const graph = createRuntimeGraphFromResumePayload({
+		state: decoded.state,
+		view: decoded.view,
+		root: input.root,
+		loadSymbol: input.loadSymbol,
+	});
 	let runtime: ResumeRuntime | undefined;
 	const applyDomJournal =
 		input.applyDomJournal ??
@@ -161,6 +298,7 @@ export async function resumeFromPayloadScripts(
 		view: decoded.view,
 		loadSymbol: input.loadSymbol,
 		createVisibilityObserver: input.createVisibilityObserver,
+		createRemovalObserver: input.createRemovalObserver,
 		applyDomJournal,
 	});
 
@@ -182,6 +320,7 @@ export async function resumeFromPayloadDocument(
 		root: input.root,
 		loadSymbol: input.loadSymbol,
 		createVisibilityObserver: input.createVisibilityObserver,
+		createRemovalObserver: input.createRemovalObserver,
 		applyDomJournal: input.applyDomJournal,
 	});
 }
@@ -232,37 +371,30 @@ function assertStatePayloadShape(payload: unknown): asserts payload is ProtocolS
 			'Invalid async/state payload: expected version.',
 		);
 	}
-	if (!Array.isArray(payload.cells)) {
-		throw invalidPayloadShapeError(
-			'async/state',
-			'Invalid async/state payload: expected cells array.',
-		);
-	}
+	const cells = requiredPayloadArrayField(payload, 'cells', 'async/state');
 
-	for (const [index, cell] of payload.cells.entries()) {
+	for (const [index, cell] of cells.entries()) {
 		const context = `async/state cell[${index}]`;
 		assertRecordShape(cell, context);
 		assertStringField(cell, 'graphNodeId', context);
 		assertStringField(cell, 'name', context);
 		assertStateValueKind(cell, context);
+		if ('value' in cell) assertSerializedGraphPayload(cell.value, `${context}.value`);
 	}
 
-	if ('computed' in payload) {
-		if (!Array.isArray(payload.computed)) {
-			throw invalidPayloadShapeError(
-				'async/state',
-				'Invalid async/state payload: expected computed array.',
-			);
-		}
+	const computedEntries = requiredPayloadArrayField(payload, 'computed', 'async/state');
 
-		for (const [index, computed] of payload.computed.entries()) {
-			const context = `async/state computed[${index}]`;
-			assertRecordShape(computed, context);
-			assertStringField(computed, 'graphNodeId', context);
-			assertStringField(computed, 'name', context);
-			assertBooleanField(computed, 'async', context);
-		}
+	for (const [index, computed] of computedEntries.entries()) {
+		const context = `async/state computed[${index}]`;
+		assertRecordShape(computed, context);
+		assertStringField(computed, 'graphNodeId', context);
+		assertStringField(computed, 'name', context);
+		assertBooleanField(computed, 'async', context);
+		assertOptionalComputedDependencies(computed, context);
+		assertOptionalAsyncComputedSnapshot(computed, context);
 	}
+
+	assertOptionalSharedDefinitions(payload);
 }
 
 function assertViewPayloadShape(payload: unknown): asserts payload is ProtocolViewPayload {
@@ -279,32 +411,23 @@ function assertViewPayloadShape(payload: unknown): asserts payload is ProtocolVi
 		);
 	}
 
-	for (const key of [
-		'locators',
-		'events',
-		'domUpdates',
-		'behaviors',
-		'elementHandles',
-		'asyncBoundaries',
-	]) {
-		if (!Array.isArray(payload[key])) {
-			throw invalidPayloadShapeError(
-				'async/view',
-				`Invalid async/view payload: expected ${key} array.`,
-			);
-		}
-	}
+	const locators = requiredPayloadArrayField(payload, 'locators', 'async/view');
+	const events = requiredPayloadArrayField(payload, 'events', 'async/view');
+	const domUpdates = requiredPayloadArrayField(payload, 'domUpdates', 'async/view');
+	const behaviors = requiredPayloadArrayField(payload, 'behaviors', 'async/view');
+	const elementHandles = requiredPayloadArrayField(payload, 'elementHandles', 'async/view');
+	const asyncBoundaries = requiredPayloadArrayField(payload, 'asyncBoundaries', 'async/view');
 
-	for (const [index, locator] of payload.locators.entries()) {
+	for (const [index, locator] of locators.entries()) {
 		const context = `async/view locator[${index}]`;
 		assertRecordShape(locator, context);
 		assertStringField(locator, 'hostNodeId', context);
 		assertLiteralField(locator, 'strategy', 'dom-order', context);
-		assertNumberField(locator, 'index', context);
+		assertNonNegativeIntegerField(locator, 'index', context);
 		assertStringField(locator, 'tagName', context);
 	}
 
-	for (const [index, event] of payload.events.entries()) {
+	for (const [index, event] of events.entries()) {
 		const context = `async/view event[${index}]`;
 		assertRecordShape(event, context);
 		assertStringField(event, 'hostNodeId', context);
@@ -315,7 +438,7 @@ function assertViewPayloadShape(payload: unknown): asserts payload is ProtocolVi
 		}
 	}
 
-	for (const [index, domUpdate] of payload.domUpdates.entries()) {
+	for (const [index, domUpdate] of domUpdates.entries()) {
 		const context = `async/view domUpdate[${index}]`;
 		assertRecordShape(domUpdate, context);
 		assertStringField(domUpdate, 'hostNodeId', context);
@@ -326,15 +449,19 @@ function assertViewPayloadShape(payload: unknown): asserts payload is ProtocolVi
 		assertOptionalStringField(domUpdate, 'symbolId', context);
 	}
 
-	for (const [index, behavior] of payload.behaviors.entries()) {
+	for (const [index, behavior] of behaviors.entries()) {
 		const context = `async/view behavior[${index}]`;
 		assertRecordShape(behavior, context);
 		assertStringField(behavior, 'hostNodeId', context);
 		assertStringField(behavior, 'source', context);
+		assertStringField(behavior, 'functionSource', context);
+		assertStringArrayField(behavior, 'inputSources', context);
+		assertOptionalArrayField(behavior, 'inputValues', context);
+		assertOptionalBehaviorInputGraphReads(behavior, context);
 		assertOptionalStringField(behavior, 'symbolId', context);
 	}
 
-	for (const [index, handle] of payload.elementHandles.entries()) {
+	for (const [index, handle] of elementHandles.entries()) {
 		const context = `async/view elementHandle[${index}]`;
 		assertRecordShape(handle, context);
 		assertStringField(handle, 'hostNodeId', context);
@@ -342,7 +469,7 @@ function assertViewPayloadShape(payload: unknown): asserts payload is ProtocolVi
 		assertStringField(handle, 'name', context);
 	}
 
-	for (const [index, boundary] of payload.asyncBoundaries.entries()) {
+	for (const [index, boundary] of asyncBoundaries.entries()) {
 		const context = `async/view asyncBoundary[${index}]`;
 		assertRecordShape(boundary, context);
 		assertStringField(boundary, 'id', context);
@@ -360,6 +487,21 @@ function assertProtocolVersion(version: unknown, type: RuntimePayloadType): void
 
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function requiredPayloadArrayField(
+	record: Record<string, unknown>,
+	key: string,
+	payloadType: RuntimePayloadType,
+): ReadonlyArray<unknown> {
+	if (!Object.prototype.hasOwnProperty.call(record, key) || !Array.isArray(record[key])) {
+		throw invalidPayloadShapeError(
+			payloadType,
+			`Invalid ${payloadType} payload: expected ${key} array.`,
+		);
+	}
+
+	return record[key];
 }
 
 function assertRecordShape(
@@ -392,15 +534,6 @@ function assertOptionalStringField(
 		throw invalidPayloadShapeError(
 			contextPayloadType(context),
 			`Invalid ${context}: expected ${key} string.`,
-		);
-	}
-}
-
-function assertNumberField(record: Record<string, unknown>, key: string, context: string): void {
-	if (typeof record[key] !== 'number') {
-		throw invalidPayloadShapeError(
-			contextPayloadType(context),
-			`Invalid ${context}: expected ${key} number.`,
 		);
 	}
 }
@@ -460,6 +593,657 @@ function assertOptionalStringArrayField(
 	}
 }
 
+function assertOptionalArrayField(
+	record: Record<string, unknown>,
+	key: string,
+	context: string,
+): void {
+	if (record[key] !== undefined && !Array.isArray(record[key])) {
+		throw invalidPayloadShapeError(
+			contextPayloadType(context),
+			`Invalid ${context}: expected ${key} array.`,
+		);
+	}
+}
+
+function assertOptionalBehaviorInputGraphReads(
+	record: Record<string, unknown>,
+	context: string,
+): void {
+	if (record.inputGraphReads === undefined) return;
+	if (!Array.isArray(record.inputGraphReads)) {
+		throw invalidPayloadShapeError(
+			contextPayloadType(context),
+			`Invalid ${context}: expected inputGraphReads array.`,
+		);
+	}
+
+	for (const [index, read] of record.inputGraphReads.entries()) {
+		const readContext = `${context}.inputGraphReads[${index}]`;
+		assertRecordShape(read, readContext);
+		assertNonNegativeIntegerField(read, 'inputIndex', readContext);
+		assertStringField(read, 'source', readContext);
+		assertStringField(read, 'graphNodeId', readContext);
+		assertStringArrayField(read, 'path', readContext);
+	}
+}
+
+function assertOptionalComputedDependencies(
+	record: Record<string, unknown>,
+	context: string,
+): void {
+	if (record.dependencies === undefined) return;
+	if (!Array.isArray(record.dependencies)) {
+		throw invalidPayloadShapeError(
+			contextPayloadType(context),
+			`Invalid ${context}: expected dependencies array.`,
+		);
+	}
+
+	for (const [index, dependency] of record.dependencies.entries()) {
+		const dependencyContext = `${context}.dependencies[${index}]`;
+		assertRecordShape(dependency, dependencyContext);
+		assertStringField(dependency, 'graphNodeId', dependencyContext);
+		assertStringArrayField(dependency, 'path', dependencyContext);
+	}
+}
+
+function assertOptionalSharedDefinitions(record: Record<string, unknown>): void {
+	if (record.sharedDefinitions === undefined) return;
+	if (!Array.isArray(record.sharedDefinitions)) {
+		throw invalidPayloadShapeError(
+			'async/state',
+			'Invalid async/state payload: expected sharedDefinitions array.',
+		);
+	}
+
+	for (const [index, definition] of record.sharedDefinitions.entries()) {
+		const context = `async/state sharedDefinitions[${index}]`;
+		assertRecordShape(definition, context);
+		assertStringField(definition, 'id', context);
+		assertStringField(definition, 'name', context);
+		assertStringField(definition, 'exportedName', context);
+		assertOptionalSharedScope(definition, context);
+		assertNonNegativeIntegerField(definition, 'version', context);
+		assertStringArrayField(definition, 'graphNodeIds', context);
+		assertOptionalSharedDependencies(definition, context);
+		assertOptionalSharedReturnProperties(definition, context);
+	}
+}
+
+function assertOptionalSharedScope(record: Record<string, unknown>, context: string): void {
+	if (record.scope === undefined) return;
+	if (record.scope === 'request' || record.scope === 'container' || record.scope === 'page') {
+		return;
+	}
+
+	throw invalidPayloadShapeError(
+		contextPayloadType(context),
+		`Invalid ${context}: expected scope request, container, or page.`,
+	);
+}
+
+function assertOptionalSharedDependencies(record: Record<string, unknown>, context: string): void {
+	if (record.dependencies === undefined) return;
+	if (!Array.isArray(record.dependencies)) {
+		throw invalidPayloadShapeError(
+			contextPayloadType(context),
+			`Invalid ${context}: expected dependencies array.`,
+		);
+	}
+
+	for (const [index, dependency] of record.dependencies.entries()) {
+		const dependencyContext = `${context}.dependencies[${index}]`;
+		assertRecordShape(dependency, dependencyContext);
+		assertStringField(dependency, 'definitionId', dependencyContext);
+		assertStringField(dependency, 'definitionName', dependencyContext);
+	}
+}
+
+function assertOptionalSharedReturnProperties(
+	record: Record<string, unknown>,
+	context: string,
+): void {
+	if (record.returnProperties === undefined) return;
+	if (!Array.isArray(record.returnProperties)) {
+		throw invalidPayloadShapeError(
+			contextPayloadType(context),
+			`Invalid ${context}: expected returnProperties array.`,
+		);
+	}
+
+	for (const [index, property] of record.returnProperties.entries()) {
+		const propertyContext = `${context}.returnProperties[${index}]`;
+		assertRecordShape(property, propertyContext);
+		assertStringField(property, 'kind', propertyContext);
+		assertStringField(property, 'name', propertyContext);
+
+		if (property.kind === 'graph') {
+			assertStringField(property, 'graphNodeId', propertyContext);
+			assertStringArrayField(property, 'path', propertyContext);
+			continue;
+		}
+
+		if (property.kind === 'method') continue;
+
+		throw invalidPayloadShapeError(
+			contextPayloadType(propertyContext),
+			`Invalid ${propertyContext}: expected graph or method return property kind.`,
+		);
+	}
+}
+
+function assertOptionalAsyncComputedSnapshot(
+	record: Record<string, unknown>,
+	context: string,
+): void {
+	if (record.snapshot === undefined) return;
+
+	const snapshotContext = `${context}.snapshot`;
+	assertRecordShape(record.snapshot, snapshotContext);
+	assertStringField(record.snapshot, 'status', snapshotContext);
+	assertNonNegativeIntegerField(record.snapshot, 'version', snapshotContext);
+
+	if (record.snapshot.status === 'idle') {
+		if (record.snapshot.version !== 0) {
+			throw invalidPayloadShapeError(
+				contextPayloadType(snapshotContext),
+				`Invalid ${snapshotContext}: expected idle version 0.`,
+			);
+		}
+		return;
+	}
+
+	if (
+		record.snapshot.status !== 'pending' &&
+		record.snapshot.status !== 'fulfilled' &&
+		record.snapshot.status !== 'rejected'
+	) {
+		throw invalidPayloadShapeError(
+			contextPayloadType(snapshotContext),
+			`Invalid ${snapshotContext}: expected supported async snapshot status.`,
+		);
+	}
+
+	if (!('key' in record.snapshot)) {
+		throw invalidPayloadShapeError(
+			contextPayloadType(snapshotContext),
+			`Invalid ${snapshotContext}: expected key.`,
+		);
+	}
+	assertSerializedGraphPayload(record.snapshot.key, `${snapshotContext}.key`);
+
+	if (record.snapshot.status === 'fulfilled' && !('value' in record.snapshot)) {
+		throw invalidPayloadShapeError(
+			contextPayloadType(snapshotContext),
+			`Invalid ${snapshotContext}: expected value.`,
+		);
+	}
+	if (record.snapshot.status === 'fulfilled') {
+		assertSerializedGraphPayload(record.snapshot.value, `${snapshotContext}.value`);
+	}
+
+	if (record.snapshot.status === 'rejected' && !('error' in record.snapshot)) {
+		throw invalidPayloadShapeError(
+			contextPayloadType(snapshotContext),
+			`Invalid ${snapshotContext}: expected error.`,
+		);
+	}
+	if (record.snapshot.status === 'rejected') {
+		assertSerializedGraphPayload(record.snapshot.error, `${snapshotContext}.error`);
+	}
+}
+
+function assertSerializedGraphPayload(value: unknown, context: string): void {
+	assertRecordShape(value, context);
+	if (value.version !== 1) {
+		throw invalidPayloadShapeError(
+			contextPayloadType(context),
+			`Invalid ${context}: expected version 1.`,
+		);
+	}
+	if (!('root' in value)) {
+		throw invalidPayloadShapeError(
+			contextPayloadType(context),
+			`Invalid ${context}: expected root.`,
+		);
+	}
+	if (!Array.isArray(value.records)) {
+		throw invalidPayloadShapeError(
+			contextPayloadType(context),
+			`Invalid ${context}: expected records array.`,
+		);
+	}
+
+	const recordIds = new Set<number>();
+	const recordsById = new Map<number, Record<string, unknown>>();
+	for (const [index, record] of value.records.entries()) {
+		const recordContext = `${context}.records[${index}]`;
+		assertSerializedRecord(record, recordContext);
+		const recordId = (record as { readonly id: number }).id;
+		if (recordIds.has(recordId)) {
+			throw invalidPayloadShapeError(
+				contextPayloadType(recordContext),
+				`Invalid ${recordContext}: duplicate record id ${String(recordId)}.`,
+			);
+		}
+		recordIds.add(recordId);
+		recordsById.set(recordId, record as Record<string, unknown>);
+	}
+
+	assertSerializedSlot(value.root, `${context}.root`);
+	assertSerializedSlotReferences(value.root, `${context}.root`, recordIds);
+	for (const [index, record] of value.records.entries()) {
+		const recordContext = `${context}.records[${index}]`;
+		const recordObject = record as Record<string, unknown>;
+		assertSerializedRecordReferences(recordObject, recordContext, recordIds);
+		assertArrayBufferViewRecordRange(recordObject, recordContext, recordsById);
+	}
+}
+
+function assertSerializedRecord(value: unknown, context: string): void {
+	assertRecordShape(value, context);
+	assertNonNegativeIntegerField(value, 'id', context);
+	assertStringField(value, 'type', context);
+
+	if (value.type === 'object') {
+		assertSerializedEntries(value, 'fields', context, 'field');
+		return;
+	}
+	if (value.type === 'array') {
+		assertSerializedSlotArray(value.items, `${context}.items`);
+		return;
+	}
+	if (value.type === 'map') {
+		assertSerializedEntries(value, 'entries', context, 'entry');
+		return;
+	}
+	if (value.type === 'set') {
+		assertSerializedSlotArray(value.values, `${context}.values`);
+		return;
+	}
+	if (value.type === 'date' || value.type === 'url') {
+		assertStringField(value, 'value', context);
+		if (value.type === 'date') assertIsoDateString(value.value, context);
+		if (value.type === 'url') assertUrlString(value.value, context);
+		return;
+	}
+	if (value.type === 'regexp') {
+		assertStringField(value, 'source', context);
+		assertStringField(value, 'flags', context);
+		assertRegExpParts(value.source, value.flags, context);
+		return;
+	}
+	if (value.type === 'array-buffer') {
+		assertByteArrayField(value, 'bytes', context);
+		return;
+	}
+	if (value.type === 'typed-array') {
+		assertStringField(value, 'arrayType', context);
+		assertSupportedTypedArrayType(value.arrayType, context);
+		assertSerializedSlot(value.buffer, `${context}.buffer`);
+		assertNonNegativeIntegerField(value, 'byteOffset', context);
+		assertNonNegativeIntegerField(value, 'length', context);
+		return;
+	}
+	if (value.type === 'data-view') {
+		assertSerializedSlot(value.buffer, `${context}.buffer`);
+		assertNonNegativeIntegerField(value, 'byteOffset', context);
+		assertNonNegativeIntegerField(value, 'byteLength', context);
+		return;
+	}
+
+	throw invalidPayloadShapeError(
+		contextPayloadType(context),
+		`Invalid ${context}: expected supported serialized record type.`,
+	);
+}
+
+function assertSupportedTypedArrayType(value: unknown, context: string): void {
+	if (
+		value === 'Int8Array' ||
+		value === 'Uint8Array' ||
+		value === 'Uint8ClampedArray' ||
+		value === 'Int16Array' ||
+		value === 'Uint16Array' ||
+		value === 'Int32Array' ||
+		value === 'Uint32Array' ||
+		value === 'Float32Array' ||
+		value === 'Float64Array' ||
+		value === 'BigInt64Array' ||
+		value === 'BigUint64Array'
+	) {
+		return;
+	}
+
+	throw invalidPayloadShapeError(
+		contextPayloadType(context),
+		`Invalid ${context}: expected supported typed array type.`,
+	);
+}
+
+function assertSerializedRecordReferences(
+	record: Record<string, unknown>,
+	context: string,
+	recordIds: ReadonlySet<number>,
+): void {
+	if (record.type === 'object') {
+		assertSerializedEntryReferences(record.fields, `${context}.fields`, recordIds, false);
+		return;
+	}
+	if (record.type === 'array') {
+		assertSerializedSlotArrayReferences(record.items, `${context}.items`, recordIds);
+		return;
+	}
+	if (record.type === 'map') {
+		assertSerializedEntryReferences(record.entries, `${context}.entries`, recordIds, true);
+		return;
+	}
+	if (record.type === 'set') {
+		assertSerializedSlotArrayReferences(record.values, `${context}.values`, recordIds);
+		return;
+	}
+	if (record.type === 'typed-array' || record.type === 'data-view') {
+		assertSerializedSlotReferences(record.buffer, `${context}.buffer`, recordIds);
+	}
+}
+
+function assertSerializedEntryReferences(
+	value: unknown,
+	context: string,
+	recordIds: ReadonlySet<number>,
+	keyIsSlot: boolean,
+): void {
+	if (!Array.isArray(value)) return;
+
+	for (const [index, entry] of value.entries()) {
+		if (!Array.isArray(entry) || entry.length !== 2) continue;
+		if (keyIsSlot) {
+			assertSerializedSlotReferences(entry[0], `${context}[${index}][0]`, recordIds);
+		}
+		assertSerializedSlotReferences(entry[1], `${context}[${index}][1]`, recordIds);
+	}
+}
+
+function assertSerializedSlotArrayReferences(
+	value: unknown,
+	context: string,
+	recordIds: ReadonlySet<number>,
+): void {
+	if (!Array.isArray(value)) return;
+
+	for (const [index, slot] of value.entries()) {
+		assertSerializedSlotReferences(slot, `${context}[${index}]`, recordIds);
+	}
+}
+
+function assertSerializedSlotReferences(
+	value: unknown,
+	context: string,
+	recordIds: ReadonlySet<number>,
+): void {
+	if (!isRecord(value) || !('$ref' in value) || typeof value.$ref !== 'number') return;
+	if (!Number.isInteger(value.$ref) || value.$ref < 0) {
+		throw invalidPayloadShapeError(
+			contextPayloadType(context),
+			`Invalid ${context}: expected $ref non-negative integer.`,
+		);
+	}
+	if (recordIds.has(value.$ref)) return;
+
+	throw invalidPayloadShapeError(
+		contextPayloadType(context),
+		`Invalid ${context}: unknown record ref ${String(value.$ref)}.`,
+	);
+}
+
+function assertArrayBufferViewRecordRange(
+	record: Record<string, unknown>,
+	context: string,
+	recordsById: ReadonlyMap<number, Record<string, unknown>>,
+): void {
+	if (record.type !== 'typed-array' && record.type !== 'data-view') return;
+
+	const bufferRecord = referencedArrayBufferRecord(record.buffer, context, recordsById);
+	const bytes = bufferRecord.bytes;
+	if (!Array.isArray(bytes)) return;
+
+	const byteOffset = record.byteOffset as number;
+	if (record.type === 'typed-array') {
+		const elementByteLength = typedArrayElementByteLength(record.arrayType);
+		if (byteOffset % elementByteLength !== 0) {
+			throw invalidPayloadShapeError(
+				contextPayloadType(context),
+				`Invalid ${context}: typed-array byteOffset must align to element byte length.`,
+			);
+		}
+		const byteLength = (record.length as number) * elementByteLength;
+		if (byteOffset + byteLength > bytes.length) {
+			throw invalidPayloadShapeError(
+				contextPayloadType(context),
+				`Invalid ${context}: typed-array byte range exceeds referenced array-buffer.`,
+			);
+		}
+		return;
+	}
+
+	const byteLength = record.byteLength as number;
+	if (byteOffset + byteLength > bytes.length) {
+		throw invalidPayloadShapeError(
+			contextPayloadType(context),
+			`Invalid ${context}: data-view byte range exceeds referenced array-buffer.`,
+		);
+	}
+}
+
+function referencedArrayBufferRecord(
+	value: unknown,
+	context: string,
+	recordsById: ReadonlyMap<number, Record<string, unknown>>,
+): Record<string, unknown> {
+	if (!isRecord(value) || typeof value.$ref !== 'number') {
+		throw invalidPayloadShapeError(
+			contextPayloadType(context),
+			`Invalid ${context}: expected buffer array-buffer ref.`,
+		);
+	}
+
+	const record = recordsById.get(value.$ref);
+	if (record?.type !== 'array-buffer') {
+		throw invalidPayloadShapeError(
+			contextPayloadType(context),
+			`Invalid ${context}: expected buffer array-buffer ref.`,
+		);
+	}
+
+	return record;
+}
+
+function typedArrayElementByteLength(value: unknown): number {
+	if (value === 'Int8Array' || value === 'Uint8Array' || value === 'Uint8ClampedArray') {
+		return 1;
+	}
+	if (value === 'Int16Array' || value === 'Uint16Array') return 2;
+	if (value === 'Int32Array' || value === 'Uint32Array' || value === 'Float32Array') {
+		return 4;
+	}
+	return 8;
+}
+
+function assertSerializedEntries(
+	record: Record<string, unknown>,
+	key: string,
+	context: string,
+	entryName: string,
+): void {
+	const entries = record[key];
+	if (!Array.isArray(entries)) {
+		throw invalidPayloadShapeError(
+			contextPayloadType(context),
+			`Invalid ${context}: expected ${key} array.`,
+		);
+	}
+
+	for (const [index, entry] of entries.entries()) {
+		if (!Array.isArray(entry) || entry.length !== 2) {
+			throw invalidPayloadShapeError(
+				contextPayloadType(context),
+				`Invalid ${context}.${key}[${index}]: expected ${entryName} pair.`,
+			);
+		}
+		if (key === 'fields' && typeof entry[0] !== 'string') {
+			throw invalidPayloadShapeError(
+				contextPayloadType(context),
+				`Invalid ${context}.${key}[${index}]: expected field name string.`,
+			);
+		} else if (key === 'entries') {
+			assertSerializedSlot(entry[0], `${context}.${key}[${index}][0]`);
+		}
+		assertSerializedSlot(entry[1], `${context}.${key}[${index}][1]`);
+	}
+}
+
+function assertSerializedSlotArray(value: unknown, context: string): void {
+	if (!Array.isArray(value)) {
+		throw invalidPayloadShapeError(
+			contextPayloadType(context),
+			`Invalid ${context}: expected array.`,
+		);
+	}
+
+	for (const [index, slot] of value.entries()) {
+		assertSerializedSlot(slot, `${context}[${index}]`);
+	}
+}
+
+function assertByteArrayField(record: Record<string, unknown>, key: string, context: string): void {
+	if (!Array.isArray(record[key])) {
+		throw invalidPayloadShapeError(
+			contextPayloadType(context),
+			`Invalid ${context}: expected ${key} array.`,
+		);
+	}
+
+	for (const value of record[key]) {
+		if (typeof value !== 'number' || !Number.isInteger(value) || value < 0 || value > 255) {
+			throw invalidPayloadShapeError(
+				contextPayloadType(context),
+				`Invalid ${context}: expected ${key} byte array.`,
+			);
+		}
+	}
+}
+
+function assertSerializedSlot(value: unknown, context: string): void {
+	if (
+		value === null ||
+		typeof value === 'string' ||
+		typeof value === 'number' ||
+		typeof value === 'boolean'
+	) {
+		return;
+	}
+	if (!isRecord(value)) {
+		throw invalidPayloadShapeError(
+			contextPayloadType(context),
+			`Invalid ${context}: expected serialized slot.`,
+		);
+	}
+	if ('$ref' in value) {
+		assertNonNegativeIntegerField(value, '$ref', context);
+		return;
+	}
+	if (value.$type === 'undefined') return;
+	if (value.$type === 'bigint') {
+		assertStringField(value, 'value', context);
+		assertBigIntString(value.value, context);
+		return;
+	}
+	if (value.$type === 'date' || value.$type === 'url') {
+		assertStringField(value, 'value', context);
+		if (value.$type === 'date') assertIsoDateString(value.value, context);
+		if (value.$type === 'url') assertUrlString(value.value, context);
+		return;
+	}
+	if (value.$type === 'regexp') {
+		assertStringField(value, 'source', context);
+		assertStringField(value, 'flags', context);
+		assertRegExpParts(value.source, value.flags, context);
+		return;
+	}
+
+	throw invalidPayloadShapeError(
+		contextPayloadType(context),
+		`Invalid ${context}: expected serialized slot.`,
+	);
+}
+
+function assertNonNegativeIntegerField(
+	record: Record<string, unknown>,
+	key: string,
+	context: string,
+): void {
+	if (typeof record[key] !== 'number' || !Number.isInteger(record[key]) || record[key] < 0) {
+		throw invalidPayloadShapeError(
+			contextPayloadType(context),
+			`Invalid ${context}: expected ${key} non-negative integer.`,
+		);
+	}
+}
+
+function assertBigIntString(value: unknown, context: string): void {
+	if (typeof value === 'string' && /^-?(0|[1-9]\d*)$/.test(value)) return;
+
+	throw invalidPayloadShapeError(
+		contextPayloadType(context),
+		`Invalid ${context}: expected bigint string.`,
+	);
+}
+
+function assertIsoDateString(value: unknown, context: string): void {
+	if (typeof value === 'string') {
+		const date = new Date(value);
+		if (!Number.isNaN(date.getTime()) && date.toISOString() === value) return;
+	}
+
+	throw invalidPayloadShapeError(
+		contextPayloadType(context),
+		`Invalid ${context}: expected ISO date string.`,
+	);
+}
+
+function assertUrlString(value: unknown, context: string): void {
+	if (typeof value === 'string') {
+		try {
+			new URL(value);
+			return;
+		} catch {
+			// Report as a payload diagnostic below.
+		}
+	}
+
+	throw invalidPayloadShapeError(
+		contextPayloadType(context),
+		`Invalid ${context}: expected valid URL string.`,
+	);
+}
+
+function assertRegExpParts(source: unknown, flags: unknown, context: string): void {
+	if (typeof source === 'string' && typeof flags === 'string') {
+		try {
+			new RegExp(source, flags);
+			return;
+		} catch {
+			// Report as a payload diagnostic below.
+		}
+	}
+
+	throw invalidPayloadShapeError(
+		contextPayloadType(context),
+		`Invalid ${context}: expected valid regexp pattern and flags.`,
+	);
+}
+
 function assertStateValueKind(record: Record<string, unknown>, context: string): void {
 	if (
 		record.valueKind !== 'scalar' &&
@@ -477,7 +1261,7 @@ function assertStateValueKind(record: Record<string, unknown>, context: string):
 function assertCommentAnchor(value: unknown, context: string): void {
 	assertRecordShape(value, context);
 	assertLiteralField(value, 'strategy', 'dom-order-comment', context);
-	assertNumberField(value, 'index', context);
+	assertNonNegativeIntegerField(value, 'index', context);
 }
 
 function assertAsyncBoundaryReads(value: unknown, context: string): void {

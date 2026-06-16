@@ -79,7 +79,7 @@ export function App() @{
   <main
     data-selected={pipeline.selectedId}
     data-revision={pipeline.revision}
-    use={pipelineReceiptBehavior({
+    attach={pipelineReceiptBehavior({
       moduleId: selected.id,
       revision: pipeline.revision,
     })}
@@ -142,7 +142,7 @@ export function App() @{
       <section
         el={receiptHost}
         data-owner={selected.id}
-        use={pipelineReceiptBehavior({
+        attach={pipelineReceiptBehavior({
           moduleId: selected.id,
           revision: pipeline.revision,
         })}

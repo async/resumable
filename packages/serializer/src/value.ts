@@ -62,6 +62,13 @@ export type SerializedRecord =
 			readonly buffer: SerializedSlot;
 			readonly byteOffset: number;
 			readonly length: number;
+	  }
+	| {
+			readonly id: number;
+			readonly type: 'data-view';
+			readonly buffer: SerializedSlot;
+			readonly byteOffset: number;
+			readonly byteLength: number;
 	  };
 
 export type TypedArrayName =
@@ -153,6 +160,9 @@ export function deserializeGraphValue(payload: SerializedGraphPayload): unknown 
 	for (const record of payload.records) {
 		if (record.type === 'typed-array') {
 			shells.set(record.id, createTypedArray(record, shells));
+		}
+		if (record.type === 'data-view') {
+			shells.set(record.id, createDataView(record, shells));
 		}
 	}
 
@@ -268,9 +278,24 @@ function encodeSlot(
 			id,
 			type: 'typed-array',
 			arrayType,
-			buffer: encodeTypedArrayBuffer(value, path, seen, records, diagnostics),
+			buffer: encodeArrayBufferViewBuffer(value, path, seen, records, diagnostics),
 			byteOffset: typedArrayByteOffset(value),
 			length: typedArrayLength(value),
+		});
+		return { $ref: id };
+	}
+	if (value instanceof DataView) {
+		const existingId = seen.get(value);
+		if (existingId !== undefined) return { $ref: existingId };
+
+		const id = records.length;
+		seen.set(value, id);
+		records.push({
+			id,
+			type: 'data-view',
+			buffer: encodeArrayBufferViewBuffer(value, path, seen, records, diagnostics),
+			byteOffset: value.byteOffset,
+			byteLength: value.byteLength,
 		});
 		return { $ref: id };
 	}
@@ -403,7 +428,7 @@ function typedArrayName(value: object): TypedArrayName | null {
 	return null;
 }
 
-function encodeTypedArrayBuffer(
+function encodeArrayBufferViewBuffer(
 	value: object,
 	path: ReadonlyArray<string>,
 	seen: WeakMap<object, number>,
@@ -468,6 +493,16 @@ function createTypedArray(
 	return new BigUint64Array(buffer, record.byteOffset, record.length);
 }
 
+function createDataView(
+	record: Extract<SerializedRecord, { readonly type: 'data-view' }>,
+	shells: ReadonlyMap<number, unknown>,
+): unknown {
+	const buffer = decodeSlot(record.buffer, shells);
+	if (!(buffer instanceof ArrayBuffer)) return undefined;
+
+	return new DataView(buffer, record.byteOffset, record.byteLength);
+}
+
 function unsupportedDiagnostic(
 	value: unknown,
 	path: ReadonlyArray<string>,
@@ -487,7 +522,7 @@ function unsupportedDiagnostic(
 		suggestions: [
 			{
 				message:
-					'Move runtime resources into use={...}, make the value serializable state, or derive it with computed().',
+					'Move runtime resources into attach={...}, make the value serializable state, or derive it with computed().',
 			},
 		],
 		docsUrl: 'https://async.await.dev/errors/AA_SERIALIZE_UNSUPPORTED_VALUE',

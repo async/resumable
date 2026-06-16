@@ -60,6 +60,21 @@ describe('Vite config integration', () => {
 		});
 	});
 
+	test('disables Vite modulepreload only for client environment builds', () => {
+		const plugin = getResumablePlugin();
+
+		expect(callConfigEnvironment(plugin, 'client', {})).toMatchObject({
+			build: {
+				modulePreload: false,
+			},
+		});
+		expect(callConfigEnvironment(plugin, 'ssr', {})).toMatchObject({
+			build: expect.not.objectContaining({
+				modulePreload: false,
+			}),
+		});
+	});
+
 	test('defaults SSR environment output from only the server entry input', () => {
 		const plugin = getResumablePlugin();
 

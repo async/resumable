@@ -1,14 +1,20 @@
 import { box } from '@async/witness';
+import { runtimeSizeReport, type RuntimeSizeReport } from '../test-support/runtime-size.ts';
 
 // Product truth: SSR resumability needs server-produced HTML. This box uses the
 // fixture's real Vite app build, then serves it through Vite preview. Preview
 // must run the built server entry for HTML requests; the box must not rewrite
 // built HTML to make the assertion pass.
 const FIXTURE = 'fixtures/vite-ssr';
+const DIST = `${FIXTURE}/dist`;
 const INDEX = `${FIXTURE}/dist/index.html`;
+const MANIFEST = `${FIXTURE}/dist/async-resumable-manifest.json`;
 const COUNTER = '[data-counter]';
 const REQUESTS = '/__async-resumable-fixture-requests';
 const WAIT = { timeoutMs: 10_000 };
+const MAX_INTERACTION_RUNTIME_CHUNK_GZIP_BYTES = 2_175;
+const MAX_INTERACTION_SCRIPTS_GZIP_BYTES = 2_650;
+const MAX_INTERACTION_SCRIPT_COUNT = 3;
 
 export default box(
 	{
@@ -54,7 +60,17 @@ export default box(
 		await expect.page.text(page, COUNTER, '1', WAIT);
 		const afterInteraction = await readScriptRequests(preview);
 		receipt.note(`SSR interaction script requests: ${formatRequests(afterInteraction)}`);
-		assertScriptsLoadedAfterInteraction(beforeInteraction, afterInteraction);
+		const interactionScripts = assertScriptsLoadedAfterInteraction(
+			beforeInteraction,
+			afterInteraction,
+		);
+		const interactionRuntimeSize = await runtimeSizeReport({
+			dist: DIST,
+			manifest: MANIFEST,
+			scripts: interactionScripts,
+		});
+		receipt.note(`SSR interaction runtime size:\n${interactionRuntimeSize.summary}`);
+		assertRuntimeSizeBudget(interactionRuntimeSize);
 		await expect.page.outcome(page, { consoleErrors: 0, failedRequests: 0 }, WAIT);
 
 		await preview.close();
@@ -95,7 +111,7 @@ function assertNoScriptsLoaded(log: ScriptRequestLog): void {
 function assertScriptsLoadedAfterInteraction(
 	beforeInteraction: ScriptRequestLog,
 	afterInteraction: ScriptRequestLog,
-): void {
+): readonly string[] {
 	const loadedAfterInteraction = afterInteraction.scripts.slice(beforeInteraction.scripts.length);
 	if (loadedAfterInteraction.length === 0) {
 		throw new Error(
@@ -105,6 +121,34 @@ function assertScriptsLoadedAfterInteraction(
 	if (!loadedAfterInteraction.some((path) => path.includes('/build/async-'))) {
 		throw new Error(
 			`Expected first interaction to request built async chunks, but saw: ${loadedAfterInteraction.join(', ')}`,
+		);
+	}
+	return loadedAfterInteraction;
+}
+
+function assertRuntimeSizeBudget(report: RuntimeSizeReport): void {
+	const largestRuntimeChunk = report.largestRuntimeChunk?.gzipBytes ?? 0;
+	if (largestRuntimeChunk > MAX_INTERACTION_RUNTIME_CHUNK_GZIP_BYTES) {
+		throw new Error(
+			`SSR interaction runtime chunk gzip budget exceeded: ${largestRuntimeChunk} > ${MAX_INTERACTION_RUNTIME_CHUNK_GZIP_BYTES}\n${report.summary}`,
+		);
+	}
+	if (report.asyncScripts.gzipBytes > MAX_INTERACTION_SCRIPTS_GZIP_BYTES) {
+		throw new Error(
+			`SSR interaction script gzip budget exceeded: ${report.asyncScripts.gzipBytes} > ${MAX_INTERACTION_SCRIPTS_GZIP_BYTES}\n${report.summary}`,
+		);
+	}
+	if (report.asyncScripts.count > MAX_INTERACTION_SCRIPT_COUNT) {
+		throw new Error(
+			`SSR interaction script count budget exceeded: ${report.asyncScripts.count} > ${MAX_INTERACTION_SCRIPT_COUNT}\n${report.summary}`,
+		);
+	}
+	const chunksWithVitePreloadHelper = report.runtimeChunks
+		.filter((chunk) => chunk.hasVitePreloadHelper)
+		.map((chunk) => chunk.fileName);
+	if (chunksWithVitePreloadHelper.length > 0) {
+		throw new Error(
+			`SSR interaction runtime chunks still include the Vite preload helper: ${chunksWithVitePreloadHelper.join(', ')}\n${report.summary}`,
 		);
 	}
 }

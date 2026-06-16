@@ -85,7 +85,18 @@ export function Handles() @{
 }
 `;
 
-const componentUseSource = `
+const elementHandleInStateSource = `
+import { state, element } from '@async/resumable';
+
+export function Handles() @{
+	let input = element<HTMLInputElement>();
+	const saved = state(input);
+
+	<input el={input} />
+}
+`;
+
+const componentAttachSource = `
 import { state } from '@async/resumable';
 
 function ChartWrapper() @{
@@ -96,7 +107,7 @@ export function Dashboard() @{
 	const config = state({ color: 'red' });
 
 	<section>
-		<ChartWrapper use={chart(config)} />
+		<ChartWrapper attach={chart(config)} />
 	</section>
 }
 `;
@@ -118,6 +129,35 @@ export function Form() @{
 			Save
 		</button>
 	</form>
+}
+`;
+
+const graphDestructureDefaultSource = `
+import { state } from '@async/resumable';
+
+export function Menu() @{
+	const menu = state({ title: undefined });
+	const { title: menuTitle = "Untitled" } = menu;
+
+	<p>{menuTitle}</p>
+}
+`;
+
+const sharedCycleSource = `
+import { shared } from '@async/resumable';
+
+export const session = shared(() => {
+	const c = cart();
+	return { c };
+});
+
+export const cart = shared(() => {
+	const s = session();
+	return { s };
+});
+
+export function App() @{
+	<p>ok</p>
 }
 `;
 
@@ -168,6 +208,33 @@ test('buildSemanticGraph reports module-scope graph state creation', async () =>
 				end: computedStart + 'computed(() => leaked * 2)'.length,
 			},
 			docsUrl: 'https://async.await.dev/errors/AA_STATE_MODULE_SCOPE',
+		}),
+	]);
+});
+
+test('buildSemanticGraph reports shared definition dependency cycles', async () => {
+	const graph = await buildSemanticGraph({
+		filename: 'src/shared-cycle.tsrx',
+		source: sharedCycleSource,
+	});
+	const cycleStart = sharedCycleSource.indexOf('session();');
+
+	expect(graph.diagnostics).toEqual([
+		expect.objectContaining({
+			code: 'AA_SHARED_DEFINITION_CYCLE',
+			severity: 'error',
+			phase: 'semantic-graph',
+			passId: 'tsrx-semantic-graph',
+			artifactKeys: ['semanticGraph'],
+			title: 'Shared definitions cannot depend on each other circularly',
+			message: 'Cannot create shared definition cycle "session -> cart -> session".',
+			why: 'shared() instances are created from graph context during initial render and resume. A cycle would require one shared instance before its own dependency graph can be created.',
+			primarySpan: {
+				filename: 'src/shared-cycle.tsrx',
+				start: cycleStart,
+				end: cycleStart + 'session()'.length,
+			},
+			docsUrl: 'https://async.await.dev/errors/AA_SHARED_DEFINITION_CYCLE',
 		}),
 	]);
 });
@@ -425,7 +492,7 @@ test('buildSemanticGraph reports invalid and duplicate element handle bindings',
 			suggestions: [
 				{
 					message:
-						'Create a handle with element<T>() and bind that handle with el={handle}. Keep DOM-backed resources in use={...}.',
+						'Create a handle with element<T>() and bind that handle with el={handle}. Keep DOM-backed resources in attach={...}.',
 				},
 			],
 			docsUrl: 'https://async.await.dev/errors/AA_ELEMENT_HANDLE_REQUIRED',
@@ -456,24 +523,60 @@ test('buildSemanticGraph reports invalid and duplicate element handle bindings',
 	]);
 });
 
-test('buildSemanticGraph reports use on components instead of treating it as a host behavior', async () => {
+test('buildSemanticGraph reports element handles stored in state', async () => {
 	const graph = await buildSemanticGraph({
-		filename: 'src/Dashboard.tsrx',
-		source: componentUseSource,
+		filename: 'src/Handles.tsrx',
+		source: elementHandleInStateSource,
 	});
-	const behaviorStart = componentUseSource.indexOf('chart(config)');
+	const handleStart = elementHandleInStateSource.indexOf('input);');
 
-	expect(graph.behaviors).toEqual([]);
 	expect(graph.diagnostics).toEqual([
 		expect.objectContaining({
-			code: 'AA_USE_HOST_ELEMENT_REQUIRED',
+			code: 'AA_STATE_ELEMENT_HANDLE_UNSERIALIZABLE',
 			severity: 'error',
 			phase: 'semantic-graph',
 			passId: 'tsrx-semantic-graph',
 			artifactKeys: ['semanticGraph'],
-			title: 'use can only be bound to host elements',
+			title: 'element() handles cannot be stored in state',
 			message:
-				'Cannot bind use={chart(config)} on component <ChartWrapper>. use installs DOM behavior and needs a concrete host element owner.',
+				'Cannot store element handle "input" in state "saved" because element handles are DOM locators, not serializable graph data.',
+			why: 'state() values are serialized into async/state and resumed without running component bodies. An element() handle resolves through DOM locator metadata and must stay outside serialized graph state.',
+			primarySpan: {
+				filename: 'src/Handles.tsrx',
+				start: handleStart,
+				end: handleStart + 'input'.length,
+			},
+			statePath: 'saved',
+			source: 'input',
+			suggestions: [
+				{
+					message:
+						'Keep element handles in element() bindings and bind them with el={handle}. Store serializable ids, flags, or data in state() instead.',
+				},
+			],
+			docsUrl: 'https://async.await.dev/errors/AA_STATE_ELEMENT_HANDLE_UNSERIALIZABLE',
+		}),
+	]);
+});
+
+test('buildSemanticGraph reports attach on components instead of treating it as a host behavior', async () => {
+	const graph = await buildSemanticGraph({
+		filename: 'src/Dashboard.tsrx',
+		source: componentAttachSource,
+	});
+	const behaviorStart = componentAttachSource.indexOf('chart(config)');
+
+	expect(graph.behaviors).toEqual([]);
+	expect(graph.diagnostics).toEqual([
+		expect.objectContaining({
+			code: 'AA_ATTACH_HOST_ELEMENT_REQUIRED',
+			severity: 'error',
+			phase: 'semantic-graph',
+			passId: 'tsrx-semantic-graph',
+			artifactKeys: ['semanticGraph'],
+			title: 'attach can only be bound to host elements',
+			message:
+				'Cannot bind attach={chart(config)} on component <ChartWrapper>. attach installs DOM behavior and needs a concrete host element owner.',
 			why: 'Element behaviors are resumed by locating the owning DOM element. A component is not a DOM locator and may render zero, one, or many host nodes.',
 			primarySpan: {
 				filename: 'src/Dashboard.tsrx',
@@ -483,10 +586,41 @@ test('buildSemanticGraph reports use on components instead of treating it as a h
 			suggestions: [
 				{
 					message:
-						'Move use={...} to a host element such as <canvas>, or make the component forward behavior to a known host element in its own TSRX body.',
+						'Move attach={...} to a host element such as <canvas>, or make the component forward behavior to a known host element in its own TSRX body.',
 				},
 			],
-			docsUrl: 'https://async.await.dev/errors/AA_USE_HOST_ELEMENT_REQUIRED',
+			docsUrl: 'https://async.await.dev/errors/AA_ATTACH_HOST_ELEMENT_REQUIRED',
+		}),
+	]);
+});
+
+test('buildSemanticGraph reports graph destructuring defaults as unsupported aliases', async () => {
+	const graph = await buildSemanticGraph({
+		filename: 'src/Menu.tsrx',
+		source: graphDestructureDefaultSource,
+	});
+	const defaultStart = graphDestructureDefaultSource.indexOf('menuTitle = "Untitled"');
+
+	expect(graph.aliases).toEqual([]);
+	expect(graph.diagnostics).toEqual([
+		expect.objectContaining({
+			code: 'AA_STATE_DESTRUCTURE_DEFAULT_UNSUPPORTED',
+			severity: 'error',
+			phase: 'semantic-graph',
+			passId: 'tsrx-semantic-graph',
+			artifactKeys: ['semanticGraph'],
+			title: 'Graph destructuring defaults are not supported yet',
+			message:
+				'Cannot create graph alias "menuTitle" from "menu.title" with a default value.',
+			why: 'A destructuring default must run only when the property value is undefined. The current graph alias artifact can represent a graph path, but not a fallback expression without changing JavaScript semantics.',
+			primarySpan: {
+				filename: 'src/Menu.tsrx',
+				start: defaultStart,
+				end: defaultStart + 'menuTitle = "Untitled"'.length,
+			},
+			statePath: 'menu.title',
+			source: 'menuTitle = "Untitled"',
+			docsUrl: 'https://async.await.dev/errors/AA_STATE_DESTRUCTURE_DEFAULT_UNSUPPORTED',
 		}),
 	]);
 });

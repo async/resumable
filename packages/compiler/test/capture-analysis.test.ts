@@ -16,7 +16,7 @@ export function App() @{
 
 	<section>
 		<button onClick={[() => count++, () => menu.open = false]}>{count}</button>
-		<canvas use={chart(menu)} />
+		<canvas attach={chart(menu)} />
 	</section>
 }
 `;
@@ -731,7 +731,7 @@ export function App() @{
 			suggestions: [
 				{
 					message:
-						'Represent durable data with state()/computed(), hoist serializable helpers to module scope, or move DOM-backed setup into a host element behavior with use.',
+						'Represent durable data with state()/computed(), hoist serializable helpers to module scope, or move DOM-backed setup into a host element behavior with attach.',
 				},
 			],
 			docsUrl: 'https://async.await.dev/errors/AA_CAPTURE_UNSUPPORTED_VALUE',
@@ -784,7 +784,7 @@ export function App() @{
 			suggestions: [
 				{
 					message:
-						'Use element() with el={...} for DOM locators, or move DOM-backed setup into a host element behavior with use.',
+						'Use element() with el={...} for DOM locators, or move DOM-backed setup into a host element behavior with attach.',
 				},
 			],
 			docsUrl: 'https://async.await.dev/errors/AA_CAPTURE_UNSUPPORTED_VALUE',
@@ -837,7 +837,7 @@ export function App() @{
 			suggestions: [
 				{
 					message:
-						'Use element() with el={...} for DOM locators, or move DOM-backed setup into a host element behavior with use.',
+						'Use element() with el={...} for DOM locators, or move DOM-backed setup into a host element behavior with attach.',
 				},
 			],
 			docsUrl: 'https://async.await.dev/errors/AA_CAPTURE_UNSUPPORTED_VALUE',

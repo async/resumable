@@ -8,6 +8,7 @@ export {
 	FrameworkApiRuntimeError,
 	type FrameworkApiRuntimeDiagnostic,
 	type FrameworkApiName,
+	type SharedDefinition,
 	type SharedOptions,
 	type SharedScope,
 } from '@async/resumable-core';

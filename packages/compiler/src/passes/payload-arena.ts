@@ -1,6 +1,7 @@
 import type {
 	PayloadArenaArtifact,
 	PayloadArenaInput,
+	PayloadBehavior,
 	SemanticGraphBinding,
 } from '../artifacts.ts';
 import { resolveGraphPath, semanticAliasMap, uniqueBy } from '../artifact-helpers/graph-paths.ts';
@@ -26,7 +27,26 @@ export function planPayloadArena(input: PayloadArenaInput): PayloadArenaArtifact
 			graphNodeId: binding.id,
 			name: binding.name,
 			async: binding.async === true,
+			functionSource: binding.functionSource,
+			dependencies: binding.dependencies,
 		}));
+	const sharedDefinitions = input.semanticGraph.sharedDefinitions.map((definition) => {
+		const graphNodeIds = input.semanticGraph.graphBindings
+			.filter((binding) => binding.sharedDefinitionId === definition.id)
+			.map((binding) => binding.id);
+
+		return {
+			id: definition.id,
+			name: definition.name,
+			exportedName: definition.exportedName,
+			...(definition.scope ? { scope: definition.scope } : {}),
+			...(definition.dependencies ? { dependencies: definition.dependencies } : {}),
+			...(definition.returnProperties
+				? { returnProperties: definition.returnProperties }
+				: {}),
+			graphNodeIds,
+		};
+	});
 	const locators = input.semanticGraph.hostNodes.map((hostNode, index) => ({
 		hostNodeId: hostNode.id,
 		strategy: 'dom-order' as const,
@@ -93,12 +113,16 @@ export function planPayloadArena(input: PayloadArenaInput): PayloadArenaArtifact
 			(read) => `${read.graphNodeId}:${read.path.join('.')}:${read.source}`,
 		),
 	}));
+	const behaviors = input.semanticGraph.behaviors.map((behavior) =>
+		payloadBehavior(behavior, bindings, aliases),
+	);
 
 	return {
 		passId: 'payload-arena',
 		state: {
 			cells,
 			computed,
+			sharedDefinitions,
 		},
 		view: {
 			locators,
@@ -108,7 +132,7 @@ export function planPayloadArena(input: PayloadArenaInput): PayloadArenaArtifact
 				(domUpdate) =>
 					`${domUpdate.hostNodeId}:${domUpdateTargetKey(domUpdate.target)}:${domUpdate.graphNodeId}:${domUpdate.path.join('.')}`,
 			),
-			behaviors: input.semanticGraph.behaviors,
+			behaviors,
 			elementHandles,
 			asyncBoundaries,
 		},
@@ -122,4 +146,141 @@ function domUpdateTargetKey(
 	if (target.kind === 'attribute') return `attribute:${target.name}`;
 	if (target.kind === 'property') return `property:${target.name}`;
 	return target.kind;
+}
+
+function payloadBehavior(
+	behavior: PayloadArenaInput['semanticGraph']['behaviors'][number],
+	bindings: ReadonlyMap<string, SemanticGraphBinding>,
+	aliases: ReturnType<typeof semanticAliasMap>,
+): PayloadBehavior {
+	const inputValues = behaviorInputValues(behavior.inputSources, bindings, aliases);
+	const inputGraphReads = behaviorInputGraphReads(behavior.inputSources, bindings, aliases);
+	if (!inputValues && !inputGraphReads) return behavior;
+
+	return {
+		...behavior,
+		...(inputValues ? { inputValues } : {}),
+		...(inputGraphReads ? { inputGraphReads } : {}),
+	};
+}
+
+function behaviorInputGraphReads(
+	inputSources: ReadonlyArray<string>,
+	bindings: ReadonlyMap<string, SemanticGraphBinding>,
+	aliases: ReturnType<typeof semanticAliasMap>,
+): PayloadBehavior['inputGraphReads'] | undefined {
+	const graphReads = inputSources.flatMap((inputSource, inputIndex) => {
+		const resolved = resolveGraphPath(inputSource, bindings, aliases);
+		if (!resolved) return [];
+		if (resolved.binding.kind !== 'state' && resolved.binding.kind !== 'computed') return [];
+
+		return [
+			{
+				inputIndex,
+				source: inputSource,
+				graphNodeId: resolved.binding.id,
+				path: resolved.path,
+			},
+		];
+	});
+
+	return graphReads.length > 0 ? graphReads : undefined;
+}
+
+function behaviorInputValues(
+	inputSources: ReadonlyArray<string>,
+	bindings: ReadonlyMap<string, SemanticGraphBinding>,
+	aliases: ReturnType<typeof semanticAliasMap>,
+): ReadonlyArray<unknown> | undefined {
+	if (inputSources.length === 0) return undefined;
+
+	const values: unknown[] = [];
+	for (const inputSource of inputSources) {
+		const inputValue =
+			literalBehaviorInputValue(inputSource) ??
+			graphInitialBehaviorInputValue(inputSource, bindings, aliases);
+		if (!inputValue) return undefined;
+
+		values.push(inputValue.value);
+	}
+
+	return values;
+}
+
+type BehaviorInputValue = {
+	readonly value: unknown;
+};
+
+function graphInitialBehaviorInputValue(
+	source: string,
+	bindings: ReadonlyMap<string, SemanticGraphBinding>,
+	aliases: ReturnType<typeof semanticAliasMap>,
+): BehaviorInputValue | undefined {
+	const resolved = resolveGraphPath(source, bindings, aliases);
+	if (!resolved || resolved.binding.kind !== 'state') return undefined;
+
+	return pathInitialValue(resolved.binding.initialValue, resolved.path);
+}
+
+function pathInitialValue(
+	initialValue: unknown,
+	path: ReadonlyArray<string>,
+): BehaviorInputValue | undefined {
+	if (initialValue === undefined) return undefined;
+
+	let value = initialValue;
+	for (const segment of path) {
+		if (value === null || value === undefined) return undefined;
+
+		if (Array.isArray(value)) {
+			const index = Number(segment);
+			if (!Number.isInteger(index) || index < 0 || index >= value.length) {
+				return undefined;
+			}
+			value = value[index];
+			continue;
+		}
+
+		if (typeof value !== 'object') return undefined;
+		if (!(segment in value)) return undefined;
+
+		value = (value as Record<string, unknown>)[segment];
+	}
+
+	if (value === undefined) return undefined;
+	return { value };
+}
+
+function literalBehaviorInputValue(source: string): BehaviorInputValue | undefined {
+	const valueSource = source.trim();
+	if (valueSource === 'true') return { value: true };
+	if (valueSource === 'false') return { value: false };
+	if (valueSource === 'null') return { value: null };
+	if (/^[+-]?(?:\d+|\d*\.\d+)(?:e[+-]?\d+)?$/i.test(valueSource)) {
+		const value = Number(valueSource);
+		if (Number.isFinite(value)) return { value };
+	}
+
+	const stringValue = literalStringValue(valueSource);
+	if (stringValue) return stringValue;
+
+	return undefined;
+}
+
+function literalStringValue(source: string): BehaviorInputValue | undefined {
+	if (/^"(?:\\.|[^"\\])*"$/.test(source)) {
+		try {
+			return { value: JSON.parse(source) as unknown };
+		} catch {
+			return undefined;
+		}
+	}
+
+	if (/^'(?:\\.|[^'\\])*'$/.test(source)) {
+		return {
+			value: source.slice(1, -1).replace(/\\'/g, "'").replace(/\\\\/g, '\\'),
+		};
+	}
+
+	return undefined;
 }

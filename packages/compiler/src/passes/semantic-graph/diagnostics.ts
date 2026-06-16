@@ -4,6 +4,7 @@ import type {
 	SemanticElementHandleBinding,
 	SemanticGraphDiagnostic,
 	SemanticGraphBinding,
+	SemanticSharedDependency,
 	SemanticStateRead,
 	SemanticTemplateRead,
 	SourceSpan,
@@ -111,6 +112,88 @@ export function asyncBoundaryRequiredDiagnostic(
 	};
 }
 
+export function graphDestructureDefaultUnsupportedDiagnostic(input: {
+	readonly localName: string;
+	readonly target: string;
+	readonly source: string;
+	readonly sourceSpan?: SourceSpan;
+}): SemanticGraphDiagnostic {
+	return {
+		code: 'AA_STATE_DESTRUCTURE_DEFAULT_UNSUPPORTED',
+		severity: 'error',
+		phase: 'semantic-graph',
+		title: 'Graph destructuring defaults are not supported yet',
+		message: `Cannot create graph alias "${input.localName}" from "${input.target}" with a default value.`,
+		why: 'A destructuring default must run only when the property value is undefined. The current graph alias artifact can represent a graph path, but not a fallback expression without changing JavaScript semantics.',
+		primarySpan: input.sourceSpan,
+		passId: 'tsrx-semantic-graph',
+		artifactKeys: ['semanticGraph'],
+		statePath: input.target,
+		source: input.source,
+		suggestions: [
+			{
+				message:
+					'Use an explicit computed() for fallback logic, or read the graph path directly without a destructuring default.',
+			},
+		],
+		docsUrl: 'https://async.await.dev/errors/AA_STATE_DESTRUCTURE_DEFAULT_UNSUPPORTED',
+	};
+}
+
+export function stateElementHandleUnsupportedDiagnostic(input: {
+	readonly stateName: string;
+	readonly handleName: string;
+	readonly source: string;
+	readonly sourceSpan?: SourceSpan;
+}): SemanticGraphDiagnostic {
+	return {
+		code: 'AA_STATE_ELEMENT_HANDLE_UNSERIALIZABLE',
+		severity: 'error',
+		phase: 'semantic-graph',
+		title: 'element() handles cannot be stored in state',
+		message: `Cannot store element handle "${input.handleName}" in state "${input.stateName}" because element handles are DOM locators, not serializable graph data.`,
+		why: 'state() values are serialized into async/state and resumed without running component bodies. An element() handle resolves through DOM locator metadata and must stay outside serialized graph state.',
+		primarySpan: input.sourceSpan,
+		passId: 'tsrx-semantic-graph',
+		artifactKeys: ['semanticGraph'],
+		statePath: input.stateName,
+		source: input.source,
+		suggestions: [
+			{
+				message:
+					'Keep element handles in element() bindings and bind them with el={handle}. Store serializable ids, flags, or data in state() instead.',
+			},
+		],
+		docsUrl: 'https://async.await.dev/errors/AA_STATE_ELEMENT_HANDLE_UNSERIALIZABLE',
+	};
+}
+
+export function sharedDefinitionCycleDiagnostic(input: {
+	readonly cycle: ReadonlyArray<string>;
+	readonly closingDependency: SemanticSharedDependency;
+}): SemanticGraphDiagnostic {
+	const cycleSource = input.cycle.join(' -> ');
+
+	return {
+		code: 'AA_SHARED_DEFINITION_CYCLE',
+		severity: 'error',
+		phase: 'semantic-graph',
+		title: 'Shared definitions cannot depend on each other circularly',
+		message: `Cannot create shared definition cycle "${cycleSource}".`,
+		why: 'shared() instances are created from graph context during initial render and resume. A cycle would require one shared instance before its own dependency graph can be created.',
+		primarySpan: input.closingDependency.sourceSpan,
+		passId: 'tsrx-semantic-graph',
+		artifactKeys: ['semanticGraph'],
+		suggestions: [
+			{
+				message:
+					'Break the shared() dependency cycle by passing plain data between definitions or by moving the shared read into an event method that runs after instance creation.',
+			},
+		],
+		docsUrl: 'https://async.await.dev/errors/AA_SHARED_DEFINITION_CYCLE',
+	};
+}
+
 export function elementHandleRequiredDiagnostic(
 	binding: SemanticElementHandleBinding,
 	graphBinding: SemanticGraphBinding | undefined,
@@ -131,7 +214,7 @@ export function elementHandleRequiredDiagnostic(
 		suggestions: [
 			{
 				message:
-					'Create a handle with element<T>() and bind that handle with el={handle}. Keep DOM-backed resources in use={...}.',
+					'Create a handle with element<T>() and bind that handle with el={handle}. Keep DOM-backed resources in attach={...}.',
 			},
 		],
 		docsUrl: 'https://async.await.dev/errors/AA_ELEMENT_HANDLE_REQUIRED',
@@ -162,7 +245,7 @@ export function duplicateElementHandleDiagnostic(
 	};
 }
 
-export function useHostElementRequiredDiagnostic(
+export function attachHostElementRequiredDiagnostic(
 	ownerTagName: string | null,
 	value: AnyNode,
 	state: Pick<WalkState, 'filename' | 'source'>,
@@ -171,11 +254,11 @@ export function useHostElementRequiredDiagnostic(
 	const owner = ownerTagName ? `<${ownerTagName}>` : 'a non-host element';
 
 	return {
-		code: 'AA_USE_HOST_ELEMENT_REQUIRED',
+		code: 'AA_ATTACH_HOST_ELEMENT_REQUIRED',
 		severity: 'error',
 		phase: 'semantic-graph',
-		title: 'use can only be bound to host elements',
-		message: `Cannot bind use={${source}} on component ${owner}. use installs DOM behavior and needs a concrete host element owner.`,
+		title: 'attach can only be bound to host elements',
+		message: `Cannot bind attach={${source}} on component ${owner}. attach installs DOM behavior and needs a concrete host element owner.`,
 		why: 'Element behaviors are resumed by locating the owning DOM element. A component is not a DOM locator and may render zero, one, or many host nodes.',
 		primarySpan: sourceSpan(value, state.filename),
 		passId: 'tsrx-semantic-graph',
@@ -183,10 +266,10 @@ export function useHostElementRequiredDiagnostic(
 		suggestions: [
 			{
 				message:
-					'Move use={...} to a host element such as <canvas>, or make the component forward behavior to a known host element in its own TSRX body.',
+					'Move attach={...} to a host element such as <canvas>, or make the component forward behavior to a known host element in its own TSRX body.',
 			},
 		],
-		docsUrl: 'https://async.await.dev/errors/AA_USE_HOST_ELEMENT_REQUIRED',
+		docsUrl: 'https://async.await.dev/errors/AA_ATTACH_HOST_ELEMENT_REQUIRED',
 	};
 }
 

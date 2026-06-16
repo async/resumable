@@ -15,7 +15,7 @@ The fixture source lives at [src/App.tsrx](./src/App.tsrx).
 - Synchronous `preventDefault()` policy extraction from an `onKeyDown` guard
   that reads graph state and event fields.
 - Async `computed()` under `@try` / `@pending` / `@catch`.
-- Host element behavior through `use={markProofPanel(panelLabel)}`.
+- Host element behavior through `attach={markProofPanel(panelLabel)}`.
 - DOM locator ownership through `element()` plus `el={searchInput}`.
 
 ## Future Pass-Boundary Tests
@@ -24,7 +24,7 @@ The same authored fixture should be consumed one layer at a time:
 
 1. **TSRX semantic graph**: identify the component, host nodes, dynamic text
    bindings, event props, `state()` sites, `computed()` sites, `element()` site,
-   `el` binding, and `use` binding.
+   `el` binding, and `attach` binding.
 2. **State lowering**: prove `count++`, `menu.query = ...`, `menu.open = false`,
    `menu.lastAction = ...`, and reads such as `menu.open` and `details.title`
    lower through graph access.

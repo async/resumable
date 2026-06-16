@@ -11,7 +11,7 @@ test('framework APIs fail loudly when executed without the TSRX compiler', () =>
 	expect(() => element()).toThrow(
 		'@async/resumable element() must be compiled from a .tsrx file before it can run.',
 	);
-	expect(() => shared('session', () => ({ user: 'Ada' }), { scope: 'page' })).toThrow(
+	expect(() => shared(() => ({ user: 'Ada' }), { scope: 'page' })).toThrow(
 		'@async/resumable shared() must be compiled from a .tsrx file before it can run.',
 	);
 });

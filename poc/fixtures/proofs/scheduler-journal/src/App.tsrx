@@ -207,7 +207,7 @@ export function App() @{
       <section
         el={detailsHost}
         data-current={selected.id}
-        use={journalBehavior({
+        attach={journalBehavior({
           scope: "branch",
           id: selected.id,
           revision: journal.revision,
@@ -236,7 +236,7 @@ export function App() @{
         <li data-active={item.id === journal.selectedId}>
           <article
             data-row-status={item.status}
-            use={journalBehavior({
+            attach={journalBehavior({
               scope: "row",
               id: item.id,
               revision: journal.revision,

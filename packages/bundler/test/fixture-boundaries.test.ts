@@ -45,13 +45,21 @@ describe('fixture framework boundaries', () => {
 			expect(source).not.toContain('applyDomJournalEntries');
 			expect(source).not.toContain('applyDomJournal');
 		}
-		expect(csrEntry).toContain("import { render } from '@async/resumable/runtime';");
+		expect(csrEntry).toContain("import { render } from '@async/resumable/runtime/render';");
 		expect(csrEntry).not.toContain('resumeFromPayloadScripts');
-		expect(vitePlusEntry).toContain("import { render } from '@async/resumable/runtime';");
+		expect(vitePlusEntry).toContain(
+			"import { render } from '@async/resumable/runtime/render';",
+		);
 		expect(vitePlusEntry).not.toContain('resumeFromPayloadScripts');
-		expect(ssrEntry).toContain('resumeFromPayloadDocument');
+		expect(ssrEntry).toContain(
+			"import { resumeEventOnlyFromPayloadDocument } from '@async/resumable/runtime/event-only-resume';",
+		);
 		expect(ssrEntry).toContain('export async function resumeContainerEvent');
+		expect(ssrEntry).toContain('eventRecord');
+		expect(ssrEntry).not.toContain('__asyncResumeRuntimeStarted');
+		expect(ssrEntry).not.toContain('syncPolicyAlreadyApplied: true');
 		expect(ssrEntry).not.toContain('await resumeFromPayloadDocument');
+		expect(ssrEntry).not.toContain('@async/resumable/runtime/resume');
 	});
 
 	test('server shell does not emit public per-node async host markers', async () => {
@@ -60,6 +68,8 @@ describe('fixture framework boundaries', () => {
 		expect(renderShell).not.toContain('data-async-host');
 		expect(renderShell).not.toContain('hostId');
 		expect(renderShell).toContain('renderToString');
+		expect(renderShell).toContain('@async/resumable/runtime/render-to-string');
+		expect(renderShell).not.toContain("from '@async/resumable/runtime/render'");
 		expect(renderShell).toContain('resumeModuleUrl');
 		expect(renderShell).toContain('<span>hello</span>');
 	});
@@ -105,6 +115,24 @@ describe('fixture framework boundaries', () => {
 		expect(box).not.toContain('project.edit');
 		expect(box).not.toContain('render?.');
 		expect(box).not.toContain('serverHtml');
+	});
+
+	test('CSR fixture preview exposes browser script requests for size receipts', async () => {
+		const config = await readFixture('vite-csr/vite.config.ts');
+
+		expect(config).toContain('configurePreviewServer');
+		expect(config).toContain('__async-resumable-fixture-requests');
+		expect(config).toContain('isScriptRequest');
+	});
+
+	test('CSR preview box records startup and interaction runtime sizes', async () => {
+		const box = await readBox('csr-preview.box.ts');
+
+		expect(box).toContain('runtimeSizeReport');
+		expect(box).toContain('CSR startup runtime size');
+		expect(box).toContain('CSR interaction runtime size');
+		expect(box).toContain('MAX_INTERACTION_RUNTIME_CHUNK_GZIP_BYTES = 0');
+		expect(box).toContain('MAX_INTERACTION_SCRIPT_COUNT = 1');
 	});
 });
 

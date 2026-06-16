@@ -1,11 +1,15 @@
 import type { AnyNode } from '../../ast/nodes.ts';
 import type {
 	SemanticComponent,
+	SemanticBehavior,
 	SemanticElementHandleBinding,
 	SemanticEvent,
 	SemanticGraphAlias,
 	SemanticGraphBinding,
 	SemanticGraphDiagnostic,
+	SemanticModuleImport,
+	SemanticSharedDefinition,
+	SemanticSharedInstance,
 	SemanticSyncPolicyConstant,
 	SemanticHostNode,
 	SemanticLocalBinding,
@@ -19,11 +23,14 @@ export type MutableSemanticGraphArtifact = {
 	passId: 'tsrx-semantic-graph';
 	filename: string;
 	components: SemanticComponent[];
+	moduleImports: SemanticModuleImport[];
 	graphBindings: SemanticGraphBinding[];
+	sharedDefinitions: SemanticSharedDefinition[];
+	sharedInstances: SemanticSharedInstance[];
 	hostNodes: SemanticHostNode[];
 	events: SemanticEvent[];
 	syncPolicyConstants: SemanticSyncPolicyConstant[];
-	behaviors: Array<{ readonly hostNodeId: string; readonly source: string }>;
+	behaviors: SemanticBehavior[];
 	elementHandleBindings: SemanticElementHandleBinding[];
 	localBindings: SemanticLocalBinding[];
 	aliases: SemanticGraphAlias[];
@@ -42,6 +49,7 @@ export type WalkState = {
 	readonly hostIds: WeakMap<object, string>;
 	currentHostNodeId: string | null;
 	currentAsyncBoundaryId: string | null;
+	currentSharedDefinitionId: string | null;
 	nextHostId: number;
 	nextEventId: number;
 	nextBoundaryId: number;
@@ -54,7 +62,10 @@ export function createMutableSemanticGraphArtifact(filename: string): MutableSem
 		passId: 'tsrx-semantic-graph',
 		filename,
 		components: [],
+		moduleImports: [],
 		graphBindings: [],
+		sharedDefinitions: [],
+		sharedInstances: [],
 		hostNodes: [],
 		events: [],
 		syncPolicyConstants: [],
@@ -84,6 +95,7 @@ export function createWalkState(input: {
 		hostIds: new WeakMap<object, string>(),
 		currentHostNodeId: null,
 		currentAsyncBoundaryId: null,
+		currentSharedDefinitionId: null,
 		nextHostId: 0,
 		nextEventId: 0,
 		nextBoundaryId: 0,

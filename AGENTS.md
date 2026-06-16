@@ -222,7 +222,7 @@ Initial proof set:
 
 - `resume-basic`: canonical vertical slice covering scalar `state()` counter,
   object path write, lazy event symbol, sync `preventDefault()` policy, async
-  `computed()` with `@try`/`@pending`/`@catch`, one `use={...}` behavior, and
+  `computed()` with `@try`/`@pending`/`@catch`, one `attach={...}` behavior, and
   one `element()` / `el={...}` locator.
 - `state-lvalues`: plain JavaScript mutation lowering, including `count++`,
   assignment, object paths, nested paths, array mutation expectations, aliases,

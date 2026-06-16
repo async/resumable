@@ -2,6 +2,7 @@ import { isEventAttribute, normalizeEventName } from '@tsrx/core';
 import { asNodes, getIdentifierName, type AnyNode } from '../../ast/nodes.ts';
 import { expressionSource, sourceSpan } from '../../ast/source.ts';
 import type {
+	SemanticBehavior,
 	SemanticElementHandleBinding,
 	SemanticGraphDiagnostic,
 	SourceSpan,
@@ -15,9 +16,9 @@ import {
 	hasSyncEventPolicyCandidate,
 } from './collect-sync-policy.ts';
 import {
+	attachHostElementRequiredDiagnostic,
 	duplicateElementHandleDiagnostic,
 	elementHandleRequiredDiagnostic,
-	useHostElementRequiredDiagnostic,
 } from './diagnostics.ts';
 import type { MutableSemanticGraphArtifact, SemanticGraphWalk, WalkState } from './types.ts';
 
@@ -108,10 +109,10 @@ function collectAttribute(
 	const value = attribute.value as AnyNode | undefined;
 	const expressionValue = unwrapExpressionContainer(value);
 
-	if (attributeName === 'use' && !isHostElement) {
+	if (attributeName === 'attach' && !isHostElement) {
 		if (expressionValue) {
 			state.graph.diagnostics.push(
-				useHostElementRequiredDiagnostic(ownerTagName, expressionValue, state),
+				attachHostElementRequiredDiagnostic(ownerTagName, expressionValue, state),
 			);
 			collectExpressionReads(expressionValue, state);
 			walk(expressionValue, state);
@@ -122,9 +123,9 @@ function collectAttribute(
 	if (!hostNodeId) return;
 
 	if (isEventAttribute(attributeName)) {
-		const handlerSources = eventHandlerExpressions(expressionValue).map((handler) =>
-			expressionSource(handler, state.source),
-		);
+		const handlers = eventHandlerExpressions(expressionValue);
+		const handlerSources = handlers.map((handler) => expressionSource(handler, state.source));
+		const handlerParameters = handlers.map(handlerParameterNames);
 		const syncPolicy = extractSyncPolicy(expressionValue, state);
 		const hasSyncPolicyCandidate = hasSyncEventPolicyCandidate(expressionValue);
 		if (hasSyncPolicyCandidate && !syncPolicy) {
@@ -138,6 +139,7 @@ function collectAttribute(
 			eventName: normalizeEventName(attributeName),
 			handlerCount: getHandlerCount(expressionValue),
 			handlerSources,
+			handlerParameters,
 			hasSyncPolicyCandidate,
 			syncPolicy,
 		});
@@ -146,12 +148,12 @@ function collectAttribute(
 		return;
 	}
 
-	if (attributeName === 'use') {
+	if (attributeName === 'attach') {
 		if (expressionValue) {
 			for (const behavior of behaviorExpressions(expressionValue)) {
 				state.graph.behaviors.push({
 					hostNodeId,
-					source: expressionSource(behavior, state.source),
+					...behaviorSourceParts(behavior, state.source),
 				});
 			}
 			collectExpressionReads(expressionValue, state);
@@ -276,8 +278,43 @@ function behaviorExpressions(node: AnyNode): AnyNode[] {
 	return [node];
 }
 
+function behaviorSourceParts(node: AnyNode, source: string): Omit<SemanticBehavior, 'hostNodeId'> {
+	const behaviorSource = expressionSource(node, source);
+
+	if (node.type !== 'CallExpression') {
+		return {
+			source: behaviorSource,
+			functionSource: behaviorSource,
+			inputSources: [],
+		};
+	}
+
+	const callee = node.callee as AnyNode | undefined;
+
+	return {
+		source: behaviorSource,
+		functionSource: callee ? expressionSource(callee, source) : behaviorSource,
+		inputSources: asNodes(node.arguments).map((argument) => expressionSource(argument, source)),
+	};
+}
+
 function eventHandlerExpressions(node: AnyNode | undefined): AnyNode[] {
 	if (!node) return [];
 	if (node.type === 'ArrayExpression') return asNodes(node.elements);
 	return [node];
+}
+
+function handlerParameterNames(node: AnyNode): string[] {
+	if (
+		node.type !== 'ArrowFunctionExpression' &&
+		node.type !== 'FunctionExpression' &&
+		node.type !== 'FunctionDeclaration'
+	) {
+		return [];
+	}
+
+	return asNodes(node.params).flatMap((parameter) => {
+		const name = getIdentifierName(parameter);
+		return name ? [name] : [];
+	});
 }
