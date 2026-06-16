@@ -1,4 +1,4 @@
-import { resumeEventFromPayloadDocument } from '@async/resumable/runtime/event-resume';
+import { resumeEventOnlyFromPayloadDocument } from '@async/resumable/runtime/event-only-resume';
 import { loadSymbol } from './root.tsrx';
 
 type ResumeContainerEventInput = {
@@ -13,7 +13,7 @@ type ResumeContainerEventInput = {
 };
 
 export async function resumeContainerEvent(input: ResumeContainerEventInput): Promise<void> {
-	await resumeEventFromPayloadDocument({
+	await resumeEventOnlyFromPayloadDocument({
 		document: input.root as never,
 		root: input.root as never,
 		event: input.event as never,

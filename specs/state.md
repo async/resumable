@@ -2202,13 +2202,13 @@ commands are listed in the implementation/build section above.
   proving the browser entry resumes that existing DOM for the same click update.
   The same SSR preview box now records the post-interaction script request list,
   computes gzip sizes for those requested build artifacts, and fails if the
-  current-regression interaction budget is exceeded: 2.7 KB gzip for the
-  runtime-heavy chunk, 3.3 KB gzip for all post-click async scripts, or three
+  current-regression interaction budget is exceeded: 2.25 KB gzip for the
+  runtime-heavy chunk, 2.8 KB gzip for all post-click async scripts, or three
   post-click script requests. Focused
   fixture-build tests also rebuild the CSR, SSR, and vite-plus fixtures and
   enforce current-regression gzip ceilings for each fixture's runtime-heavy
   chunk, total generated async scripts, and generated async script count: CSR
-  8.1 KB / 8.65 KB / 3 scripts, SSR 2.7 KB / 3.3 KB / 4 scripts, and vite-plus
+  8.1 KB / 8.65 KB / 3 scripts, SSR 2.25 KB / 2.9 KB / 4 scripts, and vite-plus
   8.0 KB / 8.45 KB / 3 scripts. Those tests also fail if generated runtime
   chunks retain Vite's empty dynamic-import preload helper and still report the
   event-only 300-500 B gzip target / 700 B gzip hard budget as the remaining
@@ -2220,16 +2220,19 @@ commands are listed in the implementation/build section above.
   virtual-module resolution and emitted chunk records. Generated DOM update
   symbols now import the helper-only
   `@async/resumable/runtime/dom-update` subpath instead of the broad runtime
-  entry, the SSR fixture browser entry imports
-  `@async/resumable/runtime/event-resume` for event-only payload dispatch
-  instead of the full `runtime/resume` payload/runtime path, and the Vite
-  CSR/vite-plus fixtures use the phase-specific `runtime/render` subpath so the
-  broad runtime entry does not own those browser paths. The event-resume helper
-  reads the existing payload scripts, materializes DOM-order locators, dispatches
-  the current event through the generated resolver, and applies setText/setAttr/
-  setProp DOM journal entries without importing the full payload validator,
-  serializer built-ins, `createResumeRuntime`, behavior/visibility/removal
-  observers, async-boundary range journal support, or shared-patch runtime. Current
+  entry, and the Vite CSR/vite-plus fixtures use the phase-specific
+  `runtime/render` subpath so the broad runtime entry does not own those browser
+  paths. The SSR fixture browser entry now imports the narrower
+  `@async/resumable/runtime/event-only-resume` subpath for event-only payload
+  dispatch instead of the full `runtime/resume` or broader `runtime/event-resume`
+  path. The event-only resume helper reads the existing payload scripts,
+  materializes DOM-order locators, dispatches the current event through the
+  generated resolver, supports the current `graph.read`/`write`/`update` symbol
+  surface, and applies setText/setAttr/setProp DOM journal entries without
+  importing the full payload validator, serializer built-ins, `createResumeRuntime`,
+  behavior/visibility/removal observers, async-boundary range journal support,
+  shared-patch runtime, event-resume element handles, graph collection calls, or
+  delete/subscription helpers. Current
   client bundle output also strips empty Vite dynamic-import preload wrappers
   from generated async-resumable runtime chunks after bundling, preserving plain
   `import(...)` records during Vite/Rolldown resolution while removing the
@@ -2242,13 +2245,13 @@ commands are listed in the implementation/build section above.
   and filters them out of the async-resumable manifest/bundle graph. Current
   rebuilt fixture totals are still above the final event-only target for CSR
   and vite-plus but are bounded by regression tests: 8,546 gzip bytes for all
-  CSR async scripts, 3,264 gzip bytes for all SSR async scripts, and 8,380 gzip
+  CSR async scripts, 2,782 gzip bytes for all SSR async scripts, and 8,380 gzip
   bytes for all vite-plus async scripts. The latest Witness SSR post-click path
   is smaller than the full SSR build artifact set: no startup scripts, three
-  requested post-click async scripts, 8,723 raw bytes / 3,183 gzip bytes total,
-  and the largest runtime-heavy interaction chunk is 7,186 raw bytes / 2,601
+  requested post-click async scripts, 7,198 raw bytes / 2,701 gzip bytes total,
+  and the largest runtime-heavy interaction chunk is 5,661 raw bytes / 2,119
   gzip bytes. The fresh receipt is
-  `packages/bundler/.witness/receipts/2026-06-16T17-11-01.850Z/receipt.json`.
+  `packages/bundler/.witness/receipts/2026-06-16T17-19-17.467Z/receipt.json`.
   A vite-plus fixture now has a real app entry and a package-local preview box
   that proves a vite-plus config emits the async-resumable manifest, bundle
   graph, and browser output through Vite preview.

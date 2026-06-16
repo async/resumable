@@ -14,6 +14,7 @@ export default defineConfig({
 			'serializer/index': './packages/serializer/src/index.ts',
 			'compiler/index': './packages/compiler/src/index.ts',
 			'runtime/dom-update': './packages/runtime/src/dom-update.ts',
+			'runtime/event-only-resume': './packages/runtime/src/event-only-resume.ts',
 			'runtime/event-resume': './packages/runtime/src/event-resume.ts',
 			'runtime/index': './packages/runtime/src/index.ts',
 			'runtime/render': './packages/runtime/src/render.ts',
@@ -24,6 +25,8 @@ export default defineConfig({
 			'resumable/rolldown': './packages/resumable/src/rolldown.ts',
 			'resumable/runtime': './packages/resumable/src/runtime.ts',
 			'resumable/runtime/dom-update': './packages/resumable/src/runtime/dom-update.ts',
+			'resumable/runtime/event-only-resume':
+				'./packages/resumable/src/runtime/event-only-resume.ts',
 			'resumable/runtime/event-resume': './packages/resumable/src/runtime/event-resume.ts',
 			'resumable/runtime/render': './packages/resumable/src/runtime/render.ts',
 			'resumable/runtime/resume': './packages/resumable/src/runtime/resume.ts',

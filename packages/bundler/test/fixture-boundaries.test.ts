@@ -52,7 +52,7 @@ describe('fixture framework boundaries', () => {
 		);
 		expect(vitePlusEntry).not.toContain('resumeFromPayloadScripts');
 		expect(ssrEntry).toContain(
-			"import { resumeEventFromPayloadDocument } from '@async/resumable/runtime/event-resume';",
+			"import { resumeEventOnlyFromPayloadDocument } from '@async/resumable/runtime/event-only-resume';",
 		);
 		expect(ssrEntry).toContain('export async function resumeContainerEvent');
 		expect(ssrEntry).toContain('eventRecord');

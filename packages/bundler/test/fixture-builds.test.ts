@@ -31,8 +31,8 @@ const fixtures = [
 		manifest: 'packages/bundler/fixtures/vite-ssr/dist/async-resumable-manifest.json',
 		runtimeBudget: {
 			dist: 'packages/bundler/fixtures/vite-ssr/dist',
-			maxRuntimeChunkGzipBytes: 2_700,
-			maxAsyncScriptsGzipBytes: 3_300,
+			maxRuntimeChunkGzipBytes: 2_250,
+			maxAsyncScriptsGzipBytes: 2_900,
 			maxAsyncScriptCount: 4,
 			forbidVitePreloadHelper: true,
 		},

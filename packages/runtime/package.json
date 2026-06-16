@@ -6,6 +6,7 @@
 	"exports": {
 		".": "./src/index.ts",
 		"./dom-update": "./src/dom-update.ts",
+		"./event-only-resume": "./src/event-only-resume.ts",
 		"./event-resume": "./src/event-resume.ts",
 		"./render": "./src/render.ts",
 		"./resume": "./src/payload.ts"
