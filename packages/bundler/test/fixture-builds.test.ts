@@ -18,7 +18,7 @@ const fixtures = [
 			entryHtml: 'packages/bundler/fixtures/vite-csr/dist/index.html',
 			maxRuntimeChunkGzipBytes: 3_900,
 			maxAsyncScriptsGzipBytes: 4_000,
-			maxAsyncScriptCount: 3,
+			maxAsyncScriptCount: 2,
 			forbidVitePreloadHelper: true,
 			forbiddenRuntimeOrigins: [
 				'/runtime/src/payload.ts',
@@ -52,7 +52,7 @@ const fixtures = [
 			entryHtml: 'packages/bundler/fixtures/vite-plus/dist/index.html',
 			maxRuntimeChunkGzipBytes: 3_850,
 			maxAsyncScriptsGzipBytes: 3_950,
-			maxAsyncScriptCount: 3,
+			maxAsyncScriptCount: 2,
 			forbidVitePreloadHelper: true,
 		},
 	},

@@ -1,4 +1,4 @@
-import { ASYNC_PROTOCOL_VERSION, type ProtocolStatePayload } from '@async/resumable-protocol';
+import type { ProtocolStatePayload, ProtocolViewPayload } from '@async/resumable-protocol';
 import {
 	createEventResumeContainerFromPayloads,
 	type EventResumeContainer,
@@ -12,7 +12,6 @@ import type {
 	ResumeRuntimeInput,
 	ResumeSymbol,
 } from './resume.ts';
-import type { ProtocolViewPayload } from '@async/resumable-protocol';
 
 export type RenderTarget = {
 	readonly replaceChildren?: (...children: ReadonlyArray<ResumeDomElement>) => void;
@@ -45,6 +44,8 @@ export type CsrRenderContainer = {
 	readonly payloadScripts?: undefined;
 	readonly resumerScript?: undefined;
 };
+
+const EMPTY_PROTOCOL_VERSION = 1 satisfies ProtocolStatePayload['version'];
 
 export async function render(
 	component: () => CsrRenderOutput,
@@ -159,7 +160,7 @@ async function createFullRuntimeGraph(
 
 function emptyStatePayload(): ProtocolStatePayload {
 	return {
-		version: ASYNC_PROTOCOL_VERSION,
+		version: EMPTY_PROTOCOL_VERSION,
 		cells: [],
 		computed: [],
 	};
@@ -167,7 +168,7 @@ function emptyStatePayload(): ProtocolStatePayload {
 
 function emptyViewPayload(): ProtocolViewPayload {
 	return {
-		version: ASYNC_PROTOCOL_VERSION,
+		version: EMPTY_PROTOCOL_VERSION,
 		locators: [],
 		events: [],
 		domUpdates: [],
