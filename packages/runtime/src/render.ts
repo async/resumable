@@ -1,10 +1,10 @@
 import type { ProtocolStatePayload, ProtocolViewPayload } from '@async/resumable-protocol';
 import {
-	createEventResumeContainerFromPayloads,
-	type EventResumeContainer,
-	type EventResumeDomElement,
-	type EventResumeDomEvent,
-} from './event-resume.ts';
+	createEventOnlyResumeContainerFromPayloads,
+	type EventOnlyResumeContainer,
+	type EventOnlyResumeDomElement,
+	type EventOnlyResumeDomEvent,
+} from './event-only-resume.ts';
 import type { RuntimeGraph } from './graph.ts';
 import type {
 	ResumeDomElement,
@@ -34,7 +34,7 @@ export type CsrRenderOptions = {
 	readonly applyDomJournal?: ResumeRuntimeInput['applyDomJournal'];
 };
 
-export type CsrRenderRuntime = ResumeRuntime | EventResumeContainer;
+export type CsrRenderRuntime = ResumeRuntime | EventOnlyResumeContainer;
 
 export type CsrRenderContainer = {
 	readonly phase: 'csr';
@@ -59,15 +59,15 @@ export async function render(
 	mountRoot(options.target, output.root);
 
 	if (canUseEventOnlyCsrRuntime(output, state, view)) {
-		const runtime = await createEventResumeContainerFromPayloads({
-			root: output.root as EventResumeDomElement,
+		const runtime = await createEventOnlyResumeContainerFromPayloads({
+			root: output.root as EventOnlyResumeDomElement,
 			state,
 			view,
 			loadSymbol: loadSymbol as Parameters<
-				typeof createEventResumeContainerFromPayloads
+				typeof createEventOnlyResumeContainerFromPayloads
 			>[0]['loadSymbol'],
 		});
-		startEventOnlyCsrRuntime(output.root as EventResumeDomElement, view, runtime);
+		startEventOnlyCsrRuntime(output.root as EventOnlyResumeDomElement, view, runtime);
 
 		return {
 			phase: 'csr',
@@ -121,6 +121,7 @@ function canUseEventOnlyCsrRuntime(
 	if ((state.sharedDefinitions?.length ?? 0) > 0) return false;
 	if (state.computed.length > 0) return false;
 	if (view.behaviors.length > 0) return false;
+	if (view.elementHandles.length > 0) return false;
 	if (view.asyncBoundaries.length > 0) return false;
 	if (view.events.some((event) => event.eventName === 'visible' || !!event.syncPolicy)) {
 		return false;
@@ -129,15 +130,15 @@ function canUseEventOnlyCsrRuntime(
 }
 
 function startEventOnlyCsrRuntime(
-	root: EventResumeDomElement,
+	root: EventOnlyResumeDomElement,
 	view: ProtocolViewPayload,
-	runtime: EventResumeContainer,
+	runtime: EventOnlyResumeContainer,
 ): void {
 	const eventNames = new Set(view.events.map((event) => event.eventName));
 	for (const eventName of eventNames) {
 		root.addEventListener?.(
 			eventName,
-			async (event: EventResumeDomEvent) => {
+			async (event: EventOnlyResumeDomEvent) => {
 				await runtime.dispatch(event);
 			},
 			{ capture: true },

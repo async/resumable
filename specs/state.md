@@ -2210,9 +2210,9 @@ commands are listed in the implementation/build section above.
   fixture-build tests also rebuild the CSR, SSR, and vite-plus fixtures and
   enforce current-regression gzip ceilings for the eager entry runtime closure
   in CSR/vite-plus and all generated async scripts in SSR. The current ceilings
-  are CSR 3.9 KB for the largest runtime-heavy chunk / 4.0 KB for the entry
+  are CSR 3.25 KB for the largest runtime-heavy chunk / 3.35 KB for the entry
   static script closure / 2 scripts, SSR 2.175 KB / 2.7 KB / 4 scripts, and
-  vite-plus 3.85 KB for the largest runtime-heavy chunk / 3.95 KB for the entry
+  vite-plus 3.2 KB for the largest runtime-heavy chunk / 3.3 KB for the entry
   static script closure / 2 scripts. Those tests also fail if generated runtime
   chunks retain Vite's empty dynamic-import preload helper and still report the
   event-only 300-500 B gzip target / 700 B gzip hard budget as the remaining
@@ -2233,8 +2233,11 @@ commands are listed in the implementation/build section above.
   focused tests still use it for those symbol kinds. The Vite CSR/vite-plus
   fixtures use the phase-specific `runtime/render` subpath so the broad runtime
   entry does not own those browser paths; that CSR entry now statically uses the
-  narrow event-resume container for the current event/DOM-update shape and
+  narrow event-only resume container for the current event/DOM-update shape and
   dynamic-imports the full graph/resume/payload paths only for fallback cases.
+  The event-only CSR path now imports `runtime/event-only-resume` instead of the
+  broader `runtime/event-resume`; the focused fixture-build size tests forbid
+  `runtime/src/event-resume.ts` in the CSR and vite-plus eager runtime origins.
   The SSR fixture render shell imports `runtime/render-to-string`, keeping the
   SSR payload rendering and inline resumer source out of the eager CSR render
   entry. The SSR fixture browser entry now imports the narrower
@@ -2261,9 +2264,9 @@ commands are listed in the implementation/build section above.
   and filters them out of the async-resumable manifest/bundle graph. Current
   rebuilt fixture eager closures are still above the final event-only target for
   CSR and vite-plus but are bounded by regression tests: CSR's entry static
-  closure is 9,896 raw bytes / 3,654 gzip bytes with a largest runtime-heavy
-  chunk of 3,580 gzip bytes, vite-plus' entry static closure is 9,561 raw bytes
-  / 3,584 gzip bytes with a largest runtime-heavy chunk of 3,510 gzip bytes,
+  closure is 8,392 raw bytes / 3,184 gzip bytes with a largest runtime-heavy
+  chunk of 3,110 gzip bytes, vite-plus' entry static closure is 8,057 raw bytes
+  / 3,120 gzip bytes with a largest runtime-heavy chunk of 3,046 gzip bytes,
   and SSR all generated async scripts remain 2,640 gzip bytes. The full emitted
   CSR async script set is currently 11,919 gzip bytes and the full emitted
   vite-plus async script set is 11,775 gzip bytes because full graph/resume/payload
@@ -2277,11 +2280,11 @@ commands are listed in the implementation/build section above.
   client-created counter, updates it from `0` to `1`, and has no console errors
   or failed requests after the preload cleanup stopped leaving orphan Vite helper
   init calls in the emitted entry. The same receipt now records real browser
-  script requests and budgets: startup requested two scripts at 9,896 raw
-  bytes / 3,654 gzip bytes with a largest runtime-heavy chunk of 3,580 gzip
+  script requests and budgets: startup requested two scripts at 8,392 raw
+  bytes / 3,184 gzip bytes with a largest runtime-heavy chunk of 3,110 gzip
   bytes, while the first counter click requested one lazy symbol chunk at 633
   raw bytes / 349 gzip bytes and no runtime-heavy chunks:
-  `packages/bundler/.witness/receipts/2026-06-16T18-00-54.412Z/receipt.json`.
+  `packages/bundler/.witness/receipts/2026-06-16T18-07-57.956Z/receipt.json`.
   A vite-plus fixture now has a real app entry and a package-local preview box
   that proves a vite-plus config emits the async-resumable manifest, bundle
   graph, and browser output through Vite preview.

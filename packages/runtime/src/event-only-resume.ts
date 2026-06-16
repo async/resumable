@@ -71,6 +71,13 @@ export type ResumeEventOnlyFromPayloadDocumentInput = {
 	) => EventOnlyResumeSymbol | Promise<EventOnlyResumeSymbol>;
 };
 
+export type CreateEventOnlyResumeContainerInput = {
+	readonly state: ProtocolStatePayload;
+	readonly view: ProtocolViewPayload;
+	readonly root: EventOnlyResumeDomElement;
+	readonly loadSymbol: ResumeEventOnlyFromPayloadDocumentInput['loadSymbol'];
+};
+
 export type EventOnlyResumeContainer = {
 	readonly graph: EventOnlyResumeGraph;
 	readonly view: ProtocolViewPayload;
@@ -100,7 +107,14 @@ export async function resumeEventOnlyFromPayloadDocument(
 ): Promise<EventOnlyResumeContainer> {
 	let container = containers.get(input.root);
 	if (!container) {
-		container = createEventOnlyResumeContainer(input);
+		const state = readPayloadJson<ProtocolStatePayload>(input.document, 'async/state');
+		const view = readPayloadJson<ProtocolViewPayload>(input.document, 'async/view');
+		container = createEventOnlyResumeContainerState({
+			state,
+			view,
+			root: input.root,
+			loadSymbol: input.loadSymbol,
+		});
 		containers.set(input.root, container);
 	}
 
@@ -112,27 +126,31 @@ export async function resumeEventOnlyFromPayloadDocument(
 	return resumed;
 }
 
-async function createEventOnlyResumeContainer(
-	input: ResumeEventOnlyFromPayloadDocumentInput,
+export async function createEventOnlyResumeContainerFromPayloads(
+	input: CreateEventOnlyResumeContainerInput,
+): Promise<EventOnlyResumeContainer> {
+	return createEventOnlyResumeContainerState(input);
+}
+
+async function createEventOnlyResumeContainerState(
+	input: CreateEventOnlyResumeContainerInput,
 ): Promise<EventOnlyResumeContainerState> {
-	const state = readPayloadJson<ProtocolStatePayload>(input.document, 'async/state');
-	const view = readPayloadJson<ProtocolViewPayload>(input.document, 'async/view');
-	const elementsByHostId = materializeDomLocators(input.root, view.locators);
+	const elementsByHostId = materializeDomLocators(input.root, input.view.locators);
 	const graph = createEventOnlyResumeGraph({
-		state,
-		view,
+		state: input.state,
+		view: input.view,
 		loadSymbol: input.loadSymbol,
 		elementsByHostId,
 	});
 
 	return {
 		graph,
-		view,
+		view: input.view,
 		elementsByHostId,
 		dispatch(event, options = {}) {
 			return dispatchEvent({
 				event,
-				view,
+				view: input.view,
 				graph,
 				loadSymbol: input.loadSymbol,
 				elementsByHostId,

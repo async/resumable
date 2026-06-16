@@ -102,6 +102,18 @@ function viewWithSyncPolicy(): ProtocolViewPayload {
 	};
 }
 
+function viewWithElementHandle(): ProtocolViewPayload {
+	return {
+		version: ASYNC_PROTOCOL_VERSION,
+		locators: [{ hostNodeId: 'h0', strategy: 'dom-order', index: 0, tagName: 'button' }],
+		events: [{ hostNodeId: 'h0', eventName: 'click', symbolIds: ['symbol:click'] }],
+		domUpdates: [],
+		behaviors: [],
+		elementHandles: [{ hostNodeId: 'h0', handleId: 'handle:counter', name: 'counter' }],
+		asyncBoundaries: [],
+	};
+}
+
 function staticView(): ProtocolViewPayload {
 	return {
 		version: ASYNC_PROTOCOL_VERSION,
@@ -208,6 +220,36 @@ test('render uses the narrow CSR event path to apply DOM update symbols', async 
 	expect(loadedSymbols).toEqual(['symbol:click', 'symbol:text']);
 	expect(container.graph.read('state:count')).toBe(1);
 	expect(button.textContent).toBe('1');
+});
+
+test('render falls back from the event-only path when element handles are present', async () => {
+	const target = {
+		children: [] as FakeElement[],
+		replaceChildren(...children: FakeElement[]) {
+			this.children = children;
+		},
+	};
+	const button = element('BUTTON');
+	const state = createProtocolStatePayload({ cells: [] });
+	let resolvedHandle: FakeElement | undefined;
+
+	const container = await render(
+		() => ({
+			root: button,
+			state,
+			view: viewWithElementHandle(),
+			loadSymbol() {
+				return ({ getElementHandle }) => {
+					resolvedHandle = getElementHandle('counter') as FakeElement | undefined;
+				};
+			},
+		}),
+		{ target },
+	);
+
+	await container.root.listeners[0].listener(event('click', container.root));
+
+	expect(resolvedHandle).toBe(button);
 });
 
 test('renderToString emits an SSR container and omits the resumer for static output', () => {
