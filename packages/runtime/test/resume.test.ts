@@ -164,6 +164,96 @@ test('resume runtime materializes view records and dispatches lazy symbols after
 	]);
 });
 
+test('resume runtime startup installs container wiring without importing app symbols', async () => {
+	const button = element('BUTTON');
+	const image = element('IMG');
+	const canvas = element('CANVAS');
+	const start = comment('async:boundary:0:start');
+	const paragraph = element('P');
+	const end = comment('async:boundary:0:end');
+	const root = element('SECTION', [button, image, canvas, start, paragraph, end]);
+	const loadedSymbols: string[] = [];
+	const observed: FakeElement[] = [];
+	const result = deferred<string>();
+	const graph = createRuntimeGraph({
+		cells: [{ graphNodeId: 'state:userId', value: 'a' }],
+		asyncComputed: [
+			{
+				graphNodeId: 'computed:details',
+				dependencies: [{ graphNodeId: 'state:userId', path: [] }],
+				key: (read) => read('state:userId'),
+				run() {
+					return result.promise;
+				},
+			},
+		],
+	});
+	const resume = createResumeRuntime({
+		root,
+		graph,
+		view: {
+			locators: [
+				{ hostNodeId: 'h0', strategy: 'dom-order', index: 0, tagName: 'section' },
+				{ hostNodeId: 'h1', strategy: 'dom-order', index: 1, tagName: 'button' },
+				{ hostNodeId: 'h2', strategy: 'dom-order', index: 2, tagName: 'img' },
+				{ hostNodeId: 'h3', strategy: 'dom-order', index: 3, tagName: 'canvas' },
+				{ hostNodeId: 'h4', strategy: 'dom-order', index: 4, tagName: 'p' },
+			],
+			events: [
+				{ hostNodeId: 'h1', eventName: 'click', symbolIds: ['symbol:click'] },
+				{ hostNodeId: 'h2', eventName: 'visible', symbolIds: ['symbol:visible'] },
+			],
+			domUpdates: [],
+			behaviors: [{ hostNodeId: 'h3', source: 'chart(config)', symbolId: 'symbol:chart' }],
+			elementHandles: [],
+			asyncBoundaries: [
+				{
+					id: 'boundary:0',
+					startAnchor: { strategy: 'dom-order-comment', index: 0 },
+					endAnchor: { strategy: 'dom-order-comment', index: 1 },
+					asyncReads: [
+						{
+							source: 'details.title',
+							graphNodeId: 'computed:details',
+							path: [],
+							runnerSymbolId: 'symbol:details-runner',
+						},
+					],
+				},
+			],
+		},
+		createVisibilityObserver() {
+			return {
+				observe(target) {
+					observed.push(target);
+				},
+			};
+		},
+		loadSymbol(symbolId) {
+			loadedSymbols.push(symbolId);
+			return () => undefined;
+		},
+	});
+
+	await resume.start();
+
+	expect(root.listeners).toEqual([
+		expect.objectContaining({
+			type: 'click',
+			options: { capture: true },
+		}),
+	]);
+	expect(observed).toEqual([image]);
+	expect(loadedSymbols).toEqual([]);
+	expect(graph.read('computed:details')).toEqual({
+		status: 'pending',
+		version: 1,
+		key: 'a',
+	});
+	await graph.flush();
+	expect(loadedSymbols).toEqual(['symbol:details-runner']);
+});
+
 test('resume runtime applies DOM journal entries after dispatch-owned graph flushes', async () => {
 	const input = element('INPUT');
 	const root = element('SECTION', [input]);
@@ -1100,6 +1190,12 @@ test('resume runtime demands async boundary reads and runs runner symbols on sta
 	});
 
 	await resume.start();
+
+	expect(loadedSymbols).toEqual([]);
+	expect(seenStatuses).toEqual([]);
+
+	graph.read('computed:details');
+	await graph.flush();
 
 	expect(loadedSymbols).toEqual(['symbol:details-runner']);
 	expect(seenStatuses).toEqual(['boundary:0:pending']);

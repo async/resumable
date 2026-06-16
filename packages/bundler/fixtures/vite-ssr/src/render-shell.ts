@@ -1,23 +1,14 @@
-export type PayloadScripts = {
-	readonly stateScript: string;
-	readonly viewScript: string;
-	readonly view: {
-		readonly locators: ReadonlyArray<{
-			readonly hostNodeId: string;
-			readonly tagName: string;
-		}>;
-	};
-};
+import { renderToString, type SsrRenderOutput } from '@async/resumable/runtime';
 
-export function renderServerShell(payloadScripts: PayloadScripts, clientEntry = ''): string {
-	return [
-		'<div id="app">',
-		'<button type="button" data-counter>0</button>',
-		'</div>',
-		payloadScripts.stateScript,
-		payloadScripts.viewScript,
-		clientEntry,
-	]
-		.filter(Boolean)
-		.join('\n');
+export type PayloadScripts = Required<Pick<SsrRenderOutput, 'state' | 'view'>>;
+
+export function renderServerShell(payloadScripts: PayloadScripts, resumeModuleUrl = ''): string {
+	return renderToString(
+		() => ({
+			html: '<button type="button" data-counter>0</button><span>hello</span>',
+			state: payloadScripts.state,
+			view: payloadScripts.view,
+		}),
+		{ resumeModuleUrl },
+	);
 }

@@ -15,7 +15,7 @@ function element(tagName: string, childNodes: FakeElement[] = []): FakeElement {
 	};
 }
 
-test('resume runtime loads element behaviors and runs cleanup on host disposal', async () => {
+test('resume runtime records element behaviors without loading app code during startup', async () => {
 	const canvas = element('CANVAS');
 	const root = element('SECTION', [canvas]);
 	const loadedSymbols: string[] = [];
@@ -50,15 +50,15 @@ test('resume runtime loads element behaviors and runs cleanup on host disposal',
 
 	await resume.start();
 
-	expect(loadedSymbols).toEqual(['symbol:chart', 'symbol:resize']);
-	expect(installedOn).toEqual(['chart:CANVAS', 'resize:CANVAS']);
+	expect(loadedSymbols).toEqual([]);
+	expect(installedOn).toEqual([]);
 	expect(cleanups).toEqual([]);
 
 	resume.disposeHost('h1');
 
-	expect(cleanups).toEqual(['resize', 'chart']);
+	expect(cleanups).toEqual([]);
 
 	resume.disposeHost('h1');
 
-	expect(cleanups).toEqual(['resize', 'chart']);
+	expect(cleanups).toEqual([]);
 });

@@ -1,5 +1,10 @@
-import { resumeFromPayloadScripts } from '@async/resumable/runtime';
+import { render } from '@async/resumable/runtime';
 import { loadSymbol, payloadScripts } from './root.tsrx';
+
+const app = document.querySelector('#app');
+if (!app) {
+	throw new Error('Expected #app target for CSR render.');
+}
 
 const status = document.createElement('p');
 status.dataset.status = '';
@@ -9,11 +14,17 @@ const host = document.createElement('section');
 host.dataset.dashboard = '';
 host.textContent = 'ready';
 
-document.querySelector('#app')?.replaceChildren(host, status);
-
-await resumeFromPayloadScripts({
-	stateScript: payloadScripts.stateScript,
-	viewScript: payloadScripts.viewScript,
-	root: host,
-	loadSymbol,
-});
+await render(
+	() => {
+		return {
+			root: host,
+			state: payloadScripts.state,
+			view: payloadScripts.view,
+			loadSymbol,
+		};
+	},
+	{
+		target: app,
+	},
+);
+app.appendChild(status);

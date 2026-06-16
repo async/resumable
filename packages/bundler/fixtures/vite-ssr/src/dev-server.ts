@@ -1,4 +1,4 @@
-import { readFile } from 'node:fs/promises';
+import { readdir, readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import {
@@ -30,7 +30,7 @@ type DevResponse = {
 	end(body?: Uint8Array): void;
 };
 
-const CLIENT_ENTRY = '<script type="module" src="/src/entry-client.ts"></script>';
+const CLIENT_RESUME_MODULE = '/src/entry-client.ts';
 
 // Fixture-only SSR host. Real apps should provide this from a runtime adapter
 // or meta-framework; the async-resumable bundler only needs SSR artifacts.
@@ -111,25 +111,34 @@ async function renderDevRequest(runner: SsrRunner, request: Request) {
 	}
 
 	const entry = (await runner.import('/src/entry-server.ts')) as SsrEntry;
-	return new Response(await entry.render(CLIENT_ENTRY), {
+	return new Response(await entry.render(CLIENT_RESUME_MODULE), {
 		headers: { 'Content-Type': 'text/html;charset=utf-8' },
 	});
 }
 
 async function renderPreviewRequest(root: string, outDir: string) {
 	const dist = resolve(root, outDir);
-	const index = await readFile(resolve(dist, 'index.html'), 'utf8');
-	const clientEntry = index
-		.split('\n')
-		.filter((line) => line.includes('/build/async-'))
-		.join('\n');
+	const resumeModuleUrl = await readClientResumeModuleUrl(dist);
 	const entry = (await import(
 		`${pathToFileURL(resolve(dist, 'server/entry-server.js')).href}?preview=${Date.now()}`
 	)) as SsrEntry;
 
-	return new Response(await entry.render(clientEntry), {
+	return new Response(await entry.render(resumeModuleUrl), {
 		headers: { 'Content-Type': 'text/html;charset=utf-8' },
 	});
+}
+
+async function readClientResumeModuleUrl(dist: string) {
+	const buildDir = resolve(dist, 'build');
+	for (const fileName of await readdir(buildDir)) {
+		if (!fileName.endsWith('.js')) continue;
+
+		const source = await readFile(resolve(buildDir, fileName), 'utf8');
+		if (source.includes('resumeContainerEvent')) {
+			return `/build/${fileName}`;
+		}
+	}
+	throw new Error('Expected built client resume module exporting resumeContainerEvent.');
 }
 
 function shouldRenderHtml(request: DevRequest) {

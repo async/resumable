@@ -12,11 +12,19 @@ export {
 	type SharedScope,
 } from '@async/resumable-core';
 export {
+	render,
+	renderToString,
 	resumeFromPayloadDocument,
 	resumeFromPayloadScripts,
+	type CsrRenderContainer,
+	type CsrRenderOptions,
+	type CsrRenderOutput,
+	type RenderTarget,
+	type RenderToStringOptions,
 	type ResumePayloadDocumentInput,
 	type ResumePayloadScriptsInput,
 	type ResumePayloadScriptsResult,
+	type SsrRenderOutput,
 } from '@async/resumable-runtime';
 export {
 	resumableClient,

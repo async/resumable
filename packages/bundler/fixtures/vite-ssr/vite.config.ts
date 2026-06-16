@@ -2,7 +2,19 @@ import { defineConfig } from 'vite';
 import { resumable } from '../../../resumable/src/vite.ts';
 import { fixtureSsrHost } from './src/dev-server.ts';
 
-export default defineConfig({
+export default defineConfig(({ command }) => ({
+	build:
+		command === 'build'
+			? {
+					rolldownOptions: {
+						input: {
+							index: 'index.html',
+							resume: 'src/entry-client.ts',
+						},
+						preserveEntrySignatures: 'exports-only',
+					},
+				}
+			: undefined,
 	environments: {
 		ssr: {
 			build: {
@@ -13,4 +25,4 @@ export default defineConfig({
 		},
 	},
 	plugins: [resumable(), fixtureSsrHost()],
-});
+}));

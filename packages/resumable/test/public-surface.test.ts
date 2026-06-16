@@ -2,6 +2,8 @@ import { expect, test } from 'vitest';
 import {
 	computed,
 	element,
+	render,
+	renderToString,
 	resumeFromPayloadDocument,
 	resumeFromPayloadScripts,
 	resumableClient,
@@ -16,6 +18,8 @@ test('main package exposes the curated author and build surface', () => {
 	expect(typeof computed).toBe('function');
 	expect(typeof element).toBe('function');
 	expect(typeof shared).toBe('function');
+	expect(typeof render).toBe('function');
+	expect(typeof renderToString).toBe('function');
 	expect(typeof resumeFromPayloadDocument).toBe('function');
 	expect(typeof resumeFromPayloadScripts).toBe('function');
 	expect(typeof createDomUpdateEntry).toBe('function');

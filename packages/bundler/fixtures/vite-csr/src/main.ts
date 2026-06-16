@@ -1,5 +1,10 @@
-import { resumeFromPayloadScripts } from '@async/resumable/runtime';
+import { render } from '@async/resumable/runtime';
 import { loadSymbol, payloadScripts } from './root.tsrx';
+
+const app = document.querySelector('#app');
+if (!app) {
+	throw new Error('Expected #app target for CSR render.');
+}
 
 const status = document.createElement('p');
 status.id = 'hmr-status';
@@ -11,14 +16,20 @@ counter.type = 'button';
 counter.dataset.counter = '';
 counter.textContent = '0';
 
-document.querySelector('#app')?.replaceChildren(counter, status);
-
-await resumeFromPayloadScripts({
-	stateScript: payloadScripts.stateScript,
-	viewScript: payloadScripts.viewScript,
-	root: counter,
-	loadSymbol,
-});
+await render(
+	() => {
+		return {
+			root: counter,
+			state: payloadScripts.state,
+			view: payloadScripts.view,
+			loadSymbol,
+		};
+	},
+	{
+		target: app,
+	},
+);
+app.appendChild(status);
 
 if (import.meta.hot) {
 	document.addEventListener('async-resumable:update', (event) => {

@@ -324,26 +324,6 @@ export function createResumeRuntime(input: ResumeRuntimeInput): ResumeRuntime {
 		}
 	}
 
-	async function installBehaviors(): Promise<void> {
-		for (const behavior of input.view.behaviors) {
-			if (!behavior.symbolId) continue;
-
-			const element = elementsByHostId.get(behavior.hostNodeId);
-			if (!element) continue;
-
-			const symbol = await input.loadSymbol(behavior.symbolId);
-			const result = await symbol({
-				graph: input.graph,
-				element,
-				getElementHandle: elementHandles.get,
-			});
-
-			if (typeof result === 'function') {
-				storeHostCleanup(behavior.hostNodeId, result);
-			}
-		}
-	}
-
 	function storeHostCleanup(hostNodeId: string, cleanup: ResumeBehaviorCleanup): void {
 		const cleanups = hostCleanups.get(hostNodeId) ?? [];
 		cleanups.push(cleanup);
@@ -403,16 +383,6 @@ export function createResumeRuntime(input: ResumeRuntimeInput): ResumeRuntime {
 		}
 	}
 
-	async function demandAsyncBoundaries(): Promise<void> {
-		for (const boundary of asyncBoundariesById.values()) {
-			for (const asyncRead of boundary.asyncReads) {
-				input.graph.read(asyncRead.graphNodeId, asyncRead.path);
-			}
-		}
-
-		await input.graph.flush();
-	}
-
 	return {
 		async start() {
 			for (const eventType of eventTypes) {
@@ -420,8 +390,6 @@ export function createResumeRuntime(input: ResumeRuntimeInput): ResumeRuntime {
 			}
 
 			installVisibilityObserver();
-			await installBehaviors();
-			await demandAsyncBoundaries();
 		},
 		dispatch,
 		getElement(hostNodeId) {
