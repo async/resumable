@@ -39,6 +39,11 @@ Completed slices are concentrated in:
   resume wiring
 - pure-value serializer support for identity/cycles and the accepted built-in
   value set
+- a POC event-only inline resumer under
+  `poc/fixtures/proofs/resumer-script` proving an already-rendered container can
+  ship compact `async/view` event data, install one delegated listener, execute
+  no app code before interaction, import exactly one lazy symbol on click, update
+  DOM/state, and stay under the 700 B gzip event-only budget
 - early public package re-exports and Rolldown/Vite adapter shells, including
   virtual module exposure for current simple event-handler update symbols,
   DOM update symbol modules, and transform
@@ -101,8 +106,14 @@ The critical path to "full spec implementation" still requires:
 - authored template-comment and statement-container lexical-scope host metadata,
   including comment-aware locator planning so generated async anchors are not
   confused with authored comments
-- a real initial-render runtime entry that executes component bodies once,
-  serializes graph/view/symbol/async snapshots, and uses the current
+- a real CSR `render(App, { target })` runtime entry that creates a live
+  container from an empty target and app bundle without requiring `async/state`,
+  `async/view`, or the resumer script
+- a real SSR `renderToString(App, options)` runtime entry that executes component
+  bodies once, emits a resumable container boundary, serializes
+  graph/view/symbol/async snapshots into container-scoped payloads, emits no
+  resumer for static no-trigger containers, inlines the feature-sliced tiny
+  resumer bootstrap for interactive containers, and uses the current
   payload-script-only compiler `renderShell` artifact as input rather than
   treating it as the whole render pipeline
 - browser resume that performs concrete DOM replacement/mutation behavior for
@@ -198,6 +209,12 @@ in the split specs.
   `packages/runtime/src/dom-journal.ts`, `packages/runtime/src/graph.ts`,
   `packages/runtime/src/payload.ts`, `packages/runtime/src/resume.ts`, and
   `packages/runtime/test/*`.
+- Resumer POC boundary: `poc/fixtures/proofs/resumer-script/README.md`,
+  `poc/fixtures/proofs/resumer-script/src/resumer-source.mjs`,
+  `poc/fixtures/proofs/resumer-script/src/size-report.mjs`,
+  `poc/fixtures/proofs/resumer-script/src/verify.mjs`,
+  `poc/fixtures/proofs/resumer-script/browser/index.html`, and
+  `poc/fixtures/proofs/resumer-script/resumer-script.box.ts`.
 - Serializer boundaries: `packages/serializer/src/index.ts`,
   `packages/serializer/src/value.ts`,
   `packages/serializer/src/protocol-state.ts`,
@@ -627,6 +644,14 @@ in the split specs.
   A companion helper now reads the payload scripts from a document-like
   `querySelector` host before taking the same resume path; this does not yet
   prove startup in a real browser document.
+- The POC resumer fixture under `poc/fixtures/proofs/resumer-script` proves a
+  deliberately tiny event-only bootstrap shape outside the production package
+  pipeline. Its current measured source is 679 B raw, 465 B minified, and 346 B
+  gzip. It uses a compact `async/view` table of event names, event rows, module
+  specifiers, and export names, executes no app symbol before interaction, and
+  imports the click symbol only after a real browser click in the Witness box.
+  This is size and behavior evidence for the production target; it is not yet the
+  production `renderToString()` integration or generated bundler output.
 - The current compiler protocol-state pass serializes semantic graph `state()`
   cell `initialValue` entries through the pure serializer. Those values come
   from syntax-evaluated literals, object expressions, array expressions, and
@@ -765,10 +790,14 @@ in the split specs.
   replacement between anchors, branch cleanup, rejected/error rendering policy,
   emitted async runner modules, and build-manifest integration that connects
   generated runner symbols to real chunks.
-- Build the initial-render runtime entry, connect it to the existing compiler
-  payload-script/render-shell artifacts, and broaden the browser resume entry
-  into component/browser and end-to-end coverage around the unified
-  runtime/protocol model.
+- Build the CSR `render(App, { target })` runtime entry as a normal browser
+  render path that creates a live container without payload scripts or a resumer.
+- Build the SSR `renderToString(App, options)` runtime entry, connect it to the
+  existing compiler payload-script/render-shell artifacts, emit the resumable
+  container, omit the resumer for static no-trigger containers, generate
+  feature-sliced inline resumers for interactive containers, support caller
+  nonces for executable inline resumer scripts, and broaden browser resume
+  coverage around the unified runtime/protocol model.
 - Broaden fixture-backed build behavior beyond the current direct Rolldown,
   Vite library build, Vite CSR build, and package-local Witness dev/browser
   HMR/build/preview receipts, SSR built-server-entry build and browser
@@ -846,6 +875,18 @@ Historical spec/progress maintenance and build receipts retained for context:
 - `git diff --check`
 - architecture/path scans
 - `pnpm exec vp pack`
+
+Latest POC resumer receipts:
+
+- `node poc/fixtures/proofs/resumer-script/src/verify.mjs`
+- `node poc/fixtures/proofs/resumer-script/src/size-report.mjs`
+  (`rawBytes: 679`, `minifiedBytes: 465`, `gzipBytes: 346`,
+  `targetBytes: 700`)
+- `pnpm exec witness resumer-script --json`
+  (`.witness/receipts/2026-06-16T03-51-05.612Z/receipt.json`)
+- `rg -n "hydrate|hydration|VNode|vnode|virtual DOM|virtual-dom|packages/server"`
+  over `poc/fixtures/proofs/resumer-script` (no matches)
+- `git diff --check`
 
 Latest implementation/build receipts for current package slices:
 

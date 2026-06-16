@@ -12,9 +12,12 @@ High-level product contract and index. Use this as the entry point before loadin
 
 ## Summary
 
-A new JavaScript framework that is fully resumable (Qwik-level: zero execution on
-load, closures lazy-loaded on first interaction) without any author-facing markers
-(no `$`, no `.value`, no `track()`, no `&` lazy destructuring). It achieves this by
+A new JavaScript framework whose SSR output is fully resumable (Qwik-level:
+zero app execution on load, closures lazy-loaded on first interaction) without
+any author-facing markers (no `$`, no `.value`, no `track()`, no `&` lazy
+destructuring). CSR remains a normal browser render mode: `render()` creates a
+live runtime container from an app bundle and target element, without requiring
+SSR payload scripts or the resumer. The framework achieves this split by
 supporting exactly one authoring language: **TSRX** (https://tsrx.dev — `.tsrx`
 files, `@{}` component blocks, first-class `@if`/`@for`, co-located `<style>`).
 Because the framework owns the language via a TSRX codegen plugin, the compiler
@@ -35,10 +38,13 @@ JSX/TSX is explicitly **not** supported.
 
 ## Goals
 
-1. **Full resumability.** Component bodies never execute on the client — not even
-   once. Initial render serializes state, the reactivity graph, and listener
-   wiring into HTML; a ~1KB browser resume entry wakes up only the code a user
-   actually interacts with.
+1. **Full SSR resumability with normal CSR.** In SSR, component bodies execute
+   during initial render and never during browser resume. Initial render
+   serializes state, the reactivity graph, and listener wiring into a resumable
+   container; a tiny inline browser resumer wakes up only the code a user
+   actually triggers. In CSR, `render(App, { target })` executes component
+   bodies in the browser, creates a live runtime container, and must work without
+   SSR payload scripts or the resumer.
 2. **Zero markers.** No `$` suffixes, no `.value`, no `Tracked<T>` boxes, no
    special destructuring syntax, no reactive collection subclasses
    (`RippleArray`-style). The reactive surface is plain values and plain mutation.
@@ -75,17 +81,20 @@ Four implementation areas:
    backend may replace parser/lowering internals only behind the same pass
    artifacts and behavior tests.
 2. **Runtime** — a small fine-grained reactive core (graph state, object state,
-   async node state, cancellation/versioning, DOM update helpers, initial render
-   entry, and browser resume entry). The in-memory graph shape is private and is
-   not a VDOM. Never exposed as user vocabulary.
-3. **Serialization and render/resume protocol** — initial render runs component
-   bodies once, renders HTML, awaits demanded async nodes in v1 non-streaming
-   mode, and serializes the resumability payload (state values, async snapshots,
+   async node state, cancellation/versioning, DOM update helpers, CSR render
+   entry, initial render entry, and browser resume entry). The in-memory graph
+   shape is private and is not a VDOM. Never exposed as user vocabulary.
+3. **Serialization and render/resume protocol** — CSR `render()` creates a live
+   runtime container directly from the app bundle and target element. SSR
+   initial render runs component bodies once, renders HTML, awaits demanded async
+   nodes in v1 non-streaming mode, wraps the output in a resumable container, and
+   serializes the resumability payload (state values, async snapshots,
    subscription graph, listener→symbol map) into compact private data scripts.
-   The browser resume entry attaches one global event listener (plus a shared
-   IntersectionObserver for `onVisible`-wired elements), lazy-loads symbols on
-   first interaction or visibility, and re-attaches DOM update subscriptions on
-   first relevant state change. No hydration pass, no component execution.
+   The SSR output includes a tiny inline browser resumer scoped to that
+   container. The resumer attaches container-scoped event listeners and
+   visibility observers, then lazy-loads app symbols only on interaction,
+   visibility, or another explicit trigger. No hydration pass, no component
+   execution during browser resume.
 4. **Build integration** — a Rolldown plugin base exported by
    `@async/resumable`,
    with framework adapters such as Vite consuming that base plugin. Extracted
@@ -95,11 +104,31 @@ Four implementation areas:
    fragments.
 
 Do not split the framework into separate "server" and "client" products or
-packages. The authoring model is one unified render/resume model: initial render
-and browser resume are environment-specific phases of the same runtime and
-protocol. Implementation entry points may be environment-specific, but there is
-no standalone `server` package and no public two-sided deployment model for app
-authors to manage.
+packages. The authoring model is one unified render/resume model: CSR render,
+initial render, and browser resume are environment-specific phases of the same
+runtime, graph, and symbol protocol. Implementation entry points may be
+environment-specific, but there is no standalone `server` package and no public
+two-sided deployment model for app authors to manage.
+
+Container vocabulary is shared across CSR and SSR:
+
+- A **CSR container** is created live by `render(App, { target })`. It owns the
+  root target, graph instance, event delegation scope, symbol resolver, shared
+  state scope, and cleanup/unmount boundary. It does not require pre-existing
+  special markup, `async/state`, `async/view`, or the resumer script. Component
+  bodies execute because CSR must create the DOM and graph from an empty target.
+- An **SSR resumable container** is emitted by `renderToString(App, options)`.
+  It owns the rendered DOM boundary, container-scoped payload scripts, symbol
+  resolver metadata, shared state scope IDs, and the inline resumer bootstrap.
+  This is the microfrontend/island boundary that lets multiple independently
+  rendered containers coexist on a page. Browser resume must not rerun component
+  bodies because the DOM and graph payload already exist.
+
+App authors should not normally call a browser `resume()` API. In SSR, the
+resumer is part of the HTML returned by `renderToString()`. Low-level resume
+helpers are internal adapter/test utilities until a concrete public use case
+requires exposing them. A fully static SSR container with no browser triggers
+should emit no resumer script.
 
 Monorepo libraries are implementation boundaries first, not public API
 guarantees. The repo may contain internal packages such as protocol, core,
@@ -124,7 +153,7 @@ Initial internal production package map:
   constants.
 - `packages/runtime` — graph state, computed/async nodes, scheduler, DOM
   mutation journal, sync policy execution, DOM locator resolution, symbol
-  resolver integration, initial render, and browser resume.
+  resolver integration, CSR render, initial render, and browser resume.
 - `packages/serializer` — tiered value serializer and compact payload
   encode/decode, talking to runtime through snapshot interfaces.
 - `packages/compiler` — TSRX semantic graph, lowering passes, capture analysis,

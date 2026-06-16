@@ -225,10 +225,10 @@ Diagnostic quality is a first-class deliverable, not polish.
 - **Runtime:** unit tests on the graph (dependency tracking, path-level
   subscriptions, lazy computed, async computed status/versioning/cancellation).
 - **Resumability end-to-end:** perform initial render for a fixture app, load it
-  in a headless browser with **zero framework JS executed**, assert no execution
-  before interaction, assert initial-render-resolved async data does not refetch
-  on resume, then interact and assert only the expected symbols were fetched and
-  the DOM updated.
+  in a headless browser with only the tiny framework resumer allowed to execute,
+  assert zero app/component/symbol execution before interaction or visibility,
+  assert initial-render-resolved async data does not refetch on resume, then
+  interact and assert only the expected symbols were fetched and the DOM updated.
   This e2e harness is the core invariant check and gets built early, not last.
   Use `@async/witness` for any resume mechanic that must prove initially
   rendered HTML, payload scripts, generated chunks, Vite/Rolldown integration,

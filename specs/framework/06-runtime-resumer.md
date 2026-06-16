@@ -1,12 +1,14 @@
 # Runtime Render/Resume
 
-Unified runtime behavior for initial render, browser resume, delegated event dispatch, graph writes, behavior setup, async invalidation, and shared patches.
+Unified runtime behavior for CSR render, initial render, browser resume,
+delegated event dispatch, graph writes, behavior setup, async invalidation, and
+shared patches.
 
-There is no separate server runtime package. Initial render and browser resume
-are two environment-specific phases of the same runtime graph, serializer
-protocol, and symbol system. The implementation may expose environment-specific
-entry points, but app authors should experience one model rather than a
-two-sided deployment split.
+There is no separate server runtime package. CSR render, initial render, and
+browser resume are environment-specific phases of the same runtime graph,
+serializer protocol, and symbol system. The implementation may expose
+environment-specific entry points, but app authors should experience one model
+rather than a two-sided deployment split.
 
 ### Runtime graph contract
 
@@ -115,9 +117,88 @@ That package should follow the CSR helper shape of
 `/Users/jacksm5pro/dev/open-source/vitest-browser-qwik` and intentionally leave
 resume proofs to Witness-backed fixtures.
 
+### CSR render containers
+
+`render(App, { target })` is the normal browser render path. It executes the
+component body in the browser, creates DOM under the target, constructs a live
+runtime container, and wires events from compiled render artifacts. A CSR
+container owns:
+
+- the root target and cleanup/unmount boundary
+- one graph instance and scheduler
+- event delegation scope
+- symbol resolver/chunk loader
+- shared-state container scope
+
+CSR must not depend on SSR artifacts. A CSR app must still render and handle
+events when the document has no resumable container markup, no `async/state`, no
+`async/view`, and no inline resumer script.
+
+CSR may share the live container, delegated event, symbol resolver, graph, and
+scheduler machinery after `render()` has created the DOM and runtime graph. It
+does not use the inline SSR resumer to skip component execution, because CSR has
+no server-created DOM or serialized graph to resume.
+
+### SSR resumable containers
+
+`renderToString(App, options)` is the server initial-render path. It returns HTML
+containing the rendered DOM, a resumable container boundary, container-scoped
+payload scripts, symbol resolver metadata, and the inline resumer bootstrap.
+That container boundary is the microfrontend/island scope for DOM locators,
+events, shared-state patches, diagnostics, and cleanup.
+
+The inline resumer activates automatically when the SSR HTML runs in a browser.
+App authors should not need to write a normal browser `resume()` call. Low-level
+resume functions are internal adapter/test utilities unless a specific public
+use case is accepted later.
+
+Container startup may execute the tiny framework resumer, but it must not import
+app chunks or run component bodies, event handlers, behavior symbols, or async
+runner symbols. Startup is limited to decoding payloads, materializing locator
+side tables, installing container-scoped listeners/observers, and waiting for
+explicit triggers such as interaction or visibility.
+
+### Inline resumer boundary
+
+The inline resumer is a tiny browser trapdoor for an already-rendered container.
+It is not the app runtime, not the bundler, and not a hydration engine. Static
+SSR containers with no browser triggers emit no resumer script.
+
+For the event-only v1 path, the resumer owns only:
+
+- locating the current SSR container
+- reading the compact `async/view` data for that container
+- materializing locator side tables against the existing DOM
+- installing delegated listeners for the event names present in that data
+- walking from `event.target` to the container root
+- matching the element/event record
+- resolving the module/export row through the generated table
+- importing and calling the lazy symbol
+
+The compiler/bundler/render pipeline owns locator planning, event extraction,
+symbol IDs, chunk emission, module/export tables, feature selection, and minified
+inline source generation. The resumer must not scan event attributes, discover
+chunks, plan symbols, decode the whole graph, run the DOM journal, start
+behaviors, demand async boundaries, or include visibility/sync-policy code unless
+the container payload needs that feature.
+
+Production size targets are part of the runtime contract:
+
+- event-only specialized resumer: 300-500 B gzip target, 700 B gzip hard budget
+- event plus sync policy: separate feature block, not paid by event-only pages
+- visibility support: separate feature block, not paid by pages without
+  `onVisible`
+- static SSR with no triggers: 0 B resumer
+
+CSP handling belongs to the render/host layer. The default v1 output may use an
+inline classic script with a caller-provided nonce from
+`renderToString(App, { nonce })`. The resumer itself must not contain CSP
+detection, nonce discovery, hash generation, `eval`, `new Function`, or inline
+event-handler attributes.
+
 ### Resume behavior
 
-- One global delegated event listener (capture phase) from the resumer.
+- One container-scoped delegated event listener (capture phase) from the resumer.
 - Before importing handler symbols, the delegated listener evaluates any
   compiler-emitted sync event policy for the target/event. This is the only v1
   path for synchronous `preventDefault()` / `stopPropagation()` behavior. The
@@ -131,8 +212,8 @@ resume proofs to Witness-backed fixtures.
 - Element handles resolve from serialized DOM locators at handler execution time.
   If the element was removed or the locator no longer matches, the handle reads
   as `undefined`.
-- Element behaviors resolve from serialized DOM locators when the host element is
-  connected in the browser. The resumer imports the behavior symbol,
+- Element behaviors resolve from serialized DOM locators when their explicit
+  browser trigger activates. The resumer then imports the behavior symbol,
   materializes its serialized inputs, runs the behavior with the element, and
   stores cleanup on the node. Behavior input changes clean up and rerun the
   behavior. Removed nodes clean up their behaviors before their locators are
