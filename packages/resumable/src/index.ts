@@ -5,9 +5,9 @@ export {
 	state,
 	type AsyncComputedValue,
 	type ElementHandle,
-	IntrinsicRuntimeError,
-	type IntrinsicRuntimeDiagnostic,
-	type IntrinsicName,
+	FrameworkApiRuntimeError,
+	type FrameworkApiRuntimeDiagnostic,
+	type FrameworkApiName,
 	type SharedOptions,
 	type SharedScope,
 } from '@async/resumable-core';

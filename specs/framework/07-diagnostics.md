@@ -94,12 +94,13 @@ the host locator and behavior symbol. This makes runtime errors actionable
 without requiring users to inspect compact payload encoding.
 
 Required compile-time diagnostics include capture-rule violations,
-`state()`/`computed()` used outside a `.tsrx` reactive scope, reactive reads
-after `await` in async computed bodies, async reads outside an async boundary,
-`el` used with a non-`element()` handle, one `element()` handle bound to multiple
-live host elements, an element handle stored in `state()` or serialized data,
-unserializable initial state, and unextractable sync event policy for
-`preventDefault()` / `stopPropagation()`.
+bare `state()`/`computed()`/`shared()`/`element()` calls that are not imported
+from `@async/resumable`, framework APIs used outside a `.tsrx` reactive scope,
+reactive reads after `await` in async computed bodies, async reads outside an
+async boundary, `el` used with a non-`element()` handle, one `element()` handle
+bound to multiple live host elements, an element handle stored in `state()` or
+serialized data, unserializable initial state, and unextractable sync event
+policy for `preventDefault()` / `stopPropagation()`.
 
 Runtime dev diagnostics fail loudly with the same structured shape.
 Serialization failures during initial render include state path and value kind.

@@ -3,6 +3,8 @@ import { compileTsrxModule } from '../src/index.ts';
 import { deserializeGraphValue } from '../../serializer/src/index.ts';
 
 const source = `
+import { state } from '@async/resumable';
+
 export function App() @{
 	let count = state(1);
 	const menu = state({ open: true, title: 'Menu' });

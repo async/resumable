@@ -1,9 +1,15 @@
 import { asNodes, getIdentifierName, type AnyNode } from '../../ast/nodes.ts';
 import { sourceSpan } from '../../ast/source.ts';
 import type { SemanticGraphBinding, SemanticLocalBinding } from '../../artifacts.ts';
+import {
+	getFrameworkApiForCall,
+	getCallName,
+	isFrameworkApiName,
+} from './imports.ts';
 import { collectDestructuredAliases } from './collect-aliases.ts';
 import { collectAsyncComputedPostAwaitReads, collectGraphDependencies } from './collect-async.ts';
 import { collectExpressionReads } from './collect-expressions.ts';
+import { frameworkImportRequiredDiagnostic } from './diagnostics.ts';
 import type { WalkState } from './types.ts';
 
 export function collectVariableDeclaration(node: AnyNode, state: WalkState): void {
@@ -19,8 +25,16 @@ export function collectVariableDeclaration(node: AnyNode, state: WalkState): voi
 
 		const name = getIdentifierName(id);
 		const callName = getCallName(init);
+		const frameworkApi = getFrameworkApiForCall(init, state.frameworkApiImports);
 
 		if (!name || !init) continue;
+
+		if (callName && isFrameworkApiName(callName) && !frameworkApi) {
+			state.graph.diagnostics.push(
+				frameworkImportRequiredDiagnostic(callName, init, state.filename),
+			);
+			continue;
+		}
 
 		const localBindingAlias = aliasedLocalBinding(init, state);
 		if (localBindingAlias) {
@@ -76,7 +90,7 @@ export function collectVariableDeclaration(node: AnyNode, state: WalkState): voi
 			});
 		}
 
-		if (callName === 'state') {
+		if (frameworkApi === 'state') {
 			const initial = firstArgument(init);
 			state.graph.graphBindings.push({
 				id: `state:${name}`,
@@ -89,7 +103,7 @@ export function collectVariableDeclaration(node: AnyNode, state: WalkState): voi
 			});
 		}
 
-		if (callName === 'computed') {
+		if (frameworkApi === 'computed') {
 			const body = firstArgument(init);
 			const isAsync = body?.async === true;
 			const dependencies = collectGraphDependencies(body, state);
@@ -107,7 +121,7 @@ export function collectVariableDeclaration(node: AnyNode, state: WalkState): voi
 			if (isAsync) collectAsyncComputedPostAwaitReads(name, body, state);
 		}
 
-		if (callName === 'element') {
+		if (frameworkApi === 'element') {
 			state.graph.graphBindings.push({
 				id: `element:${name}`,
 				name,
@@ -403,12 +417,6 @@ function containsNonSerializableConstantValue(
 	if (isFunctionValue(node) || isClassInstanceValue(node) || isDomNodeValue(node)) return true;
 
 	return isNonSerializableConstantValue(node, state);
-}
-
-function getCallName(node: AnyNode | undefined | null): string | null {
-	if (node?.type !== 'CallExpression') return null;
-
-	return getIdentifierName(node.callee as AnyNode | undefined);
 }
 
 function variableDeclarationKind(node: AnyNode): SemanticGraphBinding['declarationKind'] {

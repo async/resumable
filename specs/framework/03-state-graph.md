@@ -6,7 +6,8 @@ Author-facing graph state semantics, async derivation, shared state, identity, a
 
 ### Surface API
 
-The author-facing graph data model is three intent-named words:
+The author-facing graph data model is three intent-named APIs imported from
+`@async/resumable`:
 
 - `state()` creates graph state.
 - `computed()` creates sync or async derived graph state.
@@ -16,10 +17,12 @@ The author-facing graph data model is three intent-named words:
 Signals, stores, subscriptions, and object-state representation are
 implementation details of graph management. `onVisible` is an element event
 prop, not a state primitive.
-The two local-state intrinsics, available in any `.tsrx` file (components and
-shared logic alike):
+The two local-state APIs, available in any `.tsrx` file (components and shared
+logic alike), must be imported by the file that uses them:
 
 ```tsrx
+import { state, computed } from '@async/resumable';
+
 export function Counter() @{
   let count = state(0);
   let double = computed(() => count * 2);
@@ -39,6 +42,8 @@ export function Counter() @{
   if real apps demand it).
 
 ```tsrx
+import { state } from '@async/resumable';
+
 let count = state(0);
 let session = state({ user: null, status: "anonymous" });
 
@@ -118,6 +123,8 @@ path, users will rebuild effects by hand with `loading`, `error`, and `data`
 state. The framework instead treats async as derived graph state:
 
 ```tsrx
+import { computed } from '@async/resumable';
+
 function UserRoute() @{
   const user = computed(async ({ signal }) => {
     const id = route.params.userId;
@@ -150,6 +157,8 @@ Semantics:
   sync computed:
 
 ```tsrx
+import { computed } from '@async/resumable';
+
 const rawUser = computed(async ({ signal }) =>
   fetchUser(route.params.userId, signal)
 );
@@ -198,14 +207,17 @@ can recover some async dependencies in compiler-visible expressions. This
 framework takes the TSRX-only route: no marker, but strict compiler diagnostics
 at the async boundary.
 
-The state, async, element, event, and element-behavior primitives are
-**compiler intrinsics**, not imports of a value type. There is no
+The state, async, element, event, and element-behavior APIs are
+**compiler-rewritten framework APIs**, not runtime reactive values. Authors must
+import APIs such as `state`, `computed`, `shared`, and `element` from
+`@async/resumable`; bare calls are diagnostics. The compiler recognizes these
+APIs through their imported bindings, rewrites supported `.tsrx` usage, and the
+runtime stubs fail loudly if called directly without compilation. There is no
 `Signal`/`Tracked` type in the public API. Event handler props are camelCase
 (`onClick`, `onInput`), matching TSRX event-prop convention — no directive
-namespace. Element handles use the host prop `el`, which only accepts
-`element()` handles.
-Element behaviors use the host prop `use`, which only accepts compiler-known
-element behavior expressions.
+namespace. Element handles use the host prop `el`, which only accepts imported
+`element()` handles. Element behaviors use the host prop `use`, which only
+accepts compiler-known element behavior expressions.
 
 `state()`/`computed()` may be created anywhere in a call tree rooted in a
 component or shared instance — including helper functions in non-component
@@ -217,8 +229,9 @@ instead.
 
 ### Implementation: compiler-owned graph state
 
-**Primitives (compiler-rewritten).** The compiler knows every `state()`/`computed()`
-creation site statically, so every read of that binding compiles to a graph read
+**Imported framework APIs (compiler-rewritten).** The compiler knows every
+`state()`/`computed()` creation site whose callee resolves to an import from
+`@async/resumable`, so every read of that binding compiles to a graph read
 (`_get(count)`) and every supported write compiles to a graph write — including
 reads inside closures, template expressions, destructured aliases, and
 non-component helper functions in `.tsrx` files. Reactivity crosses `.tsrx`
@@ -229,8 +242,10 @@ This rewrite is driven by TSRX semantic analysis, not by the lowered output or
 string matching. The state compiler consumes the TSRX structural graph plus
 normal JavaScript/TypeScript AST and scope information:
 
-- `state()` / `computed()` calls in variable declarators become graph bindings
-  owned by the nearest stable TSRX graph scope.
+- Imported `state()` / `computed()` calls in variable declarators become graph
+  bindings owned by the nearest stable TSRX graph scope. Bare calls with the
+  same names are rejected with a diagnostic that asks the author to import the
+  API from `@async/resumable`.
 - Reads in TSRX expression children, element attributes, event handlers,
   behavior inputs, computed bodies, and nested helper functions resolve through
   the lexical binding map and lower to graph reads when they target a known

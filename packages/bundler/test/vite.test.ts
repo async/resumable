@@ -16,6 +16,8 @@ import {
 } from './helpers.ts';
 
 const source = `
+import { state } from '@async/resumable';
+
 export function App() @{
 	let count = state(0);
 

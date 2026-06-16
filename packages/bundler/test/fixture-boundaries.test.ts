@@ -3,8 +3,36 @@ import { resolve } from 'node:path';
 import { describe, expect, test } from 'vitest';
 
 const fixtureRoot = resolve(import.meta.dirname, '../fixtures');
+const tsrxFixtureImports = [
+	{
+		path: 'rolldown-basic/src/root.tsrx',
+		importLine: "import { state } from '@async/resumable';",
+	},
+	{
+		path: 'vite-csr/src/root.tsrx',
+		importLine: "import { state } from '@async/resumable';",
+	},
+	{
+		path: 'vite-library/src/card.tsrx',
+		importLine: "import { state } from '@async/resumable';",
+	},
+	{
+		path: 'vite-plus/src/root.tsrx',
+		importLine: "import { state } from '@async/resumable';",
+	},
+	{
+		path: 'vite-ssr/src/root.tsrx',
+		importLine: "import { state, computed } from '@async/resumable';",
+	},
+] as const;
 
 describe('fixture framework boundaries', () => {
+	test('TSRX fixtures import framework APIs explicitly', async () => {
+		for (const fixture of tsrxFixtureImports) {
+			await expect(readFixture(fixture.path)).resolves.toContain(fixture.importLine);
+		}
+	});
+
 	test('browser entries delegate payload resume to runtime helpers', async () => {
 		const csrEntry = await readFixture('vite-csr/src/main.ts');
 		const ssrEntry = await readFixture('vite-ssr/src/entry-client.ts');

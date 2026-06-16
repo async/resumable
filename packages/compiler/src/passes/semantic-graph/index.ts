@@ -6,6 +6,7 @@ import {
 	collectAsyncBoundaryDiagnostics,
 	propagateAsyncComputedCapability,
 } from './collect-async.ts';
+import { collectImports } from './imports.ts';
 import { getComponent, collectComponentProps } from './collect-components.ts';
 import {
 	collectElement,
@@ -28,14 +29,16 @@ export async function buildSemanticGraph(
 ): Promise<SemanticGraphArtifact> {
 	const ast = parseModule(input.source, input.filename) as AnyNode;
 	const graph = createMutableSemanticGraphArtifact(input.filename);
+	const frameworkApiImports = collectImports(asNodes(ast.body));
 	const state = createWalkState({
 		filename: input.filename,
 		source: input.source,
 		graph,
+		frameworkApiImports,
 	});
 
 	for (const statement of asNodes(ast.body)) {
-		collectModuleScopeGraphCreation(statement, graph, input.source, input.filename);
+		collectModuleScopeGraphCreation(statement, state);
 
 		const component = getComponent(statement);
 		const name = getIdentifierName(component?.id);

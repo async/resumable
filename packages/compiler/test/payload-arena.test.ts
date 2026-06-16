@@ -3,6 +3,8 @@ import { buildSemanticGraph, lowerStateAccess } from '../src/index.ts';
 import { planPayloadArena } from '../src/passes/payload-arena.ts';
 
 const source = `
+import { state, computed, element } from '@async/resumable';
+
 export function App() @{
 	let count = state(0);
 	const menu = state({ open: true, title: 'Menu' });
@@ -168,6 +170,8 @@ test('planPayloadArena keeps distinct targets for repeated graph reads on one ho
 	const semanticGraph = await buildSemanticGraph({
 		filename: 'src/RepeatedTarget.tsrx',
 		source: `
+import { state } from '@async/resumable';
+
 export function App() @{
 	const count = state(0);
 
@@ -209,6 +213,8 @@ test('planPayloadArena classifies class and style binding targets', async () => 
 	const semanticGraph = await buildSemanticGraph({
 		filename: 'src/ClassStyleTargets.tsrx',
 		source: `
+import { state } from '@async/resumable';
+
 export function App() @{
 	const activeClass = state('is-active');
 	const color = state('red');

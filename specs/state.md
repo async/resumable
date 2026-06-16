@@ -234,11 +234,11 @@ in the split specs.
   results use `serialization`; and the generated symbol resolver's unknown
   symbol error metadata uses `resume`; runtime payload decode/version failures
   use `payload`; runtime locator materialization failures use `resume`; and
-  direct compiler-intrinsic execution plus compiler pass-graph validation
+  direct framework API execution plus compiler pass-graph validation
   failures use `runtime`.
 - The thin internal support packages have focused package tests for current
-  narrow surfaces: `core` compiler-intrinsic stubs fail loudly with structured
-  `AA_INTRINSIC_RUNTIME_CALL` metadata when run without the TSRX compiler,
+  narrow surfaces: `core` framework API stubs fail loudly with structured
+  `AA_FRAMEWORK_API_RUNTIME_CALL` metadata when run without the TSRX compiler,
   including `shared()`; `protocol` exports the current protocol version and
   payload TypeScript shapes; and `test-utils` provides canonical payload script
   wrapper assertions, JSON decoding, selected protocol record-count summaries,
@@ -307,7 +307,7 @@ in the split specs.
   `AA_CAPTURE_UNSUPPORTED_VALUE`, `AA_SERIALIZE_UNSUPPORTED_VALUE`,
   `AA_SYMBOL_UNKNOWN`, `AA_PAYLOAD_INVALID`,
   `AA_PROTOCOL_VERSION_MISMATCH`, `AA_RESUME_LOCATOR_MISSING`,
-  `AA_RESUME_LOCATOR_MISMATCH`, `AA_INTRINSIC_RUNTIME_CALL`, and
+  `AA_RESUME_LOCATOR_MISMATCH`, `AA_FRAMEWORK_API_RUNTIME_CALL`, and
   `AA_COMPILER_PASS_GRAPH_INVALID`.
 - That inventory combines different current mechanisms: compiler passes return
   structured diagnostic objects, the pure serializer returns
@@ -321,9 +321,9 @@ in the split specs.
   protocol-version mismatches. Runtime resume locator materialization throws
   `RuntimeResumeError` objects with stable code, phase, docs URL, DOM-order
   locator metadata, host node or boundary ID, suggestions, and expected/actual
-  tag names for tag mismatches. Core compiler intrinsics throw
-  `IntrinsicRuntimeError` objects with stable code, runtime phase, docs URL, and
-  intrinsic name metadata when called without the TSRX compiler. Pass-graph
+  tag names for tag mismatches. Core framework APIs throw
+  `FrameworkApiRuntimeError` objects with stable code, runtime phase, docs URL, and
+  api name metadata when called without the TSRX compiler. Pass-graph
   validation throws `CompilerPassGraphError` objects with stable code, runtime
   phase, invalid-graph reason, pass ID, artifact keys, docs URL, and suggestions.
 - Semantic graph async collection records async boundary ownership, catches
@@ -634,7 +634,7 @@ in the split specs.
   `RegExp`, `URL`, `BigInt`, `Map`, `Set`, `ArrayBuffer`, and the current
   typed-array source table; direct unsupported values report the state path.
 - The main package exposes the current curated source-entry surface, including
-  author intrinsics, the payload-driven resume helper, the Rolldown adapter, and
+  framework APIs, the payload-driven resume helper, the Rolldown adapter, and
   the `./vite` Vite adapter subpath. Current adapter tests cover unit-level
   `.tsrx` transform metadata, in-memory resolver/payload/generated-symbol
   /manifest virtual module resolution and loading, transform manifest objects,
@@ -692,7 +692,7 @@ in the split specs.
 - Continue state-lvalue coverage beyond the current focused cases, including
   additional array write forms, nested aliases, collection-method edge cases,
   delete edge cases, and remaining invalid write diagnostics.
-- Implement `shared()` beyond the current intrinsic stub/re-export surface,
+- Implement `shared()` beyond the current framework API runtime stub/re-export surface,
   including semantic graph records for definitions and instance calls, stable
   definition IDs, request/container/page scope handling, shared-definition
   dependency and cycle diagnostics, payload serialization, runtime graph-instance
@@ -876,7 +876,7 @@ as evidence for a new source change.
 - `pnpm exec vp test packages/runtime/test/resume.test.ts packages/runtime/test/payload-scripts.test.ts packages/runtime/test/behaviors.test.ts packages/runtime/test/bindings.test.ts`
 - `pnpm exec vp test packages/serializer/test/serializer.test.ts`
 - `pnpm exec vp test packages/resumable/test/public-surface.test.ts packages/bundler/test/rolldown.test.ts packages/bundler/test/vite.test.ts`
-- `pnpm exec vp test packages/core/test/intrinsics.test.ts packages/protocol/test/protocol.test.ts packages/test-utils/test/payload-helpers.test.ts`
+- `pnpm exec vp test packages/core/test/framework-api.test.ts packages/protocol/test/protocol.test.ts packages/test-utils/test/payload-helpers.test.ts`
 - `pnpm exec vp test packages/bundler/test/vite.test.ts`
 - `pnpm exec vp test packages/bundler/test/rolldown.test.ts packages/bundler/test/vite.test.ts packages/resumable/test/public-surface.test.ts`
 - `pnpm exec vp test packages/compiler/test/symbol-resolver.test.ts packages/compiler/test/symbol-modules.test.ts packages/compiler/test/compile-module.test.ts packages/bundler/test/*.test.ts packages/resumable/test/public-surface.test.ts`
@@ -921,13 +921,13 @@ commands are listed in the implementation/build section above.
 - diagnostic inventory audit confirmed 23 implemented `AA_*` codes across
   semantic graph, state lowering, capture analysis, serializer unsupported-value,
   generated unknown-symbol resolver paths, and runtime payload decode/version
-  paths, resume locator paths, direct intrinsic runtime-call paths, and compiler
+  paths, resume locator paths, direct framework API runtime-call paths, and compiler
   pass-graph validation paths, and aligned the diagnostics spec phase list with
   the implemented `semantic-graph` phase.
 - diagnostic-scope audit confirmed current diagnostics coverage includes
   package/artifact-level object shapes for compiler passes, serializer
   unsupported-value failures, generated unknown-symbol resume errors, runtime
-  payload/resume errors, compiler-intrinsic runtime errors, and compiler
+  payload/resume errors, framework API runtime errors, and compiler
   pass-graph validation errors.
 - diagnostic-docs audit confirmed current package source and tests use hard-coded
   `https://async.await.dev/errors/...` URL shapes, while the repo currently has
@@ -1063,7 +1063,7 @@ commands are listed in the implementation/build section above.
   generated resolver unknown-symbol metadata; protocol-state serialization
   failures, runtime payload decode/version failures, and resume locator
   materialization failures now have structured error surfaces, and core
-  compiler-intrinsic runtime failures plus compiler pass-graph validation
+  framework API runtime failures plus compiler pass-graph validation
   failures now expose structured metadata.
 - runtime payload-resume audit confirmed `resumeFromPayloadScripts` composes
   payload decoding, runtime graph creation, `async/view` materialization, and
@@ -1202,12 +1202,12 @@ commands are listed in the implementation/build section above.
   source/manifest rewriting from final chunk filenames beyond the current
   generated build fixture paths.
 - public-surface source/test audit confirmed `packages/resumable` currently
-  re-exports author intrinsics, `resumeFromPayloadScripts`, the Rolldown adapter,
+  re-exports framework APIs, `resumeFromPayloadScripts`, the Rolldown adapter,
   and its `./vite` adapter subpath through private source-entry package
   manifests; current tests import those source entries directly rather than
   proving installed package export resolution.
 - core/protocol/test-utils audit confirmed support-package coverage is limited to
-  structured runtime failure metadata for compiler-only intrinsics, protocol
+  structured runtime failure metadata for compiler-rewritten framework APIs, protocol
   version/type fixtures, canonical payload script wrapper assertions, JSON
   script decoding, selected protocol record-count summaries for cells, computed
   entries, locators, events, bindings, behaviors, element handles, and async
@@ -1217,7 +1217,7 @@ commands are listed in the implementation/build section above.
   migration/version negotiation, browser helpers, or witness integration
   helpers.
 - shared-state audit confirmed current `shared()` support is limited to the
-  `@async/resumable-core` compiler-intrinsic stub, the main package re-export,
+  `@async/resumable-core` framework API stub, the main package re-export,
   public-surface presence checks, and diagnostic suggestion text. The semantic
   graph collector currently records `state()`, `computed()`, and `element()`
   calls, but not shared definitions or shared instance calls. The current core
@@ -1503,7 +1503,7 @@ commands are listed in the implementation/build section above.
   comment-skipping or offset logic, statement-container lexical-scope artifacts,
   or locator behavior when authored comments appear before generated
   async-boundary anchors.
-- Current `shared()` coverage proves only that the compiler-intrinsic stub throws
+- Current `shared()` coverage proves only that the framework API stub throws
   when executed directly and that the main package re-exports the function. It
   does not prove the final authored `shared()` call shape, shared definition
   parsing, stable shared definition IDs, graph-context resolution,
@@ -1523,10 +1523,10 @@ commands are listed in the implementation/build section above.
   snapshot integration, initial-render payload construction, runtime graph snapshots after
   component-body execution, secret-leak/resource diagnostics, compact production
   wire encoding, or integration with a real initial-render payload.
-- Current core/protocol/test-utils tests prove the compiler-only intrinsic
-  runtime failure path and `AA_INTRINSIC_RUNTIME_CALL` metadata, protocol version
-  sharing across empty state/view payloads, canonical payload script wrapper
-  checks including the closing tag, payload script JSON decoding, and selected
+- Current core/protocol/test-utils tests prove the framework API runtime failure
+  path and `AA_FRAMEWORK_API_RUNTIME_CALL` metadata, protocol version sharing
+  across empty state/view payloads, canonical payload script wrapper checks
+  including the closing tag, payload script JSON decoding, and selected
   protocol record counting for cells, computed entries, locators, events,
   bindings, behaviors, element handles, and async boundaries. They also prove a
   decoded human-readable payload debug dump with state/view IDs, names, symbol

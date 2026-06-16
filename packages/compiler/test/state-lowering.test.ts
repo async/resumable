@@ -4,6 +4,8 @@ import { buildSemanticGraph } from '../src/index.ts';
 import { lowerStateAccess } from '../src/passes/state-lowering.ts';
 
 const source = `
+import { state, computed } from '@async/resumable';
+
 export function Counter() @{
 	let count = state(0);
 	let total = state(0);
@@ -40,6 +42,8 @@ export function Counter() @{
 `;
 
 const readOnlyWriteSource = `
+import { state, computed } from '@async/resumable';
+
 export function Counter() @{
 	let count = state(0);
 	const doubled = computed(() => count * 2);
@@ -55,6 +59,8 @@ export function Greeting({ label }: { label: string }) @{
 `;
 
 const constReassignmentSource = `
+import { state } from '@async/resumable';
+
 export function Counter() @{
 	const frozenCount = state(0);
 	const menu = state({ open: false });

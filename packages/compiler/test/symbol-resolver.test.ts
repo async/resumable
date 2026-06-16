@@ -3,6 +3,8 @@ import { buildSemanticGraph, lowerStateAccess, planPayloadArena } from '../src/i
 import { planSymbolResolver } from '../src/passes/symbol-resolver.ts';
 
 const source = `
+import { state, computed } from '@async/resumable';
+
 export function App() @{
 	let count = state(0);
 	let query = state('');

@@ -2,6 +2,8 @@ import { expect, test } from 'vitest';
 import { buildSemanticGraph, lowerStateAccess, planPayloadArena } from '../src/index.ts';
 
 const source = `
+import { state } from '@async/resumable';
+
 export function Menu() @{
 	const menu = state({ open: true });
 
@@ -18,6 +20,8 @@ export function Menu() @{
 `;
 
 const negatedGuardSource = `
+import { state } from '@async/resumable';
+
 export function Menu() @{
 	const menu = state({ open: false });
 
@@ -102,6 +106,8 @@ export function Menu() @{
 `;
 
 const handlerArraySyncPolicySource = `
+import { state } from '@async/resumable';
+
 export function Menu() @{
 	const menu = state({ open: true, locked: true });
 

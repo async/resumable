@@ -90,6 +90,7 @@ export type SemanticEvent = {
 
 export type SemanticGraphDiagnostic = CompilerDiagnostic & {
 	readonly code:
+		| 'AA_FRAMEWORK_IMPORT_REQUIRED'
 		| 'AA_STATE_MODULE_SCOPE'
 		| 'AA_ASYNC_POST_AWAIT_READ'
 		| 'AA_ASYNC_BOUNDARY_REQUIRED'

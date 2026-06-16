@@ -1,7 +1,10 @@
 import { expect, test } from 'vitest';
 import type { AnyNode } from '../src/ast/nodes.ts';
 import { collectModuleScopeGraphCreation } from '../src/passes/semantic-graph/collect-module-scope.ts';
-import { createMutableSemanticGraphArtifact } from '../src/passes/semantic-graph/types.ts';
+import {
+	createMutableSemanticGraphArtifact,
+	createWalkState,
+} from '../src/passes/semantic-graph/types.ts';
 
 test('module-scope collector reports state and computed creation diagnostics', () => {
 	const source = 'const count = state(0);';
@@ -30,8 +33,14 @@ test('module-scope collector reports state and computed creation diagnostics', (
 		],
 	} satisfies AnyNode;
 	const graph = createMutableSemanticGraphArtifact('src/App.tsrx');
+	const state = createWalkState({
+		filename: 'src/App.tsrx',
+		source,
+		graph,
+		frameworkApiImports: new Map([['state', 'state']]),
+	});
 
-	collectModuleScopeGraphCreation(statement, graph, source, 'src/App.tsrx');
+	collectModuleScopeGraphCreation(statement, state);
 
 	expect(graph.diagnostics).toEqual([
 		expect.objectContaining({

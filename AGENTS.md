@@ -46,6 +46,20 @@ is the Codex-facing always-on guidance for building the TSRX resumable framework
   not add standalone esbuild, terser, Rollup, SWC, webpack, Babel build
   pipelines, or similar secondary transformers/minifiers.
 
+## Naming For Contributors And Agents
+
+- Prefer names a junior developer can understand from the local file and the
+  current task. Use concrete nouns from the user-facing concept (`imports`,
+  `frameworkApi`, `payload`, `locator`) over internal shorthand or abstract
+  labels that require project history.
+- Compiler helper files and functions should make the ownership and reason
+  visible. If a name still needs framework context, add a short comment near the
+  helper that explains what it reads, why it exists, and what callers should do
+  with the result.
+- Avoid introducing new terms such as "intrinsic", "authored primitive", or
+  similar compiler jargon in source names unless the spec section and diagnostic
+  already use that exact term for users.
+
 ## Pnpm / Vite-Plus Monorepo Shape
 
 This framework will be a **pnpm workspace** and vite-plus monorepo with multiple

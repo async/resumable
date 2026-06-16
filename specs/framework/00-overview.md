@@ -46,7 +46,8 @@ JSX/TSX is explicitly **not** supported.
    compile to real DOM operations; each dynamic binding is its own subscription.
    "Signal" is an implementation detail of compiled output, never API vocabulary.
 4. **TSRX-only.** State and reactivity are language features of `.tsrx` files,
-   not a runtime library importable from arbitrary TS.
+   surfaced through compiler-rewritten imports from `@async/resumable`, not a
+   runtime library usable from arbitrary TS.
 5. **First-class async.** Async dataflow is a compiler-tracked graph feature, not
    an effect/task/resource wrapper. Pending/error UI is expressed with TSRX
    boundaries, and async dependencies are serializable/resumable.
@@ -116,7 +117,7 @@ Initial internal production package map:
 
 - `packages/resumable` — main package for `@async/resumable`; curated public
   re-exports only.
-- `packages/core` — compiler-known author intrinsics and public types.
+- `packages/core` — compiler-rewritten framework APIs and public types.
 - `packages/protocol` — private shared contracts: graph IDs, symbol IDs,
   payload schema types, manifest types, diagnostics, and protocol/version
   constants.

@@ -1,15 +1,18 @@
 import { asNodes, getIdentifierName, type AnyNode } from '../../ast/nodes.ts';
 import { expressionSourceOrFallback } from '../../ast/source.ts';
-import { moduleScopeGraphCreationDiagnostic } from './diagnostics.ts';
+import {
+	moduleScopeGraphCreationDiagnostic,
+	frameworkImportRequiredDiagnostic,
+} from './diagnostics.ts';
 import { evaluateSyncPolicyConstant } from './collect-state.ts';
-import type { MutableSemanticGraphArtifact } from './types.ts';
+import {
+	getFrameworkApiForCall,
+	getCallName,
+	isFrameworkApiName,
+} from './imports.ts';
+import type { WalkState } from './types.ts';
 
-export function collectModuleScopeGraphCreation(
-	statement: AnyNode,
-	graph: MutableSemanticGraphArtifact,
-	source: string,
-	filename: string,
-): void {
+export function collectModuleScopeGraphCreation(statement: AnyNode, state: WalkState): void {
 	const declaration = moduleScopeVariableDeclaration(statement);
 	if (!declaration) return;
 
@@ -17,26 +20,34 @@ export function collectModuleScopeGraphCreation(
 		const id = declarator.id as AnyNode | undefined;
 		const init = declarator.init as AnyNode | undefined;
 		const callName = getCallName(init);
+		const frameworkApi = getFrameworkApiForCall(init, state.frameworkApiImports);
 		const name = getIdentifierName(id);
 
 		if (declaration.kind === 'const' && name) {
 			const constant = evaluateSyncPolicyConstant(init);
 			if (constant.ok) {
-				graph.syncPolicyConstants.push({
+				state.graph.syncPolicyConstants.push({
 					name,
 					value: constant.value,
 				});
 			}
 		}
 
-		if (callName !== 'state' && callName !== 'computed') continue;
+		if (callName && isFrameworkApiName(callName) && !frameworkApi && init) {
+			state.graph.diagnostics.push(
+				frameworkImportRequiredDiagnostic(callName, init, state.filename),
+			);
+			continue;
+		}
 
-		graph.diagnostics.push(
+		if (frameworkApi !== 'state' && frameworkApi !== 'computed') continue;
+
+		state.graph.diagnostics.push(
 			moduleScopeGraphCreationDiagnostic(
-				moduleScopeDeclarationName(id, source),
-				callName,
+				moduleScopeDeclarationName(id, state.source),
+				frameworkApi,
 				init,
-				filename,
+				state.filename,
 			),
 		);
 	}
@@ -55,10 +66,4 @@ function moduleScopeVariableDeclaration(statement: AnyNode): AnyNode | null {
 
 function moduleScopeDeclarationName(node: AnyNode | undefined, source: string): string {
 	return getIdentifierName(node) ?? expressionSourceOrFallback(node, source, 'graph binding');
-}
-
-function getCallName(node: AnyNode | undefined | null): string | null {
-	if (node?.type !== 'CallExpression') return null;
-
-	return getIdentifierName(node.callee as AnyNode | undefined);
 }
