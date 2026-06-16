@@ -16,8 +16,8 @@ const fixtures = [
 		runtimeBudget: {
 			dist: 'packages/bundler/fixtures/vite-csr/dist',
 			entryHtml: 'packages/bundler/fixtures/vite-csr/dist/index.html',
-			maxRuntimeChunkGzipBytes: 3_250,
-			maxAsyncScriptsGzipBytes: 3_350,
+			maxRuntimeChunkGzipBytes: 3_000,
+			maxAsyncScriptsGzipBytes: 3_050,
 			maxAsyncScriptCount: 2,
 			forbidVitePreloadHelper: true,
 			forbiddenRuntimeOrigins: [
@@ -51,8 +51,8 @@ const fixtures = [
 		runtimeBudget: {
 			dist: 'packages/bundler/fixtures/vite-plus/dist',
 			entryHtml: 'packages/bundler/fixtures/vite-plus/dist/index.html',
-			maxRuntimeChunkGzipBytes: 3_200,
-			maxAsyncScriptsGzipBytes: 3_300,
+			maxRuntimeChunkGzipBytes: 2_950,
+			maxAsyncScriptsGzipBytes: 3_000,
 			maxAsyncScriptCount: 2,
 			forbidVitePreloadHelper: true,
 			forbiddenRuntimeOrigins: ['/runtime/src/event-resume.ts'],

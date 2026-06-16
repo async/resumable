@@ -57,7 +57,7 @@ export async function transformTsrxModule(
 		{
 			id: payloadId,
 			type: 'payload',
-			source: objectModule(compiled.payloadScripts),
+			source: payloadModule(compiled.payloadScripts),
 		},
 		{
 			id: resolverId,
@@ -104,6 +104,28 @@ function objectModule(value: unknown) {
 	return `export default ${JSON.stringify(value, null, '\t')};\n`;
 }
 
+function payloadModule(payloadScripts: {
+	readonly state: unknown;
+	readonly view: unknown;
+	readonly stateScript: string;
+	readonly viewScript: string;
+}) {
+	return [
+		`export const state = ${JSON.stringify(payloadScripts.state, null, '\t')};`,
+		`export const view = ${JSON.stringify(payloadScripts.view, null, '\t')};`,
+		`export const stateScript = ${JSON.stringify(payloadScripts.stateScript)};`,
+		`export const viewScript = ${JSON.stringify(payloadScripts.viewScript)};`,
+		'export const payloadScripts = {',
+		'	state,',
+		'	view,',
+		'	stateScript,',
+		'	viewScript,',
+		'};',
+		'export default payloadScripts;',
+		'',
+	].join('\n');
+}
+
 function emitSourceModule(input: {
 	readonly filename: string;
 	readonly payloadId: string;
@@ -111,16 +133,18 @@ function emitSourceModule(input: {
 	readonly moduleManifestId: string;
 }) {
 	return [
-		`import payloadScripts from '${input.payloadId}';`,
+		`import payloadScripts, { state as payloadState, view as payloadView } from '${input.payloadId}';`,
 		`import { loadSymbol, symbolManifest } from '${input.resolverId}';`,
 		`import moduleManifest from '${input.moduleManifestId}';`,
 		'',
 		`export const resumableSource = ${JSON.stringify(input.filename)};`,
-		'export { loadSymbol, moduleManifest, payloadScripts, symbolManifest };',
+		'export { loadSymbol, moduleManifest, payloadScripts, payloadState, payloadView, symbolManifest };',
 		'',
 		'export default {',
 		'	source: resumableSource,',
 		'	payloadScripts,',
+		'	payloadState,',
+		'	payloadView,',
 		'	loadSymbol,',
 		'	symbolManifest,',
 		'	moduleManifest,',
