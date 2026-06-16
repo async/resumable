@@ -30,4 +30,18 @@ describe('package metadata', () => {
 			);
 		}
 	});
+
+	test('workspace test script includes package-local Witness boxes', async () => {
+		const workspace = JSON.parse(await readFile(resolve(root, 'package.json'), 'utf8')) as {
+			readonly scripts?: Record<string, string>;
+		};
+		const bundler = JSON.parse(
+			await readFile(resolve(root, 'packages/bundler/package.json'), 'utf8'),
+		) as {
+			readonly scripts?: Record<string, string>;
+		};
+
+		expect(bundler.scripts?.['test:boxes']).toBe('witness run');
+		expect(workspace.scripts?.test).toBe('vp test && pnpm --dir packages/bundler test:boxes');
+	});
 });
