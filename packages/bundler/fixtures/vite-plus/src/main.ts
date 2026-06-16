@@ -1,4 +1,4 @@
-import { render } from '@async/resumable/runtime';
+import { render } from '@async/resumable/runtime/render';
 import { loadSymbol, payloadScripts } from './root.tsrx';
 
 const app = document.querySelector('#app');

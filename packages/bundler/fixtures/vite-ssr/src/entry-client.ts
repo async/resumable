@@ -1,4 +1,4 @@
-import { resumeFromPayloadDocument } from '../../../../resumable/src/runtime.ts';
+import { resumeFromPayloadDocument } from '@async/resumable/runtime/resume';
 import { loadSymbol } from './root.tsrx';
 
 type ResumeContainerEventInput = {

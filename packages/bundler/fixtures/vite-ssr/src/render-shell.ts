@@ -1,4 +1,4 @@
-import { renderToString, type SsrRenderOutput } from '@async/resumable/runtime';
+import { renderToString, type SsrRenderOutput } from '@async/resumable/runtime/render';
 
 export type PayloadScripts = Required<Pick<SsrRenderOutput, 'state' | 'view'>>;
 

@@ -1,5 +1,6 @@
 import { expect, test } from 'vitest';
-import { applyDomJournalEntries, createDomUpdateEntry } from '../src/index.ts';
+import { createDomUpdateEntry } from '../src/dom-update.ts';
+import { applyDomJournalEntries } from '../src/index.ts';
 
 type FakeElement = {
 	textContent: string;

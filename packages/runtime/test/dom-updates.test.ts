@@ -1,9 +1,6 @@
 import { expect, test } from 'vitest';
-import {
-	createDomUpdateEntry,
-	createResumeRuntime,
-	createRuntimeGraph,
-} from '../src/index.ts';
+import { createDomUpdateEntry } from '../src/dom-update.ts';
+import { createResumeRuntime, createRuntimeGraph } from '../src/index.ts';
 
 type FakeElement = {
 	readonly nodeType: 1;

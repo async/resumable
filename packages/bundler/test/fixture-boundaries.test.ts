@@ -45,11 +45,15 @@ describe('fixture framework boundaries', () => {
 			expect(source).not.toContain('applyDomJournalEntries');
 			expect(source).not.toContain('applyDomJournal');
 		}
-		expect(csrEntry).toContain("import { render } from '@async/resumable/runtime';");
+		expect(csrEntry).toContain("import { render } from '@async/resumable/runtime/render';");
 		expect(csrEntry).not.toContain('resumeFromPayloadScripts');
-		expect(vitePlusEntry).toContain("import { render } from '@async/resumable/runtime';");
+		expect(vitePlusEntry).toContain(
+			"import { render } from '@async/resumable/runtime/render';",
+		);
 		expect(vitePlusEntry).not.toContain('resumeFromPayloadScripts');
-		expect(ssrEntry).toContain('resumeFromPayloadDocument');
+		expect(ssrEntry).toContain(
+			"import { resumeFromPayloadDocument } from '@async/resumable/runtime/resume';",
+		);
 		expect(ssrEntry).toContain('export async function resumeContainerEvent');
 		expect(ssrEntry).toContain('__asyncResumeRuntimeStarted');
 		expect(ssrEntry).toContain('syncPolicyAlreadyApplied: true');

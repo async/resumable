@@ -4,7 +4,10 @@
 	"private": true,
 	"type": "module",
 	"exports": {
-		".": "./src/index.ts"
+		".": "./src/index.ts",
+		"./dom-update": "./src/dom-update.ts",
+		"./render": "./src/render.ts",
+		"./resume": "./src/payload.ts"
 	},
 	"dependencies": {
 		"@async/resumable-protocol": "workspace:*",

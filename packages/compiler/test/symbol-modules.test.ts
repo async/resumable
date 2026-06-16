@@ -64,7 +64,7 @@ test('emitSymbolModules emits event and DOM update modules that consume resume c
 		exportName: 'symbol_domUpdate',
 	});
 	expect(artifact.modules[1].source).toContain(
-		"import { createDomUpdateEntry } from '@async/resumable/runtime';",
+		"import { createDomUpdateEntry } from '@async/resumable/runtime/dom-update';",
 	);
 	expect(artifact.modules[1].source).toContain('export function symbol_domUpdate(context)');
 	expect(artifact.modules[1].source).toContain('locator: context.domUpdate?.hostNodeId ?? "h1"');

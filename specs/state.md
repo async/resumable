@@ -1264,6 +1264,13 @@ as evidence for a new source change.
 - `(from packages/bundler) pnpm exec witness --json` (latest receipt:
   `packages/bundler/.witness/receipts/2026-06-16T00-37-49.165Z/receipt.json`)
 - `pnpm exec vp test packages/bundler/test/*.test.ts packages/resumable/test/public-surface.test.ts`
+- `pnpm exec vp test packages/bundler/test/fixture-builds.test.ts`
+- `(from repo root) pnpm --filter @async/resumable-bundler exec witness run ssr-preview --mode preview`
+  (receipt:
+  `packages/bundler/.witness/receipts/2026-06-16T16-19-07.583Z/receipt.json`;
+  records startup script requests `(none)`, post-click requested async chunks,
+  largest runtime-heavy chunk `async-CAT12afM.js` at 43,623 raw / 12,500 gzip
+  bytes, and all post-click async scripts at 45,658 raw / 13,486 gzip bytes)
 
 Current spec/ledger-maintenance receipts:
 
@@ -2183,6 +2190,22 @@ commands are listed in the implementation/build section above.
   preview, and a package-local SSR preview box now uses the fixture's app-build
   path plus Vite preview response instead of rewriting the preview index before
   proving the browser entry resumes that existing DOM for the same click update.
+  The same SSR preview box now records the post-interaction script request list,
+  computes gzip sizes for those requested build artifacts, and fails if the
+  current-regression interaction budget is exceeded: 12.5 KB gzip for the
+  runtime-heavy chunk and 14.5 KB gzip for all post-click async scripts. Focused
+  fixture-build tests also rebuild the CSR, SSR, and vite-plus fixtures and
+  enforce current-regression gzip ceilings for each fixture's runtime-heavy
+  chunk and total generated async scripts while reporting the event-only
+  300-500 B gzip target / 700 B gzip hard budget as the remaining spec target.
+  Generated DOM update symbols now import the helper-only
+  `@async/resumable/runtime/dom-update` subpath instead of the broad runtime
+  entry, and the Vite CSR/vite-plus/SSR fixtures use phase-specific
+  `runtime/render` and `runtime/resume` subpaths so the broad runtime entry does
+  not own those browser paths. Current rebuilt fixture totals are still far
+  above the final target: 9,373 gzip bytes for all CSR async scripts, 13,670
+  gzip bytes for all SSR async scripts, and 8,994 gzip bytes for all vite-plus
+  async scripts.
   A vite-plus fixture now has a real app entry and a package-local preview box
   that proves a vite-plus config emits the async-resumable manifest, bundle
   graph, and browser output through Vite preview.

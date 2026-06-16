@@ -3,6 +3,7 @@ import { readFile, rm } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { beforeAll, describe, expect, test } from 'vitest';
+import { runtimeSizeReport } from '../test-support/runtime-size.ts';
 
 const exec = promisify(execFile);
 const root = resolve(import.meta.dirname, '../../..');
@@ -12,15 +13,35 @@ const fixtures = [
 		filter: '@fixtures/vite-csr',
 		outputs: ['packages/bundler/fixtures/vite-csr/dist'],
 		manifest: 'packages/bundler/fixtures/vite-csr/dist/async-resumable-manifest.json',
+		runtimeBudget: {
+			dist: 'packages/bundler/fixtures/vite-csr/dist',
+			maxRuntimeChunkGzipBytes: 8_600,
+			maxAsyncScriptsGzipBytes: 9_600,
+		},
 	},
 	{
 		filter: '@fixtures/vite-library',
 		outputs: ['packages/bundler/fixtures/vite-library/dist'],
 	},
 	{
+		filter: '@fixtures/vite-ssr',
+		outputs: ['packages/bundler/fixtures/vite-ssr/dist'],
+		manifest: 'packages/bundler/fixtures/vite-ssr/dist/async-resumable-manifest.json',
+		runtimeBudget: {
+			dist: 'packages/bundler/fixtures/vite-ssr/dist',
+			maxRuntimeChunkGzipBytes: 12_500,
+			maxAsyncScriptsGzipBytes: 14_500,
+		},
+	},
+	{
 		filter: '@fixtures/vite-plus',
 		outputs: ['packages/bundler/fixtures/vite-plus/dist'],
 		manifest: 'packages/bundler/fixtures/vite-plus/dist/async-resumable-manifest.json',
+		runtimeBudget: {
+			dist: 'packages/bundler/fixtures/vite-plus/dist',
+			maxRuntimeChunkGzipBytes: 8_500,
+			maxAsyncScriptsGzipBytes: 9_200,
+		},
 	},
 	{
 		filter: '@fixtures/rolldown-basic',
@@ -55,6 +76,20 @@ describe('fixture builds', () => {
 				expect(manifest.version).toBe(1);
 				expect(manifest.modules).toEqual(expect.any(Array));
 				expect(manifest.bundleGraphAsset).toBe('build/bundle-graph.json');
+			}
+
+			if ('runtimeBudget' in fixture) {
+				const report = await runtimeSizeReport({
+					dist: resolve(root, fixture.runtimeBudget.dist),
+					manifest: resolve(root, fixture.manifest),
+				});
+				expect(report.runtimeChunks.length, report.summary).toBeGreaterThan(0);
+				expect(report.largestRuntimeChunk?.gzipBytes, report.summary).toBeLessThanOrEqual(
+					fixture.runtimeBudget.maxRuntimeChunkGzipBytes,
+				);
+				expect(report.asyncScripts.gzipBytes, report.summary).toBeLessThanOrEqual(
+					fixture.runtimeBudget.maxAsyncScriptsGzipBytes,
+				);
 			}
 		}, 120_000);
 	}

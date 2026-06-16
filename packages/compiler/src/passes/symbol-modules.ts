@@ -195,7 +195,7 @@ function emitDomBindingModule(
 	const exportName = symbolExportName(symbol.id);
 
 	return [
-		"import { createDomUpdateEntry } from '@async/resumable/runtime';",
+		"import { createDomUpdateEntry } from '@async/resumable/runtime/dom-update';",
 		'',
 		`export function ${exportName}(context) {`,
 		'	return createDomUpdateEntry({',

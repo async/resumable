@@ -1,7 +1,7 @@
 import { expect, test } from 'vitest';
 import { createProtocolStatePayload, renderPayloadScripts } from '../../serializer/src/index.ts';
+import { createDomUpdateEntry } from '../src/dom-update.ts';
 import {
-	createDomUpdateEntry,
 	createResumeRuntime,
 	createRuntimeGraphFromStatePayload,
 	decodePayloadScripts,

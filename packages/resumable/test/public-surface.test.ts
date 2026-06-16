@@ -10,7 +10,12 @@ import {
 	shared,
 	state,
 } from '../src/index.ts';
-import { createDomUpdateEntry } from '../src/runtime.ts';
+import { createDomUpdateEntry as createNarrowDomUpdateEntry } from '../src/runtime/dom-update.ts';
+import {
+	render as narrowRender,
+	renderToString as narrowRenderToString,
+} from '../src/runtime/render.ts';
+import { resumeFromPayloadDocument as narrowResumeFromPayloadDocument } from '../src/runtime/resume.ts';
 import { resumable as viteResumable } from '../src/vite.ts';
 
 test('main package exposes the curated author and build surface', () => {
@@ -22,7 +27,10 @@ test('main package exposes the curated author and build surface', () => {
 	expect(typeof renderToString).toBe('function');
 	expect(typeof resumeFromPayloadDocument).toBe('function');
 	expect(typeof resumeFromPayloadScripts).toBe('function');
-	expect(typeof createDomUpdateEntry).toBe('function');
+	expect(typeof createNarrowDomUpdateEntry).toBe('function');
+	expect(typeof narrowRender).toBe('function');
+	expect(typeof narrowRenderToString).toBe('function');
+	expect(typeof narrowResumeFromPayloadDocument).toBe('function');
 	expect(typeof resumableClient).toBe('function');
 	expect(typeof viteResumable).toBe('function');
 });
