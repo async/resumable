@@ -22,7 +22,7 @@ export async function compileTsrxModule(
 	const semanticGraph = await buildSemanticGraph(input);
 	const stateLowering = lowerStateAccess({ semanticGraph });
 	const payloadArena = planPayloadArena({ semanticGraph, stateLowering });
-	const symbolResolver = planSymbolResolver({ semanticGraph, payloadArena });
+	const symbolResolver = planSymbolResolver({ semanticGraph, payloadArena, stateLowering });
 	const captureAnalysis = analyzeCaptures({ semanticGraph, symbolResolver });
 	const protocolState = createProtocolStatePayloadFromArena({ semanticGraph, payloadArena });
 	const protocolView = createProtocolViewPayload({ payloadArena, symbolResolver });

@@ -9,6 +9,6 @@
 	"dependencies": {
 		"@async/resumable-protocol": "workspace:*",
 		"@async/resumable-serializer": "workspace:*",
-		"@tsrx/core": "workspace:*"
+		"@tsrx/core": "catalog:"
 	}
 }

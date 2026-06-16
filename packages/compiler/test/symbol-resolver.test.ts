@@ -42,6 +42,7 @@ test('planSymbolResolver assigns lazy symbols while resolver owns import boundar
 	const plan = planSymbolResolver({
 		semanticGraph,
 		payloadArena,
+		stateLowering,
 	});
 
 	expect(plan.passId).toBe('symbol-resolver');
@@ -55,6 +56,13 @@ test('planSymbolResolver assigns lazy symbols while resolver owns import boundar
 				eventName: 'click',
 				order: 0,
 				source: '() => count++',
+				writes: [
+					expect.objectContaining({
+						bindingId: 'state:count',
+						operation: 'update',
+						updateOperator: '++',
+					}),
+				],
 			}),
 			expect.objectContaining({
 				kind: 'event-handler',

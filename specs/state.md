@@ -40,26 +40,51 @@ Completed slices are concentrated in:
 - pure-value serializer support for identity/cycles and the accepted built-in
   value set
 - early public package re-exports and Rolldown/Vite adapter shells, including
-  virtual module exposure for current DOM binding symbol modules and transform
+  virtual module exposure for current simple event-handler update symbols,
+  DOM binding symbol modules, and transform
   manifests, a unit-tested build manifest asset hook, a fixture-backed Vite
   library build, and a direct Rolldown build that load the generated payload,
-  resolver, manifest, and current DOM-binding symbol virtual modules while
+  resolver, manifest, and current generated symbol virtual modules while
   recording bundle-derived chunk filenames, finalized generated-symbol rows in
   the emitted build manifest, and final emitted chunk filenames in the generated
-  resolver's exported symbol manifest for those current DOM-binding symbols;
+  resolver's exported symbol manifest for those current generated symbols;
   repeated transforms for the same `.tsrx` module now drop stale generated
   virtual modules before registering fresh artifacts, and the Vite adapter's
   structural `configureServer` / `handleHotUpdate` hooks invalidate generated
   virtual module graph nodes for changed `.tsrx` files and emit a custom
   dev-server update payload listing the changed module plus generated virtual
-  module IDs; `transformIndexHtml` injects an inert dev-only marker tag and a
+  module IDs, including server-originated hot updates routed through the
+  configured Vite client environment name; `transformIndexHtml` injects an inert
+  dev-only marker tag and a
   requestable virtual dev-client module in Vite dev HTML contexts, and a real
   Vite dev-server fixture proves that HTML transform, the virtual client request,
   and a `.tsrx` source transform run through Vite; that client listens for the
   custom update payload before redispatching it as a cancelable browser
   `CustomEvent`, and if no consumer prevents default it asks Vite HMR to
-  invalidate the client module; `buildStart` clears accumulated transform
-  manifests and generated virtual modules before a new build/dev cycle
+  invalidate the client module; the Vite adapter also defaults app builds to
+  `build.modulePreload = false` so the framework manifest/bundle-graph path owns
+  preload decisions; package-local Witness boxes under `packages/bundler/boxes`
+  now run the Vite dev-server pipeline for the `vite-csr` fixture, edit a
+  `.tsrx` file, record the `async-resumable:update` custom hot payload for the
+  client environment without a Vite update payload, prove a real browser page
+  receives the cancelable custom event without navigating, and prove the CSR
+  production build emits `async-resumable-manifest.json`, `build/bundle-graph.json`,
+  and generated event-handler/DOM-binding async chunks without leaking dev-HMR
+  client strings; the CSR production build is also served through Vite preview
+  and proves client-created DOM can load the generated payload/resolver/symbol
+  pipeline for a counter click with no console errors or failed requests; a
+  package-local SSR build Witness box proves the Vite/Rolldown build emits both
+  client and `ssr` environments and that the built server entry contains the
+  counter DOM plus canonical `async/state` and `async/view` payload scripts; a
+  package-local SSR preview Witness box runs the fixture's Vite app-build path,
+  starts Vite preview, verifies the preview response contains server-produced
+  counter DOM plus canonical payload scripts, and proves the browser entry
+  resumes that DOM for a `0` to `1` counter update without box-side HTML
+  rewriting; the vite-plus fixture now has a real app entry and package-local
+  Witness preview receipt proving a vite-plus config can build the
+  async-resumable manifest, bundle graph, and browser page through Vite preview;
+  `buildStart` clears accumulated transform manifests and generated virtual
+  modules before a new build/dev cycle
 
 The critical path to "full spec implementation" still requires:
 
@@ -90,20 +115,27 @@ The critical path to "full spec implementation" still requires:
   handle-id/name lookup, current DOM resolution, initial-render absence, and
   removed-locator `undefined` semantics
 - generated symbol resolver integration with real build chunks and manifests
-  beyond the current generated DOM-binding filename/symbol map, including
-  non-binding source-to-module extraction, generated exports, and resolver tables
+  beyond the current generated DOM-binding and simple event-handler update
+  filename/symbol map, including behavior/async-runner source-to-module
+  extraction, broader event write forms, generated exports, and resolver tables
   fully derived from build output rather than fixture-supplied symbol tables
 - `shared()` definition and instance support, including stable definition IDs,
   request/container/page scopes, graph-context resolution, dependency/cycle
   diagnostics, payload records, and cross-runtime patch behavior
 - broader build-pipeline proof beyond the current direct Rolldown, Vite library
   build, repeated-transform artifact cleanup, build-start cleanup, structural
-  hot-update invalidation/custom-payload/dev-client fixtures, and one Vite
-  dev-server transform fixture, including real browser HMR delivery/reload
-  receipts beyond the tested dev-client invalidation fallback, witness receipts,
-  non-binding symbol chunks, and resolver source/manifest tables derived from
-  final emitted chunk specifiers beyond the current generated DOM-binding build
-  fixture paths
+  hot-update invalidation/custom-payload/dev-client fixtures, one Vite
+  dev-server transform fixture, package-local Witness dev/browser HMR receipts,
+  one CSR production-build manifest/bundle-graph/no-dev-HMR-leakage receipt,
+  one CSR preview client-click receipt, one SSR built-server-entry build
+  receipt, one SSR built-server-entry preview browser resume-click receipt, and
+  one vite-plus build/preview receipt,
+  including real DOM hot replacement beyond the fixture's custom-event consumer,
+  production SSR serving beyond the current fixture host,
+  behavior/async-runner chunks,
+  broader non-binding symbol support beyond simple event-handler update chunks,
+  and resolver source/manifest tables derived from final emitted chunk
+  specifiers beyond the current generated build fixture paths
 - component/browser and resumability end-to-end tests proving no component body
   execution on browser resume
 - broad diagnostic coverage for unsupported state, capture, async, event, and
@@ -169,8 +201,9 @@ in the split specs.
   `packages/protocol/src/index.ts`, `packages/test-utils/src/index.ts`, and
   their package tests.
 - Curated public surface and build adapters: `packages/resumable/src/index.ts`,
-  `packages/resumable/src/vite.ts`, `packages/rolldown/src/index.ts`,
-  `packages/vite/src/index.ts`, and their package tests.
+  `packages/resumable/src/vite.ts`, `packages/resumable/src/rolldown.ts`,
+  `packages/bundler/src/rolldown.ts`, `packages/bundler/src/vite/index.ts`,
+  and their package tests.
 
 ## Completed Work Recorded In This Tree
 
@@ -243,11 +276,12 @@ in the split specs.
   registry order.
 - `compileTsrxModule` currently returns pass artifacts, protocol payloads,
   canonical payload scripts, a concatenated payload-only `renderShell`, a
-  first `symbolModules` artifact for planned DOM binding symbols, a generated
-  symbol resolver module string, and a resolver manifest object. It does not
-  return a final emitted JavaScript module for component execution, state access
-  rewriting, event-handler modules, behavior modules, async-runner modules, or
-  build-ready extracted symbol chunks.
+  first `symbolModules` artifact for planned simple event-handler update symbols
+  and DOM binding symbols, a generated symbol resolver module string, and a
+  resolver manifest object. It does not return a final emitted JavaScript module
+  for component execution, state access rewriting, behavior modules,
+  async-runner modules, broad event write forms, or complete build-ready
+  extracted symbol chunks.
 
 ### Semantic Graph And Diagnostics
 
@@ -439,22 +473,24 @@ in the split specs.
   module emission owns dynamic import dispatch for the supplied chunk/export
   table. The `symbol-modules` pass now emits source strings for planned DOM
   binding symbols that consume resume binding context and
-  `createBindingDomJournalRecord`; event-handler, behavior, and async-runner
-  source-to-module extraction is not implemented yet. The Rolldown/Vite adapter
-  path can now derive resolver rows for current generated DOM binding virtual
-  modules, and the current Vite fixture build proves the transformed `.tsrx`
-  entry imports generated payload/resolver/manifest virtual modules so the
-  generated DOM-binding symbol module code reaches build output. The emitted
+  `createBindingDomJournalRecord`, and it emits event-handler modules for the
+  current lowered `++`/`--` graph-update path through `context.graph.update`.
+  Behavior, async-runner, assignment, collection-call, and delete
+  source-to-module extraction are not implemented yet. The Rolldown/Vite adapter
+  path can now derive resolver rows for current generated event-handler and DOM
+  binding virtual modules, and the current Vite fixture build proves the
+  transformed `.tsrx` entry imports generated payload/resolver/manifest virtual
+  modules so those generated symbol modules reach build output. The emitted
   `async-resumable-manifest.json` now records bundle-derived file names for
-  generated resolver, payload, manifest, and current DOM-binding symbol virtual
+  generated resolver, payload, manifest, and current generated symbol virtual
   modules, plus finalized `{ symbolId, exportName, virtualModuleId, fileName }`
-  rows for generated DOM-binding symbols when their virtual modules appear in
-  bundle output. The emitted public module manifests omit the internal
-  pre-build symbol rows used to derive those finalized rows. The bundle hook now
-  uses those finalized generated-symbol rows to rewrite matching `chunk` fields
-  in the emitted resolver's exported symbol manifest from generated virtual
-  module IDs to final emitted file names for the current DOM-binding symbol path.
-  Non-binding resolver rows still come from caller-supplied symbol tables rather
+  rows for generated symbols when their virtual modules appear in bundle output.
+  The emitted public module manifests omit the internal pre-build symbol rows
+  used to derive those finalized rows. The bundle hook now uses those finalized
+  generated-symbol rows to rewrite matching `chunk` fields in the emitted
+  resolver's exported symbol manifest from generated virtual module IDs to final
+  emitted file names for the current generated symbol path. Behavior and
+  async-runner resolver rows still come from caller-supplied symbol tables rather
   than real build output, and pre-bundle generated resolver source still starts
   from virtual module IDs before the bundler rewrites dynamic imports and the
   bundle hook patches exported manifest rows.
@@ -600,16 +636,17 @@ in the split specs.
 - The main package exposes the current curated source-entry surface, including
   author intrinsics, the payload-driven resume helper, the Rolldown adapter, and
   the `./vite` Vite adapter subpath. Current adapter tests cover unit-level
-  `.tsrx` transform metadata, in-memory resolver/payload/DOM-binding-symbol
+  `.tsrx` transform metadata, in-memory resolver/payload/generated-symbol
   /manifest virtual module resolution and loading, transform manifest objects,
   build manifest asset emission from accumulated transform manifests, direct
   Vite transform/resolveId/load/generateBundle hook forwarding, a direct
   Rolldown build, and a temporary Vite library build that write
   `async-resumable-manifest.json` while loading the generated payload, resolver,
-  manifest, and current DOM-binding symbol virtual modules and recording their
-  emitted chunk filenames plus finalized generated-symbol manifest rows,
-  including the final emitted file name in the resolver's exported symbol
-  manifest for the current generated DOM-binding symbol chunk. Focused adapter
+  manifest, and current generated event-handler/DOM-binding symbol virtual
+  modules and recording their emitted chunk filenames plus finalized
+  generated-symbol manifest rows, including the final emitted file names in the
+  resolver's exported symbol manifest for the current generated symbol chunks.
+  Focused adapter
   tests also simulate an HMR-style module update by retransforming the same
   `.tsrx` file and proving stale generated DOM-binding virtual modules no longer
   resolve or load after the binding is removed, and a structural
@@ -617,11 +654,34 @@ in the split specs.
   invalidated and returned with the changed `.tsrx` module. A focused
   `configureServer` / `handleHotUpdate` test proves the adapter emits a custom
   `async-resumable:update` dev-server payload containing the changed module ID
-  and generated virtual module IDs. A focused `transformIndexHtml` / virtual
+  and generated virtual module IDs, and a custom-environment test proves
+  server-originated hot updates send through the configured Vite client
+  environment rather than assuming the literal `client` environment name. A
+  focused Vite config test proves normal app builds default
+  `build.modulePreload` to `false` while library and SSR builds keep their
+  caller-supplied defaults. A focused `transformIndexHtml` / virtual
   module test proves Vite dev HTML contexts receive an inert
   `async-resumable:dev` marker tag plus a virtual dev-client module that listens
   for that Vite custom event and redispatches it as a browser `CustomEvent`;
-  build/no-server contexts receive neither tag.
+  build/no-server contexts receive neither tag. Package-local Witness boxes now
+  live under `packages/bundler/boxes`: one runs the `vite-csr` dev-server
+  pipeline, edits `src/root.tsrx`, and writes a receipt whose client environment
+  outcome records `hmr: 'none'` plus the `async-resumable:update` framework hot
+  message; one opens a real browser page, tracks the cancelable
+  `async-resumable:update` browser event, and proves no navigation/reload while
+  the fixture consumes the event; and one runs a production Vite build, proving
+  the emitted CSR manifest, bundle graph, async chunks, and absence of dev-HMR
+  strings in production artifacts. A fourth package-local box serves that CSR
+  production build through Vite preview and proves client-created DOM can load
+  the generated payload/resolver/symbol pipeline for a counter click without
+  console errors or failed requests. A fifth package-local box builds the
+  `vite-ssr` fixture, proves the build emits both `client` and `ssr`
+  environments, and asserts the built server entry contains the counter DOM plus
+  `async/state` and `async/view` payload scripts. A sixth package-local box
+  imports that built server entry, writes its generated HTML into the preview
+  index for the box run, serves the built client chunks through Vite preview,
+  and proves the browser entry resumes existing server-produced DOM for the same
+  `0` to `1` click update.
   Focused base-plugin and Vite-wrapper tests prove `buildStart` clears generated
   virtual modules plus accumulated transform manifests before a new build/dev
   cycle, so stale virtual modules do not resolve/load and no stale manifest asset
@@ -644,9 +704,9 @@ in the split specs.
   current manual `compileTsrxModule` pass calls.
 - Finish template/view lowering and final emit beyond the early payload and
   resolver artifacts, including range binding target metadata, build-ready
-  emitted binding chunks from the current symbol module artifact, event,
-  behavior, and async-runner module emission, and generated DOM operation wiring
-  for those bindings.
+  emitted binding chunks from the current symbol module artifact, broader
+  event write module emission, behavior and async-runner module emission, and
+  generated DOM operation wiring for those bindings.
 - Implement TSRX control-flow identity support beyond the current generic AST
   walk, including keyed loop scope records, positional/unkeyed loop diagnostics
   for stateful or interactive bodies, branch-local graph scope records, branch
@@ -666,8 +726,8 @@ in the split specs.
   artifacts, and tests where authored comments interact with generated async
   boundary anchors.
 - Implement symbol source extraction and chunk/export generation beyond current
-  planned symbol IDs and fixture-supplied symbol tables, including event handler,
-  DOM binding, behavior, and async-runner source-to-module extraction plus
+  planned symbol IDs and fixture-supplied symbol tables, including broader event
+  handler writes, behavior, and async-runner source-to-module extraction plus
   resolver manifests derived from real build output.
 - Broaden payload/protocol coverage beyond the current simple DOM-order locator
   and data-script wrappers, including branch/list/fragment locator streams,
@@ -703,12 +763,16 @@ in the split specs.
   payload-script/render-shell artifacts, and broaden the browser resume entry
   into component/browser and end-to-end coverage around the unified
   runtime/protocol model.
-- Broaden fixture-backed build behavior beyond the current direct Rolldown and
-  Vite library build fixtures plus in-memory hook tests, including non-binding
-  symbol chunk generation/finalized manifest rows, resolver source/manifest
-  derivation from emitted chunk filenames beyond the current generated
-  DOM-binding build fixture paths, Vite dev HTML/HMR coverage, and witness
-  receipts.
+- Broaden fixture-backed build behavior beyond the current direct Rolldown,
+  Vite library build, Vite CSR build, and package-local Witness dev/browser
+  HMR/build/preview receipts, SSR built-server-entry build and browser
+  resume-click receipts, and in-memory hook tests, including production SSR
+  server-environment serving beyond the preview-index harness, behavior
+  and async-runner symbol chunk generation/finalized manifest rows, broader
+  non-binding symbol support beyond simple event-handler update chunks, resolver
+  source/manifest derivation from emitted chunk filenames beyond the current
+  generated build fixture paths, and real DOM hot replacement beyond the
+  fixture-level custom-event consumer.
 - Finish production packaging/build metadata beyond the current flat root
   `dist/` output, including package-local export wiring, package build ordering,
   dependency externalization policy, and the final public/internal package split.
@@ -734,7 +798,10 @@ Current `vp test` receipts use the root vite-plus Node test project
 (`environment: 'node'`) and include `packages/*/test/**/*.test.ts`; at this
 ledger update, that is 40 package test files. Treat those results as
 package/unit-integration evidence. They do not prove browser-mode component
-tests, real browser resume, witness HMR/build-pipeline behavior, or end-to-end
+tests, real browser resume, broad witness HMR/build-pipeline behavior beyond
+the package-local CSR dev/browser HMR, production-build, preview client-click,
+SSR built-server-entry build, and SSR built-server-entry browser resume-click
+receipts, or end-to-end
 no-component-execution-on-resume behavior.
 
 The production package implementation and split spec files are now tracked on
@@ -772,7 +839,8 @@ after the current package files were created or changed. They remain scoped
 receipts, not permanent green status; rerun the relevant command before using it
 as evidence for a new source change.
 
-- `pnpm exec vp test packages/rolldown/test/transform.test.ts packages/vite/test/adapter.test.ts`
+- `pnpm exec vp test packages/bundler/test/rolldown.test.ts packages/bundler/test/vite.test.ts`
+- `pnpm exec vp test packages/bundler/test/rolldown.test.ts packages/bundler/test/vite.test.ts packages/bundler/test/witness.test.ts`
 - `pnpm exec vp pack`
 - `pnpm exec vp test`
 - `pnpm exec vp test packages/compiler/test/*.test.ts`
@@ -788,14 +856,14 @@ as evidence for a new source change.
 - `pnpm exec vp test packages/compiler/test/semantic-graph.test.ts packages/compiler/test/semantic-collector-boundaries.test.ts packages/compiler/test/payload-arena.test.ts packages/compiler/test/protocol-view.test.ts`
 - `pnpm exec vp test packages/compiler/test/semantic-graph.test.ts packages/compiler/test/semantic-diagnostics.test.ts packages/compiler/test/payload-arena.test.ts`
 - `pnpm exec vp test packages/compiler/test/protocol-view.test.ts packages/runtime/test/resume.test.ts`
-- `pnpm exec vp test packages/compiler/test/symbol-resolver.test.ts packages/compiler/test/symbol-resolver-emit.test.ts packages/compiler/test/compile-module.test.ts packages/rolldown/test/transform.test.ts packages/vite/test/adapter.test.ts`
+- `pnpm exec vp test packages/compiler/test/symbol-resolver.test.ts packages/compiler/test/symbol-resolver-emit.test.ts packages/compiler/test/compile-module.test.ts packages/bundler/test/rolldown.test.ts packages/bundler/test/vite.test.ts`
 - `pnpm exec vp test packages/compiler/test/protocol-view.test.ts packages/compiler/test/symbol-resolver.test.ts packages/runtime/test/resume.test.ts`
 - `pnpm exec vp test packages/compiler/test/semantic-diagnostics.test.ts packages/compiler/test/payload-arena.test.ts packages/compiler/test/protocol-view.test.ts packages/runtime/test/behaviors.test.ts packages/runtime/test/payload-scripts.test.ts`
 - `pnpm exec vp test packages/serializer/test/payload-scripts.test.ts packages/runtime/test/payload-scripts.test.ts packages/test-utils/test/payload-helpers.test.ts packages/compiler/test/compile-module.test.ts`
 - `pnpm exec vp test packages/compiler/test/semantic-diagnostics.test.ts packages/compiler/test/semantic-diagnostic-constructors.test.ts packages/compiler/test/state-lowering.test.ts packages/compiler/test/state-lowering-delete.test.ts packages/compiler/test/capture-analysis.test.ts packages/compiler/test/symbol-resolver-emit.test.ts packages/serializer/test/serializer.test.ts`
 - `pnpm exec vp test packages/runtime/test/resume.test.ts packages/runtime/test/payload-scripts.test.ts packages/runtime/test/behaviors.test.ts packages/runtime/test/bindings.test.ts`
 - `pnpm exec vp test packages/runtime/test/runtime-graph.test.ts packages/runtime/test/resume.test.ts`
-- `pnpm exec vp test packages/compiler/test/compile-module.test.ts packages/compiler/test/pass-pipeline.test.ts packages/rolldown/test/transform.test.ts packages/vite/test/adapter.test.ts`
+- `pnpm exec vp test packages/compiler/test/compile-module.test.ts packages/compiler/test/pass-pipeline.test.ts packages/bundler/test/rolldown.test.ts packages/bundler/test/vite.test.ts`
 - `pnpm exec vp test packages/compiler/test/symbol-resolver-emit.test.ts packages/compiler/test/semantic-diagnostic-constructors.test.ts`
 - `pnpm exec vp test packages/compiler/test/payload-arena.test.ts packages/compiler/test/protocol-view.test.ts packages/compiler/test/symbol-resolver.test.ts packages/compiler/test/compile-module.test.ts packages/runtime/test/bindings.test.ts packages/runtime/test/resume.test.ts`
 - `pnpm exec vp test packages/compiler/test/compile-module.test.ts packages/serializer/test/payload-scripts.test.ts packages/serializer/test/serializer.test.ts`
@@ -807,8 +875,19 @@ as evidence for a new source change.
 - `pnpm exec vp test`
 - `pnpm exec vp test packages/runtime/test/resume.test.ts packages/runtime/test/payload-scripts.test.ts packages/runtime/test/behaviors.test.ts packages/runtime/test/bindings.test.ts`
 - `pnpm exec vp test packages/serializer/test/serializer.test.ts`
-- `pnpm exec vp test packages/resumable/test/public-surface.test.ts packages/rolldown/test/transform.test.ts packages/vite/test/adapter.test.ts`
+- `pnpm exec vp test packages/resumable/test/public-surface.test.ts packages/bundler/test/rolldown.test.ts packages/bundler/test/vite.test.ts`
 - `pnpm exec vp test packages/core/test/intrinsics.test.ts packages/protocol/test/protocol.test.ts packages/test-utils/test/payload-helpers.test.ts`
+- `pnpm exec vp test packages/bundler/test/vite.test.ts`
+- `pnpm exec vp test packages/bundler/test/rolldown.test.ts packages/bundler/test/vite.test.ts packages/resumable/test/public-surface.test.ts`
+- `pnpm exec vp test packages/compiler/test/symbol-resolver.test.ts packages/compiler/test/symbol-modules.test.ts packages/compiler/test/compile-module.test.ts packages/bundler/test/*.test.ts packages/resumable/test/public-surface.test.ts`
+- `(from packages/bundler) pnpm exec witness "csr build: manifest and bundle graph describe tsrx symbols" --json`
+- `(from packages/bundler) pnpm exec witness "csr preview: built app loads through vite preview" --json`
+- `(from packages/bundler) pnpm exec witness "ssr build: Rolldown server entry renders payload shell" --json`
+- `(from packages/bundler) pnpm exec witness "ssr preview: built server entry shell resumes counter click" --json`
+- `(from packages/bundler) pnpm exec witness "vite-plus preview: built app loads async-resumable output" --json`
+- `(from packages/bundler) pnpm exec witness --json` (latest receipt:
+  `packages/bundler/.witness/receipts/2026-06-16T00-37-49.165Z/receipt.json`)
+- `pnpm exec vp test packages/bundler/test/*.test.ts packages/resumable/test/public-surface.test.ts`
 
 Current spec/ledger-maintenance receipts:
 
@@ -819,6 +898,7 @@ scans. They do not refresh implementation test or pack receipts unless those
 commands are listed in the implementation/build section above.
 
 - `git diff --check`
+- `pnpm exec vp fmt --check .gitignore packages/compiler/src/artifacts.ts packages/compiler/src/passes/symbol-resolver.ts packages/compiler/src/compile-module.ts packages/compiler/src/passes/symbol-modules.ts packages/compiler/test/symbol-modules.test.ts packages/compiler/test/symbol-resolver.test.ts packages/bundler/test/rolldown.test.ts packages/bundler/boxes/csr-build.box.ts specs/state.md`
 - `pnpm exec vp fmt --check specs/framework-design.md specs/state.md specs/framework/*.md`
 - `pnpm exec vp check package.json pnpm-lock.yaml pnpm-workspace.yaml vite.config.ts packages specs/framework-design.md specs/state.md specs/framework/*.md`
 - code-fence scan over current implementation-facing specs confirmed no `tsx`
@@ -1044,17 +1124,18 @@ commands are listed in the implementation/build section above.
   artifact orchestration, payload script rendering, generated resolver strings,
   and Rolldown virtual module metadata. `transformTsrxModule` emits an
   `__async_resumable_module` export plus resolver, payload, current
-  DOM-binding-symbol, and manifest virtual module IDs; it now statically imports
-  the generated resolver/payload/manifest virtual modules so a Vite library build
-  loads them, and the generated resolver can pull the current DOM-binding symbol
-  virtual module into build output. The build manifest hook now maps generated
-  virtual module IDs to output file names when bundler metadata exposes them. It
-  derives resolver entries for those DOM binding virtual modules and patches the
-  emitted resolver symbol manifest's current DOM-binding `chunk` rows to final
-  emitted file names, but it does not emit executable component code, lowered
-  state access code, extracted event/behavior/async modules, non-binding
-  resolver source/manifest rows derived from final chunk filenames, or
-  initial-render/browser resume entry code.
+  event-handler-symbol, DOM-binding-symbol, and manifest virtual module IDs; it
+  now statically imports the generated resolver/payload/manifest virtual modules
+  so a Vite library build loads them, and the generated resolver can pull the
+  current generated symbol virtual modules into build output. The build manifest
+  hook now maps generated virtual module IDs to output file names when bundler
+  metadata exposes them. It derives resolver entries for those generated virtual
+  modules and patches the emitted resolver symbol manifest's current generated
+  `chunk` rows to final emitted file names, but it does not emit executable
+  component code, lowered state access code beyond simple event-handler update
+  modules, behavior/async modules, broad non-binding resolver source/manifest
+  rows derived from final chunk filenames, or initial-render/browser resume
+  entry code.
 - template-binding audit confirmed current semantic/payload/protocol records for
   template reads now carry graph-path subscriptions, text or plain-attribute
   target metadata, common DOM property target metadata for `value`, `checked`,
@@ -1064,21 +1145,21 @@ commands are listed in the implementation/build section above.
   final emit.
 - bundler-adapter source/test audit confirmed current Rolldown coverage is a
   unit-level plugin shell whose `transform` compiles `.tsrx` modules with
-  caller-supplied symbol tables, stores resolver, payload, DOM-binding-symbol,
+  caller-supplied symbol tables, stores resolver, payload, generated-symbol,
   and manifest virtual module strings in an in-memory map, resolves and loads
-  those produced virtual module IDs, derives resolver rows for those DOM binding
+  those produced virtual module IDs, derives resolver rows for those generated
   virtual modules, skips re-transforming generated virtual module IDs, imports
   generated payload/resolver/manifest modules from the transformed entry, returns
   a transform manifest object, and emits accumulated transform manifests plus any
   bundle-exposed generated virtual-module output filenames as
   `async-resumable-manifest.json` through `generateBundle`; for current
-  generated DOM-binding symbols, it also records finalized symbol rows when the
-  symbol's virtual module has an emitted file name, while the emitted public
-  module manifests omit the internal pre-build symbol rows. Repeated transforms
-  for the same `.tsrx` module drop the previous transform's virtual module IDs
-  from the in-memory resolver before registering the new artifacts, preventing
-  stale generated DOM-binding virtual modules from surviving an HMR-style source
-  update that removes a binding. The current Vite adapter wraps that shell and
+  generated event-handler and DOM-binding symbols, it also records finalized
+  symbol rows when the symbol's virtual module has an emitted file name, while
+  the emitted public module manifests omit the internal pre-build symbol rows.
+  Repeated transforms for the same `.tsrx` module drop the previous transform's
+  virtual module IDs from the in-memory resolver before registering the new
+  artifacts, preventing stale generated symbol virtual modules from surviving an
+  HMR-style source update that removes a binding. The current Vite adapter wraps that shell and
   forwards `transform`, `resolveId`, `load`, and `generateBundle`; its
   structural `configureServer` / `handleHotUpdate` hooks capture a Vite dev
   server, invalidate any known generated virtual module graph nodes for the
@@ -1096,17 +1177,30 @@ commands are listed in the implementation/build section above.
   `.tsrx` source file through Vite. One direct Rolldown build fixture and one
   temporary Vite library build fixture now prove real builds write the manifest
   asset, include generated
-  payload/resolver/current DOM-binding symbol code, record emitted file names
+  payload/resolver/current event-handler and DOM-binding symbol code, record emitted file names
   plus finalized symbol rows for those generated virtual modules, patch the
-  emitted resolver symbol manifest to use the generated DOM-binding symbol's
-  final file name, and keep internal pre-build symbol rows out of emitted module
+  emitted resolver symbol manifest to use those generated symbols' final file
+  names, and keep internal pre-build symbol rows out of emitted module
   manifests. `buildStart` clears generated virtual modules plus accumulated
   transform manifests before a new build/dev cycle, preventing stale virtual
   module resolution/loading and stale manifest asset emission in focused tests.
-  No fixture proves real browser HMR delivery/reload receipts beyond the tested
-  dev-client invalidation fallback, witness receipts, non-binding symbol chunks,
-  or runtime resolver source/manifest rewriting from final chunk filenames
-  beyond the current generated DOM-binding build fixture paths.
+  Package-local Witness boxes now prove Vite dev HMR payload delivery, real
+  browser receipt of the cancelable `async-resumable:update` event without
+  navigation, and a CSR production build with manifest/bundle-graph artifacts
+  plus no dev-HMR string leakage. The same CSR production build is now served
+  through Vite preview and proves client-created DOM can load the generated
+  payload/resolver/symbol pipeline for a counter click with no console errors or
+  failed requests. A Vite SSR fixture now builds a server entry that contains
+  counter DOM plus payload scripts, and a package-local SSR browser box imports
+  that built entry, serves its generated HTML through Vite preview with the
+  built client chunks, and proves the browser entry resumes that existing DOM
+  through the generated resolver for a `0` to `1` click update. No fixture
+  proves real DOM hot replacement beyond the fixture-level custom-event
+  consumer, production SSR server-environment serving beyond the preview-index
+  harness, behavior/async-runner chunks,
+  broader event-handler write chunks beyond simple updates, or runtime resolver
+  source/manifest rewriting from final chunk filenames beyond the current
+  generated build fixture paths.
 - public-surface source/test audit confirmed `packages/resumable` currently
   re-exports author intrinsics, `resumeFromPayloadScripts`, the Rolldown adapter,
   and its `./vite` adapter subpath through private source-entry package
@@ -1161,12 +1255,14 @@ commands are listed in the implementation/build section above.
   async-computed runners, while `compileTsrxModule`, `transformTsrxModule`, the
   Rolldown adapter, and the Vite wrapper still accept caller-supplied
   `id`/`chunk`/`exportName` tables for resolver emission. The `symbol-modules`
-  pass emits source strings for planned DOM binding modules, and the Rolldown
-  and Vite adapters expose those modules as in-memory virtual modules. The
-  Rolldown transform derives resolver rows for those DOM binding virtual modules.
-  No package source extracts planned event-handler, behavior, or async-runner
-  symbols into emitted modules, and no build adapter derives resolver tables from
-  real chunk output.
+  pass emits source strings for planned DOM binding modules and simple
+  event-handler `++`/`--` graph-update modules, and the Rolldown and Vite
+  adapters expose those modules as in-memory virtual modules. The Rolldown
+  transform derives resolver rows for those generated virtual modules. No
+  package source extracts planned behavior or async-runner symbols into emitted
+  modules, event-handler module extraction is still limited to simple update
+  writes, and no build adapter derives resolver tables from real chunk output
+  beyond the current generated symbol virtual-module path.
 - runtime-graph journal audit confirmed current graph source accepts the full
   `DomJournalRecord` union, records subscription-produced DOM journal entries,
   and exposes them through `takeJournal`. The resume runtime can also deliver
@@ -1459,46 +1555,68 @@ commands are listed in the implementation/build section above.
   failures, duplicate-producer failures, dependency-cycle failures, source layout
   ownership, duplicate pass-ID validation, structured pass-graph failure
   metadata, the returned `compileTsrxModule` pass graph, and the first
-  `symbolModules` DOM binding source artifact. They do not prove a generic pass
+  `symbolModules` event-handler and DOM binding source artifacts. They do not prove a generic pass
   executor, artifact dump tooling, disabled/reordered pass execution, full
   artifact-focused coverage for every pass output, or build-ready emitted
-  JavaScript snapshots for component code, state rewriting, event/behavior/async
-  symbol modules, and render/resume entry wiring.
+  JavaScript snapshots for component code, broad state rewriting,
+  behavior/async symbol modules, and render/resume entry wiring.
 - Current Rolldown/Vite adapter and public-surface tests exercise curated source
   re-exports, unit-level `.tsrx` transforms with fixture-supplied symbol tables,
-  in-memory resolver/payload/DOM-binding-symbol/manifest virtual module
+  in-memory resolver/payload/generated-symbol/manifest virtual module
   resolution and loads, transform manifest objects, resolver rows derived from
-  current DOM-binding-symbol virtual modules, direct Vite wrapper hook
+  current event-handler and DOM-binding symbol virtual modules, direct Vite wrapper hook
   forwarding for transform, resolveId, load, and generateBundle, and one
   direct Rolldown build fixture and one fixture-backed Vite library build that
   write the build manifest asset while loading generated
-  payload/resolver/current DOM-binding symbol virtual modules and recording
+  payload/resolver/current event-handler and DOM-binding symbol virtual modules and recording
   their emitted chunk filenames plus finalized generated-symbol rows without
   leaking internal pre-build symbol rows in the public module manifests. Those
   fixtures also prove the emitted resolver's exported symbol manifest uses the
-  final emitted file name for the current generated DOM-binding symbol chunk
+  final emitted file names for the current generated symbol chunks
   instead of the generated virtual module ID. Focused repeated-transform tests
-  prove stale generated DOM-binding virtual modules stop resolving/loading after
+  prove stale generated symbol virtual modules stop resolving/loading after
   a `.tsrx` update removes the binding that produced them, and structural
   `handleHotUpdate` tests prove generated virtual module graph nodes are
   invalidated and returned with the changed source module. A focused
   `configureServer` / `handleHotUpdate` test proves the adapter emits a custom
   `async-resumable:update` payload with the changed module ID and generated
-  virtual module IDs. A focused `transformIndexHtml` / virtual module test proves
-  dev-only inert marker tag injection plus a virtual client module that listens
-  for the custom Vite event and redispatches it as a browser `CustomEvent`;
+  virtual module IDs, and a custom-environment test proves server-originated
+  hot updates use the configured client environment name. A focused Vite config
+  test proves normal app builds default `build.modulePreload` to `false` while
+  library and SSR builds are left alone. A focused `transformIndexHtml` /
+  virtual module test proves dev-only inert marker tag injection plus a virtual
+  client module that listens for the custom Vite event and redispatches it as a
+  browser `CustomEvent`;
   executable virtual-client coverage proves the event is cancelable and the
   client falls back to `hot.invalidate()` only when no consumer prevents default.
   A temporary Vite dev-server fixture proves real `transformIndexHtml`,
   virtual-client `transformRequest`, and `.tsrx` source `transformRequest`
-  behavior through Vite.
+  behavior through Vite. Package-local Witness boxes now run that fixture's
+  dev-server pipeline, edit the `.tsrx` source, record the
+  `async-resumable:update` custom payload in the client environment's edit
+  outcome, prove a real browser page receives the cancelable event without
+  navigating, and prove the CSR production build emits the async-resumable
+  manifest/bundle graph/async chunks while forbidding dev-HMR client strings in
+  emitted text artifacts. The CSR production build is also served by Vite
+  preview and proves client-created DOM can load the generated
+  payload/resolver/symbol pipeline for a counter click with no console errors or
+  failed requests. A Vite SSR fixture now builds a server entry that contains
+  counter DOM plus payload scripts, exposes a fixture-only SSR host for dev and
+  preview, and a package-local SSR preview box now uses the fixture's app-build
+  path plus Vite preview response instead of rewriting the preview index before
+  proving the browser entry resumes that existing DOM for the same click update.
+  A vite-plus fixture now has a real app entry and a package-local preview box
+  that proves a vite-plus config emits the async-resumable manifest, bundle
+  graph, and browser output through Vite preview.
   Focused base-plugin and Vite-wrapper tests prove `buildStart` cleanup clears
   stale generated virtual modules and accumulated transform manifests.
   They do not prove installed package export resolution, publish-ready exports,
   resolver source/manifest rows rewritten from final chunk filenames beyond the
-  current generated DOM-binding build fixture paths, non-binding symbol chunks,
-  real browser HMR update delivery/reload receipts beyond the tested dev-client
-  invalidation fallback, or witness receipts.
+  current generated build fixture paths, production SSR serving beyond the
+  current fixture host, behavior/async-runner chunks,
+  broader event-handler write chunks beyond simple updates, real DOM hot
+  replacement beyond the fixture-level custom-event consumer, or full
+  installed-package build receipts.
 - At this ledger update, the production package implementation under
   `packages/`, this progress ledger, and the compiler split plan are tracked on
   the current `impl` branch. Status entries still describe current worktree
@@ -1508,13 +1626,11 @@ commands are listed in the implementation/build section above.
   source state unless a future task explicitly decides to commit generated
   artifacts.
 - `pnpm-workspace.yaml` deliberately keeps `../native-tsrx` out of this
-  workspace, but `packages/compiler/package.json` still declares `@tsrx/core` as
-  `workspace:*` and the current lockfile resolves it through a sibling
-  `../native-tsrx` link. Do not inspect or modify that sibling repository for
-  async-await work. Parser-backed checks and install/build portability are not
-  portable evidence until `@tsrx/core` is resolved as an external dependency
-  boundary; artifact tests that construct inputs directly remain the safest
-  focused verification path for compiler work that does not need parsing.
+  workspace, and `packages/compiler/package.json` resolves `@tsrx/core` through
+  the catalog as an external dependency boundary. Do not inspect or modify that
+  sibling repository for async-await work. Parser-backed checks should continue
+  to prove async-await compiler artifact behavior against published `@tsrx/core`
+  shapes instead of relying on sibling workspace parser artifacts.
 - Markdown-only `vp check` can report formatting success and then fail before
   lint analysis because there are no lintable files. For spec-only maintenance,
   use `vp fmt --check` plus `git diff --check`; use broader `vp check` only when

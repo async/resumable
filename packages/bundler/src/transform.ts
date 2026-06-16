@@ -1,0 +1,130 @@
+import {
+	compileTsrxModule,
+	createSymbolResolverModuleManifest,
+	emitSymbolResolverModule,
+} from '@async/resumable-compiler';
+import type {
+	ResumableTransformManifest,
+	ResumableVirtualModule,
+	TransformTsrxModuleInput,
+	TransformTsrxModuleResult,
+} from './types.ts';
+
+export const ASYNC_RESUMABLE_VIRTUAL_PREFIX = 'virtual:async-resumable:';
+
+export async function transformTsrxModule(
+	input: TransformTsrxModuleInput,
+): Promise<TransformTsrxModuleResult> {
+	const encodedFilename = encodeURIComponent(input.filename);
+	const payloadId = `${ASYNC_RESUMABLE_VIRTUAL_PREFIX}payload:${encodedFilename}`;
+	const resolverId = `${ASYNC_RESUMABLE_VIRTUAL_PREFIX}resolver:${encodedFilename}`;
+	const moduleManifestId = `${ASYNC_RESUMABLE_VIRTUAL_PREFIX}module-manifest:${encodedFilename}`;
+	const compiled = await compileTsrxModule({
+		filename: input.filename,
+		source: input.source,
+		buildId: input.buildId,
+		resolverId,
+		symbols: [],
+	});
+	const symbolRows = compiled.symbolModules.modules.map((module) => ({
+		id: module.symbolId,
+		chunk: symbolVirtualModuleId(input.filename, module.symbolId),
+		exportName: module.exportName,
+	}));
+	const resolverSource = emitSymbolResolverModule({
+		buildId: input.buildId,
+		resolverId,
+		symbols: symbolRows,
+	});
+	const resolverManifest = createSymbolResolverModuleManifest({
+		buildId: input.buildId,
+		resolverId,
+		symbols: symbolRows,
+	});
+	const manifest: ResumableTransformManifest = {
+		source: input.filename,
+		payload: { virtualModuleId: payloadId },
+		resolver: { virtualModuleId: resolverId },
+		moduleManifest: { virtualModuleId: moduleManifestId },
+		symbols: compiled.symbolModules.modules.map((module) => ({
+			symbolId: module.symbolId,
+			kind: module.kind,
+			exportName: module.exportName,
+			virtualModuleId: symbolVirtualModuleId(input.filename, module.symbolId),
+		})),
+	};
+	const virtualModules: ResumableVirtualModule[] = [
+		{
+			id: payloadId,
+			type: 'payload',
+			source: objectModule(compiled.payloadScripts),
+		},
+		{
+			id: resolverId,
+			type: 'resolver',
+			source: resolverSource,
+		},
+		{
+			id: moduleManifestId,
+			type: 'module-manifest',
+			source: objectModule({
+				...manifest,
+				resolverManifest,
+			}),
+		},
+		...compiled.symbolModules.modules.map(
+			(module): ResumableVirtualModule => ({
+				id: symbolVirtualModuleId(input.filename, module.symbolId),
+				type: 'symbol',
+				symbolId: module.symbolId,
+				exportName: module.exportName,
+				source: module.source,
+			}),
+		),
+	];
+
+	return {
+		code: emitSourceModule({
+			filename: input.filename,
+			payloadId,
+			resolverId,
+			moduleManifestId,
+		}),
+		map: null,
+		virtualModules,
+		manifest,
+	};
+}
+
+function symbolVirtualModuleId(filename: string, symbolId: string) {
+	return `${ASYNC_RESUMABLE_VIRTUAL_PREFIX}symbol:${encodeURIComponent(filename)}:${encodeURIComponent(symbolId)}`;
+}
+
+function objectModule(value: unknown) {
+	return `export default ${JSON.stringify(value, null, '\t')};\n`;
+}
+
+function emitSourceModule(input: {
+	readonly filename: string;
+	readonly payloadId: string;
+	readonly resolverId: string;
+	readonly moduleManifestId: string;
+}) {
+	return [
+		`import payloadScripts from '${input.payloadId}';`,
+		`import { loadSymbol, symbolManifest } from '${input.resolverId}';`,
+		`import moduleManifest from '${input.moduleManifestId}';`,
+		'',
+		`export const resumableSource = ${JSON.stringify(input.filename)};`,
+		'export { loadSymbol, moduleManifest, payloadScripts, symbolManifest };',
+		'',
+		'export default {',
+		'	source: resumableSource,',
+		'	payloadScripts,',
+		'	loadSymbol,',
+		'	symbolManifest,',
+		'	moduleManifest,',
+		'};',
+		'',
+	].join('\n');
+}

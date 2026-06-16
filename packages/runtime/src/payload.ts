@@ -4,6 +4,7 @@ import {
 	type ProtocolViewPayload,
 } from '@async/resumable-protocol';
 import { deserializeGraphValue, type SerializedGraphPayload } from '@async/resumable-serializer';
+import { applyDomJournalRecords } from './dom-journal.ts';
 import { createRuntimeGraph, type RuntimeGraph } from './graph.ts';
 import {
 	createResumeRuntime,
@@ -145,13 +146,22 @@ export async function resumeFromPayloadScripts(
 ): Promise<ResumePayloadScriptsResult> {
 	const decoded = decodePayloadScripts(input);
 	const graph = createRuntimeGraphFromStatePayload(decoded.state);
-	const runtime = createResumeRuntime({
+	let runtime: ResumeRuntime | undefined;
+	const applyDomJournal =
+		input.applyDomJournal ??
+		((records) =>
+			applyDomJournalRecords(records, {
+				resolveTarget(locator) {
+					return runtime?.getElement(String(locator));
+				},
+			}));
+	runtime = createResumeRuntime({
 		root: input.root,
 		graph,
 		view: decoded.view,
 		loadSymbol: input.loadSymbol,
 		createVisibilityObserver: input.createVisibilityObserver,
-		applyDomJournal: input.applyDomJournal,
+		applyDomJournal,
 	});
 
 	await runtime.start();

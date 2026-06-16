@@ -1,4 +1,9 @@
-import type { PlannedSymbol, SymbolResolverInput, SymbolResolverPlan } from '../artifacts.ts';
+import type {
+	LoweredStateWrite,
+	PlannedSymbol,
+	SymbolResolverInput,
+	SymbolResolverPlan,
+} from '../artifacts.ts';
 
 export function planSymbolResolver(input: SymbolResolverInput): SymbolResolverPlan {
 	const symbols: PlannedSymbol[] = [];
@@ -13,6 +18,7 @@ export function planSymbolResolver(input: SymbolResolverInput): SymbolResolverPl
 				eventName: event.eventName,
 				source: event.handlerSources[order] ?? '',
 				order,
+				writes: eventWrites(event.handlerSources[order] ?? '', input.stateLowering?.writes),
 			});
 		}
 	}
@@ -61,4 +67,30 @@ export function planSymbolResolver(input: SymbolResolverInput): SymbolResolverPl
 			})),
 		diagnostics: input.payloadArena.diagnostics,
 	};
+}
+
+function eventWrites(
+	handlerSource: string,
+	writes: ReadonlyArray<LoweredStateWrite> | undefined,
+): ReadonlyArray<LoweredStateWrite> {
+	if (!handlerSource || !writes?.length) return [];
+
+	return writes.filter((write) => handlerContainsWrite(handlerSource, write));
+}
+
+function handlerContainsWrite(handlerSource: string, write: LoweredStateWrite): boolean {
+	if (write.operation === 'update' && write.updateOperator) {
+		const source = escapeRegExp(write.source);
+		const operator = escapeRegExp(write.updateOperator);
+		return (
+			new RegExp(`(?:^|[^$0-9A-Z_a-z])${source}\\s*${operator}`).test(handlerSource) ||
+			new RegExp(`${operator}\\s*${source}(?:$|[^$0-9A-Z_a-z])`).test(handlerSource)
+		);
+	}
+
+	return handlerSource.includes(write.source);
+}
+
+function escapeRegExp(value: string): string {
+	return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }

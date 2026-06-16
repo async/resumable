@@ -300,6 +300,7 @@ export type PayloadArenaArtifact = {
 export type SymbolResolverInput = {
 	readonly semanticGraph: SemanticGraphArtifact;
 	readonly payloadArena: PayloadArenaArtifact;
+	readonly stateLowering?: StateLoweringArtifact;
 };
 
 export type PlannedSymbol =
@@ -310,6 +311,7 @@ export type PlannedSymbol =
 			readonly eventName: string;
 			readonly source: string;
 			readonly order: number;
+			readonly writes?: ReadonlyArray<LoweredStateWrite>;
 	  }
 	| {
 			readonly id: string;

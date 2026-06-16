@@ -127,10 +127,9 @@ Initial internal production package map:
   encode/decode, talking to runtime through snapshot interfaces.
 - `packages/compiler` — TSRX semantic graph, lowering passes, capture analysis,
   symbol extraction, artifact planning, and diagnostics.
-- `packages/rolldown` — Rolldown-first build plugin, virtual modules, symbol
-  chunks, and manifest output.
-- `packages/vite` — Vite adapter over the Rolldown plugin: dev/HMR/HTML
-  integration only.
+- `packages/bundler` — Qwik-bundler-shaped build package containing the
+  Rolldown-first plugin, virtual modules, symbol chunks, manifest output, and
+  Vite adapter dev/HMR/HTML integration.
 - `packages/test-utils` — fixture harnesses, artifact assertions,
   serializer/resume helpers, browser helpers, and witness integration helpers.
 

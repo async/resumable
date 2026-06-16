@@ -12,16 +12,20 @@ export {
 	type SharedScope,
 } from '@async/resumable-core';
 export {
+	resumeFromPayloadDocument,
 	resumeFromPayloadScripts,
+	type ResumePayloadDocumentInput,
 	type ResumePayloadScriptsInput,
 	type ResumePayloadScriptsResult,
-} from '../../runtime/src/index.ts';
+} from '@async/resumable-runtime';
 export {
-	asyncResumableRolldown,
+	resumableClient,
+	resumableLib,
+	resumableServer,
 	type ResumableRolldownOptions,
 	type ResumableRolldownPlugin,
 	type ResumableTransformManifest,
 	type ResumableVirtualModule,
 	type TransformTsrxModuleInput,
 	type TransformTsrxModuleResult,
-} from '@async/resumable-rolldown';
+} from '@async/resumable-bundler/rolldown';

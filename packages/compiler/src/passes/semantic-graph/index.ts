@@ -59,9 +59,11 @@ function walk(node: AnyNode | null | undefined, state: WalkState): void {
 
 	switch (node.type) {
 		case 'Element':
+		case 'JSXElement':
 			collectElement(node, state, walk);
 			return;
 		case 'TSRXExpression':
+		case 'JSXExpressionContainer':
 			collectTemplateExpression(node, state);
 			break;
 		case 'VariableDeclaration':
@@ -86,6 +88,7 @@ function walk(node: AnyNode | null | undefined, state: WalkState): void {
 			collectCollectionCall(node, state);
 			break;
 		case 'TryStatement':
+		case 'JSXTryExpression':
 			collectAsyncBoundary(node, state, walk);
 			return;
 	}

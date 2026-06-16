@@ -1,6 +1,7 @@
 import { expect, test } from 'vitest';
 import { createProtocolStatePayload, renderPayloadScripts } from '../../serializer/src/index.ts';
 import {
+	createBindingDomJournalRecord,
 	createResumeRuntime,
 	createRuntimeGraphFromStatePayload,
 	decodePayloadScripts,
@@ -15,6 +16,7 @@ type FakeElement = {
 	readonly nodeType: 1;
 	readonly tagName: string;
 	readonly childNodes: FakeElement[];
+	textContent?: string | null;
 	readonly listeners: Array<{
 		readonly type: string;
 		readonly listener: (event: FakeEvent) => Promise<void>;
@@ -178,6 +180,54 @@ test('runtime decodes async payload scripts from a document-like script lookup',
 		state,
 		view,
 	});
+});
+
+test('payload document resume applies DOM journal records through async/view locators by default', async () => {
+	const button = element('BUTTON');
+	const root = element('SECTION', [button]);
+	const state = createProtocolStatePayload({
+		cells: [{ bindingId: 'state:count', name: 'count', valueKind: 'scalar', value: 0 }],
+	});
+	const view: ProtocolViewPayload = {
+		version: 1,
+		locators: [
+			{ hostNodeId: 'h0', strategy: 'dom-order', index: 0, tagName: 'section' },
+			{ hostNodeId: 'h1', strategy: 'dom-order', index: 1, tagName: 'button' },
+		],
+		events: [],
+		bindings: [
+			{
+				hostNodeId: 'h1',
+				source: 'count',
+				bindingId: 'state:count',
+				path: [],
+				target: { kind: 'text' },
+				symbolId: 'symbol:binding',
+			},
+		],
+		behaviors: [],
+		elementHandles: [],
+		asyncBoundaries: [],
+	};
+	const scripts = renderPayloadScripts({ state, view });
+	const resumed = await resumeFromPayloadDocument({
+		document: payloadDocument(scripts.stateScript, scripts.viewScript),
+		root,
+		loadSymbol() {
+			return (context) =>
+				createBindingDomJournalRecord({
+					locator: context.binding!.hostNodeId,
+					target: context.binding!.target!,
+					value: context.value,
+				});
+		},
+	});
+
+	resumed.graph.write({ bindingId: 'state:count', value: 1 });
+	await resumed.graph.flush();
+
+	expect(button.textContent).toBe('1');
+	expect(resumed.graph.takeJournal()).toEqual([]);
 });
 
 test('runtime rejects payload scripts missing required state or view fields', () => {

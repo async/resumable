@@ -1,5 +1,6 @@
 import type {
 	GeneratedSymbolModule,
+	LoweredStateWrite,
 	PlannedSymbol,
 	SymbolModulesArtifact,
 	SymbolModulesInput,
@@ -14,6 +15,17 @@ export function emitSymbolModules(input: SymbolModulesInput): SymbolModulesArtif
 }
 
 function emitSymbolModule(symbol: PlannedSymbol): GeneratedSymbolModule[] {
+	if (symbol.kind === 'event-handler') {
+		return [
+			{
+				symbolId: symbol.id,
+				kind: symbol.kind,
+				exportName: symbolExportName(symbol.id),
+				source: emitEventHandlerModule(symbol),
+			},
+		];
+	}
+
 	if (symbol.kind !== 'dom-binding') return [];
 
 	return [
@@ -26,13 +38,47 @@ function emitSymbolModule(symbol: PlannedSymbol): GeneratedSymbolModule[] {
 	];
 }
 
+function emitEventHandlerModule(
+	symbol: Extract<PlannedSymbol, { readonly kind: 'event-handler' }>,
+): string {
+	const exportName = symbolExportName(symbol.id);
+	const writes = (symbol.writes ?? []).flatMap(emitEventWrite);
+
+	return [
+		`export const authoredSource = ${JSON.stringify(symbol.source)};`,
+		'',
+		`export function ${exportName}(context) {`,
+		...(writes.length > 0 ? writes : ['	void context;']),
+		'}',
+		'',
+	].join('\n');
+}
+
+function emitEventWrite(write: LoweredStateWrite): string[] {
+	if (write.operation === 'update' && write.updateOperator) {
+		const operator = write.updateOperator;
+		return [
+			'	context.graph.update({',
+			`		bindingId: ${JSON.stringify(write.bindingId)},`,
+			`		path: ${JSON.stringify(write.path)},`,
+			'		returnValue: "next",',
+			'		update(value) {',
+			`			return Number(value) ${operator === '++' ? '+' : '-'} 1;`,
+			'		},',
+			'	});',
+		];
+	}
+
+	return [];
+}
+
 function emitDomBindingModule(
 	symbol: Extract<PlannedSymbol, { readonly kind: 'dom-binding' }>,
 ): string {
 	const exportName = symbolExportName(symbol.id);
 
 	return [
-		"import { createBindingDomJournalRecord } from '@async/resumable-runtime';",
+		"import { createBindingDomJournalRecord } from '@async/resumable/runtime';",
 		'',
 		`export function ${exportName}(context) {`,
 		'	return createBindingDomJournalRecord({',

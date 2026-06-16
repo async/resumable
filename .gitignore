@@ -1,2 +1,18 @@
-node_modules
-docs/goals
+# Dependencies
+node_modules/
+
+# Build and test output
+dist/
+coverage/
+.witness/
+.vite/
+playwright-report/
+test-results/
+*.tsbuildinfo
+
+# Local/editor files
+.DS_Store
+*.log
+
+# Local planning output
+docs/goals/

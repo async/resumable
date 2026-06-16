@@ -1,1 +1,1 @@
-export { asyncResumableVite, type ResumableVitePlugin } from '@async/resumable-vite';
+export { resumable, type ResumableVitePlugin } from '@async/resumable-bundler/vite';

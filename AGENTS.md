@@ -73,8 +73,7 @@ Expected shape:
   maintenance task
 - production package folders are `packages/resumable`, `packages/core`,
   `packages/protocol`, `packages/runtime`, `packages/serializer`,
-  `packages/compiler`, `packages/rolldown`, `packages/vite`, and
-  `packages/test-utils`
+  `packages/compiler`, `packages/bundler`, and `packages/test-utils`
 - `packages/resumable` is the main package for `@async/resumable`; the other
   packages are internal implementation boundaries until tests prove what should
   become public
@@ -257,9 +256,9 @@ For bundling behavior, structure the framework plugins similarly to:
 
 `/Users/jacksm5pro/dev/open-source/qwik-bundler`
 
-Before changing `packages/rolldown`, `packages/vite`, or their fixture tests,
-inspect the applicable `qwik-bundler` source/fixtures and use them as the
-reference shape for Rolldown and Vite plugin architecture:
+Before changing `packages/bundler` or its fixture tests, inspect the applicable
+`qwik-bundler` source/fixtures and use them as the reference shape for Rolldown
+and Vite plugin architecture:
 
 - `src/rolldown.ts` style entry for Rolldown-first plugin behavior.
 - `src/vite/*` style adapter layer for Vite-specific dev/HMR/HTML integration.

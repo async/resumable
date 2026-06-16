@@ -286,12 +286,42 @@ function isSerializedSlot(value) {
 }
 //#endregion
 //#region packages/serializer/src/protocol-state.ts
+var ProtocolStateSerializationError = class extends Error {
+	code;
+	severity;
+	phase;
+	title;
+	path;
+	statePath;
+	valueKind;
+	why;
+	suggestions;
+	docsUrl;
+	bindingId;
+	cellName;
+	constructor(diagnostic) {
+		super(diagnostic.message);
+		this.name = "ProtocolStateSerializationError";
+		this.code = diagnostic.code;
+		this.severity = diagnostic.severity;
+		this.phase = diagnostic.phase;
+		this.title = diagnostic.title;
+		this.path = diagnostic.path;
+		this.statePath = diagnostic.statePath;
+		this.valueKind = diagnostic.valueKind;
+		this.why = diagnostic.why;
+		this.suggestions = diagnostic.suggestions;
+		this.docsUrl = diagnostic.docsUrl;
+		this.bindingId = diagnostic.bindingId;
+		this.cellName = diagnostic.cellName;
+	}
+};
 function createProtocolStatePayload(input) {
 	return {
 		version: 1,
 		cells: input.cells.map((cell) => {
 			const result = serializeGraphValue(cell.value);
-			if (!result.ok) throw new Error(result.diagnostics[0]?.message ?? "Cannot serialize protocol state cell.");
+			if (!result.ok) throw protocolStateSerializationError(cell, result.diagnostics[0]);
 			return {
 				bindingId: cell.bindingId,
 				name: cell.name,
@@ -302,5 +332,29 @@ function createProtocolStatePayload(input) {
 		computed: input.computed ?? []
 	};
 }
+function protocolStateSerializationError(cell, diagnostic) {
+	const cellPrefix = cell.name === "" ? cell.bindingId : cell.name;
+	const base = diagnostic ?? {
+		code: "AA_SERIALIZE_UNSUPPORTED_VALUE",
+		severity: "error",
+		phase: "serialization",
+		title: "Cannot serialize graph state value",
+		path: [],
+		statePath: cellPrefix,
+		valueKind: "unknown",
+		message: `Cannot serialize value at ${cellPrefix} because unknown values are not durable graph state.`,
+		why: "Serialization is for durable graph state. Functions and host/runtime resources cannot be restored during resume.",
+		suggestions: [{ message: "Move runtime resources into use={...}, make the value serializable state, or derive it with computed()." }],
+		docsUrl: "https://async.await.dev/errors/AA_SERIALIZE_UNSUPPORTED_VALUE"
+	};
+	const statePath = base.statePath === "<root>" ? cellPrefix : `${cellPrefix}.${base.statePath}`;
+	return new ProtocolStateSerializationError({
+		...base,
+		bindingId: cell.bindingId,
+		cellName: cell.name,
+		statePath,
+		message: `Cannot serialize value at ${statePath} because ${base.valueKind} values are not durable graph state.`
+	});
+}
 //#endregion
-export { createProtocolStatePayload, deserializeGraphValue, renderPayloadScripts, serializeGraphValue };
+export { ProtocolStateSerializationError, createProtocolStatePayload, deserializeGraphValue, renderPayloadScripts, serializeGraphValue };
